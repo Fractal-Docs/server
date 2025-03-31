@@ -10,6 +10,25 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@types/node": "^22.13.11"
+    "@neondatabase/serverless": "^1.0.0",
+    "@octokit/rest": "^21.1.1",
+    "@pinecone-database/pinecone": "^5.1.1",
+    "@types/express": "^5.0.1",
+    "@types/express-session": "^1.18.1",
+    "@types/node": "^22.13.14",
+    "drizzle-kit": "^0.30.6",
+    "drizzle-orm": "^0.41.0",
+    "drizzle-zod": "^0.7.1",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1",
+    "memorystore": "^1.6.7",
+    "node-fetch": "^3.3.2",
+    "openai": "^4.91.0",
+    "passport": "^0.7.0",
+    "passport-local": "^1.0.0",
+    "typescript": "^5.8.2",
+    "ws": "^8.18.1",
+    "zod": "^3.24.2",
+    "zod-validation-error": "^3.4.0"
   }
 }
