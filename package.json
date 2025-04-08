@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -16,6 +19,7 @@
     "@types/express": "^5.0.1",
     "@types/express-session": "^1.18.1",
     "@types/node": "^22.13.14",
+    "@types/ws": "^8.18.0",
     "drizzle-kit": "^0.30.6",
     "drizzle-orm": "^0.41.0",
     "drizzle-zod": "^0.7.1",
@@ -26,6 +30,7 @@
     "openai": "^4.91.0",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
+    "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "ws": "^8.18.1",
     "zod": "^3.24.2",
