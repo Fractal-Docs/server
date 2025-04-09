@@ -15,7 +15,7 @@ ignorePorts = false
 build = ["sh", "-c", "npm run build"]
 
 [workflows]
-runButton = "Build"
+runButton = "Build and Start"
 
 [[workflows.workflow]]
 name = "Run"
@@ -39,6 +39,19 @@ args = "npm run build"
 name = "Start"
 mode = "sequential"
 author = 33380737
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run start"
+
+[[workflows.workflow]]
+name = "Build and Start"
+author = 33380737
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run build"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
