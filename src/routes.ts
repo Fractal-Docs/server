@@ -1,12 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertPrdSchema } from "@shared/schema";
+import { insertPrdSchema } from "./shared/schema";
 import { getRepoContent, listUserRepos } from "./lib/github";
 import { generateDocumentation } from "./lib/openai";
-import path from "path";
-import { fileURLToPath } from "url";
-import express from "express";
 import fetch from "node-fetch";
 import { processFileContent, generateEmbedding } from "./lib/embeddings";
 import { vectorStorage } from "./lib/vector-storage";
@@ -17,9 +14,6 @@ import {
   visualizeControlFlowGraphs,
 } from "./lib/cfg-analyzer";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 interface GithubTokenResponse {
   access_token?: string;
   error?: string;
@@ -27,9 +21,6 @@ interface GithubTokenResponse {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Serve static files from the correct build output directory
-  app.use(express.static(path.join(__dirname, "../dist/public")));
-
   // PRD routes
   app.get("/api/prds", async (_req, res) => {
     try {

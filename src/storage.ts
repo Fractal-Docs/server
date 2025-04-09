@@ -14,7 +14,7 @@ import {
   type InsertRepoFile,
   type RepoDoc,
   type InsertRepoDoc,
-} from "@shared/schema";
+} from "./shared/schema";
 import { db } from "./db";
 import { eq, like, and } from "drizzle-orm";
 

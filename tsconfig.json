@@ -1,25 +1,19 @@
-
 {
   "include": ["src/**/*"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "outDir": "dist",
-    "module": "node16",
-    "target": "ES2022",
-    "moduleResolution": "node16",
+    "target": "es6",
+    "moduleResolution": "node",
+    "module": "commonjs",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
     "jsx": "preserve",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "moduleResolution": "node",
     "noImplicitAny": false,
     "baseUrl": ".",
-    "types": ["node"],
-    "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["./src/shared/*"]
-    }
+    "types": ["node"]
   }
 }
