@@ -142,7 +142,7 @@ export class DatabaseStorage implements IStorage {
     return this.handleDatabaseOperation(async () => {
       const [repo] = await db
         .delete(githubRepos)
-        .where(eq(githubRepos.id, id))
+        .where(eq(githubRepos.repoId, id))
         .returning();
       if (!repo) throw new Error("Repository not found");
     });

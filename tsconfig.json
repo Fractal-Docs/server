@@ -2,9 +2,7 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
-    "incremental": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
-    "noEmit": false,
     "outDir": "dist",
     "module": "ESNext",
     "strict": true,
@@ -12,8 +10,8 @@
     "jsx": "preserve",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true,
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
+    "noImplicitAny": false,
     "baseUrl": ".",
     "types": ["node"],
     "paths": {

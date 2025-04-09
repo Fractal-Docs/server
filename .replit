@@ -15,7 +15,7 @@ ignorePorts = false
 build = ["sh", "-c", "npm run build"]
 
 [workflows]
-runButton = "Run"
+runButton = "Build"
 
 [[workflows.workflow]]
 name = "Run"
@@ -25,6 +25,24 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run dev"
+
+[[workflows.workflow]]
+name = "Build"
+mode = "sequential"
+author = 33380737
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run build"
+
+[[workflows.workflow]]
+name = "Start"
+mode = "sequential"
+author = 33380737
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run start"
 
 [[ports]]
 localPort = 3000

@@ -1,7 +1,7 @@
-import { Pinecone } from "@pinecone-database/pinecone";
+import { Pinecone, RecordMetadata } from "@pinecone-database/pinecone";
 import { cosineSimilarity } from "./embeddings";
 
-export interface VectorMetadata {
+export interface VectorMetadata extends RecordMetadata {
   repoId: string;
   filePath: string;
   fileId: number;
@@ -137,7 +137,7 @@ export class PineconeVectorStorage implements IVectorStorage {
 
     return results.matches.map((match) => ({
       id: match.id,
-      score: match.score,
+      score: match.score || 0,
       metadata: match.metadata as VectorMetadata,
     }));
   }

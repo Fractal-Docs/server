@@ -39,14 +39,14 @@ export const db = drizzle({ client: pool, schema });
 // Function to attempt connection with retries
 const connectWithRetry = async (retries = 3, delay = 2000) => {
   const lookup = promisify(dns.lookup);
-  const dbUrl = new URL(process.env.DATABASE_URL);
+  const dbUrl = new URL(process.env.DATABASE_URL || "");
 
   // Test DNS resolution first
   try {
     console.log(`Testing DNS resolution for host: ${dbUrl.hostname}`);
     await lookup(dbUrl.hostname);
     console.log("DNS resolution successful");
-  } catch (err) {
+  } catch (err: any) {
     console.error("DNS resolution failed:", err.message);
     throw new Error(`DNS resolution failed for ${dbUrl.hostname}`);
   }
@@ -63,7 +63,7 @@ const connectWithRetry = async (retries = 3, delay = 2000) => {
         client.release();
         throw err;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Connection attempt ${i + 1} failed:`, err.message);
       if (i < retries - 1) {
         console.log(`Retrying in ${delay / 1000} seconds...`);

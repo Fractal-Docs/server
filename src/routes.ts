@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertPrdSchema, repoDocs } from "@shared/schema";
+import { insertPrdSchema } from "@shared/schema";
 import { getRepoContent, listUserRepos } from "./lib/github";
 import { generateDocumentation } from "./lib/openai";
 import path from "path";
@@ -10,7 +10,6 @@ import express from "express";
 import fetch from "node-fetch";
 import { processFileContent, generateEmbedding } from "./lib/embeddings";
 import { vectorStorage } from "./lib/vector-storage";
-import { readFile } from "fs/promises";
 import { extname } from "path";
 import {
   generateCFG,
@@ -46,12 +45,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/prds/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
-      return res.status(400).json({ error: "Invalid PRD ID" });
+      res.status(400).json({ error: "Invalid PRD ID" });
+      return;
     }
 
     const prd = await storage.getPrd(id);
     if (!prd) {
-      return res.status(404).json({ error: "PRD not found" });
+      res.status(404).json({ error: "PRD not found" });
+      return;
     }
 
     res.json(prd);
@@ -72,10 +73,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = insertPrdSchema.safeParse(req.body);
       if (!result.success) {
-        return res.status(400).json({
+        res.status(400).json({
           error: "Invalid PRD data",
           details: result.error.issues,
         });
+        return;
       }
 
       const prd = await storage.createPrd(result.data);
@@ -91,7 +93,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        return res.status(400).json({ error: "Invalid PRD ID" });
+        res.status(400).json({ error: "Invalid PRD ID" });
+        return;
       }
 
       await storage.deletePrd(id);
@@ -108,15 +111,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        return res.status(400).json({ error: "Invalid PRD ID" });
+        res.status(400).json({ error: "Invalid PRD ID" });
+        return;
       }
 
       const result = insertPrdSchema.safeParse(req.body);
       if (!result.success) {
-        return res.status(400).json({
+        res.status(400).json({
           error: "Invalid PRD data",
           details: result.error.issues,
         });
+        return;
       }
 
       const prd = await storage.updatePrd(id, result.data);
@@ -140,7 +145,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { code } = req.query;
 
     if (!code || typeof code !== "string") {
-      return res.status(400).json({ error: "No code provided" });
+      res.status(400).json({ error: "No code provided" });
+      return;
     }
 
     try {
@@ -214,7 +220,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const auth = await storage.getGithubAuth();
       if (!auth) {
-        return res.status(401).json({ error: "GitHub not authenticated" });
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
       }
 
       const availableRepos = await listUserRepos(auth.accessToken);
@@ -241,12 +248,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const auth = await storage.getGithubAuth();
       if (!auth) {
-        return res.status(401).json({ error: "GitHub not authenticated" });
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
       }
 
       const { repositories } = req.body;
       if (!Array.isArray(repositories)) {
-        return res.status(400).json({ error: "Invalid repositories format" });
+        res.status(400).json({ error: "Invalid repositories format" });
+        return;
       }
 
       const createdRepos = await Promise.all(
@@ -272,7 +281,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
-        return res.status(400).json({ error: "Invalid repository ID" });
+        res.status(400).json({ error: "Invalid repository ID" });
+        return;
       }
 
       await storage.deleteRepo(id.toString());
@@ -331,7 +341,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const repo = await storage.getRepo(repoId);
 
       if (!repo) {
-        return res.status(404).json({ error: "Repository not found" });
+        res.status(404).json({ error: "Repository not found" });
+        return;
       }
 
       const repoContent = await getRepoContent(
@@ -442,7 +453,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!relevantFiles.length) {
-        return res.status(404).json({ error: "No analyzed files found" });
+        res.status(404).json({ error: "No analyzed files found" });
+        return;
       }
 
       console.log("Relevant files found:", relevantFiles.length);
@@ -577,9 +589,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       if (!sortedDocs.length) {
-        return res.status(404).json({
+        res.status(404).json({
           error: "No documentation found for this repository",
         });
+        return;
       }
 
       res.json(sortedDocs[0]);
@@ -599,19 +612,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const repo = await storage.getRepo(repoId);
 
       if (!repo) {
-        return res.status(404).json({ error: "Repository not found" });
+        res.status(404).json({ error: "Repository not found" });
+        return;
       }
 
       // Get all files in the repository
       const repoFiles = await storage.getRepoFiles(repoId);
 
       if (!repoFiles.length) {
-        return res
-          .status(404)
-          .json({
-            error:
-              "No analyzed files found. Please analyze the repository first.",
-          });
+        res.status(404).json({
+          error:
+            "No analyzed files found. Please analyze the repository first.",
+        });
+        return;
       }
 
       // Convert file data to format needed by CFG analyzer
@@ -696,10 +709,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
       if (cfgDocs.length === 0) {
-        return res.status(404).json({
+        res.status(404).json({
           error: "No CFG analysis found for this repository",
           message: "Please generate CFG analysis first",
         });
+        return;
       }
 
       res.json(cfgDocs[0]);
