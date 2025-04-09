@@ -9,4 +9,9 @@ await esbuild.build({
   target: 'node18',
   format: 'esm',
   sourcemap: true,
+  loader: { '.ts': 'ts' },
+  packages: 'external',
+  banner: {
+    js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',
+  },
 })
