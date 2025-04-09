@@ -1,10 +1,12 @@
+
 {
   "include": ["src/**/*"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "outDir": "dist",
-    "module": "ESNext",
+    "module": "CommonJS",
+    "target": "ES2020",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
     "jsx": "preserve",
