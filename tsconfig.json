@@ -4,8 +4,7 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "outDir": "dist",
-    "target": "es6",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "module": "esnext",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
