@@ -2,7 +2,11 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertPrdSchema } from "./shared/schema";
-import { getRepoContent, listUserRepos } from "./lib/github";
+import {
+  getRepoContent,
+  listRepoFileSystem,
+  listUserRepos,
+} from "./lib/github";
 import { generateDocumentation } from "./lib/openai";
 import fetch from "node-fetch";
 import { processFileContent, generateEmbedding } from "./lib/embeddings";
@@ -325,10 +329,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Endpoint to analyze repository files
-  app.post("/api/repos/:repoId/analyze", async (req, res) => {
+  // Add new route to return a repository's files and folders
+  app.get("/api/github/repos/:repoId/files", async (req, res) => {
     try {
       const { repoId } = req.params;
+      const auth = await storage.getGithubAuth();
+      if (!auth) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+
       const repo = await storage.getRepo(repoId);
 
       if (!repo) {
@@ -336,9 +346,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // Utilize the listRepoFileSystem function from /github
+      const fileSystem = await listRepoFileSystem(
+        auth.accessToken,
+        `https://github.com/${repo.fullName}`,
+      );
+      res.json(fileSystem);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to list repository files";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Add new route to update repo in database with fileFilterRegex
+  app.patch("/api/github/repos/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { fileFilterRegex } = req.body;
+
+      if (!fileFilterRegex) {
+        res.status(400).json({ error: "fileFilterRegex is required" });
+        return;
+      }
+
+      const repo = await storage.getRepo(id);
+      if (!repo) {
+        res.status(404).json({ error: "Repository not found" });
+        return;
+      }
+
+      await storage.updateRepo(id, { fileFilterRegex });
+      res.status(204).end();
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to update repository";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Endpoint to analyze repository files
+  app.post("/api/repos/:repoId/analyze", async (req, res) => {
+    try {
+      const { repoId } = req.params;
+      const { fileFilterRegex } = req.body;
+      const repo = await storage.getRepo(repoId);
+
+      if (!repo) {
+        res.status(404).json({ error: "Repository not found" });
+        return;
+      }
+
+      if (!fileFilterRegex) {
+        res
+          .status(400)
+          .json({ error: "Please supply a file regex for matching" });
+      }
+
       const repoContent = await getRepoContent(
         repo.accessToken,
         `https://github.com/${repo.fullName}`,
+        fileFilterRegex,
       );
 
       // Process each file

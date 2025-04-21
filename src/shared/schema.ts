@@ -24,6 +24,7 @@ export const githubRepos = pgTable("github_repos", {
   owner: text("owner").notNull(),
   repoId: text("repo_id").notNull(),
   accessToken: text("access_token").notNull(),
+  fileFilterRegex: text("file_filter_regex"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -79,6 +80,7 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   owner: true,
   repoId: true,
   accessToken: true,
+  fileFilterRegex: true,
 });
 
 export const insertGithubAuthSchema = createInsertSchema(githubAuth).pick({

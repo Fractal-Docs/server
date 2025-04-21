@@ -138,6 +138,19 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  
+  async updateRepo(id: string, updateRepo: Partial<InsertGithubRepo>): Promise<GithubRepo> {
+    return this.handleDatabaseOperation(async () => {
+      const [repo] = await db
+        .update(githubRepos)
+        .set(updateRepo)
+        .where(eq(githubRepos.repoId, id))
+        .returning();
+      if (!repo) throw new Error("Repository not found");
+      return repo;
+    });
+  }
+
   async deleteRepo(id: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       const [repo] = await db
