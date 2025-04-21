@@ -60,11 +60,11 @@ export function chunkText(text: string, maxChunkSize: number = 8000): string[] {
 
 // Process file content and generate embeddings
 export async function processFileContent(
-  content: string,
+  content: string
 ): Promise<{ chunks: string[]; embeddings: number[][] }> {
   const chunks = chunkText(content);
   const embeddings = await Promise.all(
-    chunks.map((chunk) => generateEmbedding(chunk)),
+    chunks.map((chunk) => generateEmbedding(chunk))
   );
 
   return { chunks, embeddings };

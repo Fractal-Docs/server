@@ -9,7 +9,7 @@ interface FileSystemItem {
 export async function getRepoContent(
   accessToken: string,
   repoUrl: string,
-  fileRegexString: string,
+  fileRegexString: string
 ): Promise<{ path: string; content: string }[]> {
   const octokit = new Octokit({ auth: accessToken });
   const fileRegex = new RegExp(fileRegexString);
@@ -31,7 +31,7 @@ export async function getRepoContent(
 
   // Recursive function to get content
   async function getContentRecursive(
-    path: string = "",
+    path: string = ""
   ): Promise<{ path: string; content: string }[]> {
     try {
       const response = await octokit.repos.getContent({
@@ -45,7 +45,7 @@ export async function getRepoContent(
         if (isMatchingFile(path)) {
           const content = Buffer.from(
             (response.data as { content: string }).content,
-            "base64",
+            "base64"
           ).toString();
           return [{ path, content }];
         }
@@ -74,7 +74,7 @@ export async function getRepoContent(
                 path: item.path,
                 content: Buffer.from(
                   fileResponse.data.content,
-                  "base64",
+                  "base64"
                 ).toString(),
               },
             ];
@@ -88,7 +88,7 @@ export async function getRepoContent(
     } catch (error) {
       console.error(`Error processing path ${path}:`, error);
       throw new Error(
-        error instanceof Error ? error.message : "Failed to fetch repo content",
+        error instanceof Error ? error.message : "Failed to fetch repo content"
       );
     }
   }
@@ -133,7 +133,7 @@ export async function listUserRepos(accessToken: string) {
 
 export async function listRepoFileSystem(
   accessToken: string,
-  repoUrl: string,
+  repoUrl: string
 ): Promise<FileSystemItem[]> {
   const octokit = new Octokit({ auth: accessToken });
 
@@ -151,7 +151,7 @@ export async function listRepoFileSystem(
       });
 
       if (Array.isArray(response.data)) {
-        let items = await Promise.all(
+        const items = await Promise.all(
           response.data.map(async (item) => {
             const actualFilename = item.path.split("/");
             if (item.type === "dir") {
@@ -168,7 +168,7 @@ export async function listRepoFileSystem(
                 type: "file" as FileSystemItem["type"],
               };
             }
-          }),
+          })
         );
 
         // Sort items by type, with folders first, then files, each sorted by path
@@ -180,7 +180,7 @@ export async function listRepoFileSystem(
         });
         console.log(
           "items sorted",
-          items.map((i) => i.path),
+          items.map((i) => i.path)
         );
         items.forEach((item) => {
           if (item.type === "folder" && item.children) {
@@ -200,7 +200,7 @@ export async function listRepoFileSystem(
     } catch (error) {
       console.error(`Error fetching file system at path ${path}:`, error);
       throw new Error(
-        error instanceof Error ? error.message : "Error fetching file system",
+        error instanceof Error ? error.message : "Error fetching file system"
       );
     }
   }

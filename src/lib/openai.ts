@@ -8,7 +8,7 @@ type ModelType = "gpt-4o" | "gpt-3.5-turbo" | "o1-2024-12-17" | "o1-mini";
 export async function generateDocumentation(
   code: string,
   businessContext: string,
-  model: ModelType = "gpt-4o", // Default to gpt-4o
+  model: ModelType = "gpt-4o" // Default to gpt-4o
 ): Promise<{ content: string; prompts: { developer: string; user: string } }> {
   try {
     const developerPrompt =

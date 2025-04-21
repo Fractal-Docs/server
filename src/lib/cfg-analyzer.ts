@@ -31,7 +31,7 @@ interface CFGResult {
  * Analyzes JavaScript/TypeScript files to generate a call graph and control flow graph
  */
 export async function generateCFG(
-  fileContents: { path: string; content: string }[],
+  fileContents: { path: string; content: string }[]
 ): Promise<CFGResult> {
   const callGraph: CallGraphNode[] = [];
   const controlFlowGraphs: { [key: string]: ControlFlowNode[] } = {};
@@ -47,7 +47,7 @@ export async function generateCFG(
           file.path,
           file.content,
           ts.ScriptTarget.Latest,
-          true,
+          true
         );
 
         // Analyze the source file and add to results
@@ -65,7 +65,7 @@ function analyzeSourceFile(
   sourceFile: ts.SourceFile,
   filePath: string,
   callGraph: CallGraphNode[],
-  controlFlowGraphs: { [key: string]: ControlFlowNode[] },
+  controlFlowGraphs: { [key: string]: ControlFlowNode[] }
 ) {
   // Visit all nodes in the source file
   visitNode(sourceFile, sourceFile, filePath, callGraph, controlFlowGraphs);
@@ -76,7 +76,7 @@ function visitNode(
   sourceFile: ts.SourceFile,
   filePath: string,
   callGraph: CallGraphNode[],
-  controlFlowGraphs: { [key: string]: ControlFlowNode[] },
+  controlFlowGraphs: { [key: string]: ControlFlowNode[] }
 ) {
   // Check if this is a function declaration, function expression, or arrow function
   if (
@@ -113,13 +113,13 @@ function visitNode(
 
   // Recursively visit all child nodes
   ts.forEachChild(node, (child) =>
-    visitNode(child, sourceFile, filePath, callGraph, controlFlowGraphs),
+    visitNode(child, sourceFile, filePath, callGraph, controlFlowGraphs)
   );
 }
 
 function getFunctionName(
   node: ts.Node,
-  sourceFile: ts.SourceFile,
+  sourceFile: ts.SourceFile
 ): string | undefined {
   // For function declarations, get the name directly
   if (ts.isFunctionDeclaration(node) && node.name) {
@@ -163,7 +163,7 @@ function findFunctionCalls(
   node: ts.Node,
   sourceFile: ts.SourceFile,
   filePath: string,
-  callGraphNode: CallGraphNode,
+  callGraphNode: CallGraphNode
 ) {
   // Check for call expressions (function calls)
   if (ts.isCallExpression(node)) {
@@ -179,13 +179,13 @@ function findFunctionCalls(
 
   // Recursively visit all child nodes
   ts.forEachChild(node, (child) =>
-    findFunctionCalls(child, sourceFile, filePath, callGraphNode),
+    findFunctionCalls(child, sourceFile, filePath, callGraphNode)
   );
 }
 
 function createControlFlowGraph(
   node: ts.Node,
-  sourceFile: ts.SourceFile,
+  sourceFile: ts.SourceFile
 ): ControlFlowNode[] {
   const cfgNodes: ControlFlowNode[] = [];
 
@@ -226,7 +226,7 @@ function createControlFlowGraph(
 
 function processStatement(
   node: ts.Node,
-  sourceFile: ts.SourceFile,
+  sourceFile: ts.SourceFile
 ): ControlFlowNode | null {
   // Process different statement types
   if (ts.isIfStatement(node)) {
@@ -531,7 +531,7 @@ export function visualizeControlFlowGraphs(controlFlowGraphs: {
 
 function visualizeControlFlowNode(
   node: ControlFlowNode,
-  indent: number,
+  indent: number
 ): string {
   let result = " ".repeat(indent) + `${node.nodeType}: ${node.content}\n`;
 

@@ -13,12 +13,12 @@ export interface IVectorStorage {
   storeEmbedding(
     id: string,
     embedding: number[],
-    metadata: VectorMetadata,
+    metadata: VectorMetadata
   ): Promise<void>;
   searchSimilar(
     embedding: number[],
     repoId: string,
-    limit?: number,
+    limit?: number
   ): Promise<
     Array<{
       id: string;
@@ -40,7 +40,7 @@ export class LocalVectorStorage implements IVectorStorage {
   async storeEmbedding(
     id: string,
     embedding: number[],
-    metadata: VectorMetadata,
+    metadata: VectorMetadata
   ): Promise<void> {
     this.vectors.push({ id, embedding, metadata });
   }
@@ -48,7 +48,7 @@ export class LocalVectorStorage implements IVectorStorage {
   async searchSimilar(
     queryEmbedding: number[],
     repoId: string,
-    limit: number = 5,
+    limit: number = 5
   ) {
     return this.vectors
       .filter((v) => v.metadata.repoId === repoId)
@@ -107,7 +107,7 @@ export class PineconeVectorStorage implements IVectorStorage {
   async storeEmbedding(
     id: string,
     embedding: number[],
-    metadata: VectorMetadata,
+    metadata: VectorMetadata
   ): Promise<void> {
     await this.ensureIndex();
     const index = this.client.index(this.indexName);
@@ -124,7 +124,7 @@ export class PineconeVectorStorage implements IVectorStorage {
   async searchSimilar(
     queryEmbedding: number[],
     repoId: string,
-    limit: number = 5,
+    limit: number = 5
   ) {
     const index = this.client.index(this.indexName);
 

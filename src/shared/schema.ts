@@ -45,7 +45,7 @@ export const repoFiles = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.repoId, table.filePath] })],
+  (table) => [primaryKey({ columns: [table.repoId, table.filePath] })]
 );
 
 export const repoDocs = pgTable("repo_docs", {

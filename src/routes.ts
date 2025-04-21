@@ -159,7 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             code,
             redirect_uri: `https://${req.hostname}/repos`,
           }),
-        },
+        }
       );
 
       console.log("GitHub token response status:", tokenRes.status);
@@ -226,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingRepoIds = new Set(existingRepos.map((r) => r.repoId));
 
       const filteredRepos = availableRepos.filter(
-        (repo) => !existingRepoIds.has(String(repo.repoId)),
+        (repo) => !existingRepoIds.has(String(repo.repoId))
       );
 
       res.json(filteredRepos);
@@ -258,8 +258,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           storage.createRepo({
             ...repo,
             accessToken: auth.accessToken,
-          }),
-        ),
+          })
+        )
       );
 
       res.json(createdRepos);
@@ -349,7 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Utilize the listRepoFileSystem function from /github
       const fileSystem = await listRepoFileSystem(
         auth.accessToken,
-        `https://github.com/${repo.fullName}`,
+        `https://github.com/${repo.fullName}`
       );
       res.json(fileSystem);
     } catch (error: unknown) {
@@ -408,7 +408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const repoContent = await getRepoContent(
         repo.accessToken,
         `https://github.com/${repo.fullName}`,
-        fileFilterRegex,
+        fileFilterRegex
       );
 
       // Process each file
@@ -437,7 +437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             repoFile = await storage.getRepoFile(repoId, file.path);
           } catch (error) {
             console.log(
-              `File ${file.path} not found in the database, will create it`,
+              `File ${file.path} not found in the database, will create it`
             );
           }
 
@@ -467,7 +467,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(
             "File analyzed:",
             file.path,
-            `${index + 1}/${repoContent.length}`,
+            `${index + 1}/${repoContent.length}`
           );
         } catch (fileError) {
           console.error(`Error processing file ${file.path}:`, fileError);
@@ -497,16 +497,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const similarResults = await vectorStorage.searchSimilar(
           queryEmbedding,
           repoId,
-          10,
+          10
         );
         relevantFiles = await Promise.all(
           similarResults.map(async (result) => {
             const file = await storage.getRepoFile(
               repoId,
-              result.metadata.filePath,
+              result.metadata.filePath
             );
             return file;
-          }),
+          })
         );
       } else {
         // Otherwise use all files
@@ -538,7 +538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .filter((file) => file !== undefined)
         .map(
           (file) =>
-            `File: ${file!.filePath}\n\n${JSON.stringify(file!.metadata, null, 2)}\n\nContent:\n${file!.content || "No content available"}`,
+            `File: ${file!.filePath}\n\n${JSON.stringify(file!.metadata, null, 2)}\n\nContent:\n${file!.content || "No content available"}`
         )
         .join("\n\n");
 
@@ -552,7 +552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { content: documentation, prompts } = await generateDocumentation(
         codeWithCfg,
         `Generate ${docType} documentation`,
-        model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini",
+        model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini"
       );
 
       console.log("Documentation generated");
@@ -610,7 +610,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const results = await vectorStorage.searchSimilar(
         queryEmbedding,
         repoId,
-        5,
+        5
       );
 
       // Fetch the actual content for the matches
@@ -619,14 +619,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Use the proper parameters for getRepoFile
           const file = await storage.getRepoFile(
             result.metadata.repoId,
-            result.metadata.filePath,
+            result.metadata.filePath
           );
           return {
             ...result,
             content: file?.content || "",
             filePath: file?.filePath || "",
           };
-        }),
+        })
       );
 
       res.json(enrichedResults);
@@ -646,7 +646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Sort by updatedAt to get the most recent doc
       const sortedDocs = docs.sort(
         (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       );
 
       if (!sortedDocs.length) {
@@ -766,7 +766,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .filter((doc) => doc.docType === "cfg")
         .sort(
           (a, b) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         );
 
       if (cfgDocs.length === 0) {

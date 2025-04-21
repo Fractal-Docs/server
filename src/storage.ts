@@ -54,14 +54,14 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   private async handleDatabaseOperation<T>(
-    operation: () => Promise<T>,
+    operation: () => Promise<T>
   ): Promise<T> {
     try {
       return await operation();
     } catch (error) {
       console.error("Database operation failed:", error);
       throw new Error(
-        error instanceof Error ? error.message : "Database operation failed",
+        error instanceof Error ? error.message : "Database operation failed"
       );
     }
   }
@@ -138,8 +138,10 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  
-  async updateRepo(id: string, updateRepo: Partial<InsertGithubRepo>): Promise<GithubRepo> {
+  async updateRepo(
+    id: string,
+    updateRepo: Partial<InsertGithubRepo>
+  ): Promise<GithubRepo> {
     return this.handleDatabaseOperation(async () => {
       const [repo] = await db
         .update(githubRepos)
@@ -181,7 +183,7 @@ export class DatabaseStorage implements IStorage {
   // Repository file analysis operations
   async getRepoFiles(repoId: string): Promise<RepoFile[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(repoFiles).where(eq(repoFiles.repoId, repoId)),
+      db.select().from(repoFiles).where(eq(repoFiles.repoId, repoId))
     );
   }
 
@@ -194,14 +196,14 @@ export class DatabaseStorage implements IStorage {
 
   async getRepoFile(
     repoId: string,
-    filePath: string,
+    filePath: string
   ): Promise<RepoFile | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [file] = await db
         .select()
         .from(repoFiles)
         .where(
-          and(eq(repoFiles.repoId, repoId), eq(repoFiles.filePath, filePath)),
+          and(eq(repoFiles.repoId, repoId), eq(repoFiles.filePath, filePath))
         );
       return file;
     });
@@ -209,7 +211,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateRepoFile(
     id: number,
-    updateFile: Partial<InsertRepoFile>,
+    updateFile: Partial<InsertRepoFile>
   ): Promise<RepoFile> {
     return this.handleDatabaseOperation(async () => {
       const [file] = await db
@@ -235,7 +237,7 @@ export class DatabaseStorage implements IStorage {
   // Repository documentation operations
   async getRepoDocs(repoId: string): Promise<RepoDoc[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(repoDocs).where(eq(repoDocs.repoId, repoId)),
+      db.select().from(repoDocs).where(eq(repoDocs.repoId, repoId))
     );
   }
 
@@ -258,7 +260,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateRepoDoc(
     id: number,
-    updateDoc: Partial<InsertRepoDoc>,
+    updateDoc: Partial<InsertRepoDoc>
   ): Promise<RepoDoc> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
