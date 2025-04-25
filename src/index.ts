@@ -1,5 +1,6 @@
 import express, { NextFunction, type Request, Response } from "express";
 import cors from "cors";
+import "dotenv/config";
 
 import { registerRoutes } from "./routes";
 
@@ -49,9 +50,7 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // ALWAYS serve the app on port 3000
-
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 8888;
   server.listen({
     port,
     host: "0.0.0.0",
