@@ -187,8 +187,8 @@ export function codeRoutes(app: Express) {
   // Endpoint to generate documentation
   app.post("/api/repos/:id/generate-docs", async (req, res) => {
     try {
-      const { id } = getParams(req, res);
-      const { docType, query, model = "gpt-4o", branch } = req.body;
+      const { id, branch } = getParams(req, res);
+      const { docType, query, model = "gpt-4o" } = req.body;
 
       const repoDoc = await storage.getRepoDoc(id, branch);
 
@@ -369,6 +369,8 @@ export function codeRoutes(app: Express) {
       // Check for existing CFG doc
       const existingDocs = await storage.getRepoDocs(id, branch);
       const cfgDoc = existingDocs.find((doc) => doc.docType === "cfg");
+      console.log("Existing CFG doc:", cfgDoc);
+      console.log("Existing CFG docs:", existingDocs);
 
       // Store the generated CFG
       const doc = cfgDoc

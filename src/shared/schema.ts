@@ -64,7 +64,9 @@ export const repoDocs = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.repoId, table.branch] })]
+  (table) => [
+    primaryKey({ columns: [table.repoId, table.docType, table.branch] }),
+  ]
 );
 
 // Existing schemas

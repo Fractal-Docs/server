@@ -170,7 +170,6 @@ export async function listRepoFileSystem(
     .replace(".git", "")
     .split("/");
 
-  console.log("Fetching file system...", { owner, repo, branch });
   async function fetchFileSystem(path: string = ""): Promise<FileSystemItem[]> {
     try {
       const response = await octokit.repos.getContent({
