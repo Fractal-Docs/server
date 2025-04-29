@@ -4,6 +4,7 @@ import { cosineSimilarity } from "./embeddings";
 export interface VectorMetadata extends RecordMetadata {
   repoId: string;
   filePath: string;
+  branch: string;
   fileId: number;
   language: string;
   lastModified: string;
@@ -29,7 +30,6 @@ export interface IVectorStorage {
   deleteByRepoId(repoId: string): Promise<void>;
 }
 
-// Mock implementation that uses in-memory storage and cosine similarity
 export class LocalVectorStorage implements IVectorStorage {
   private vectors: Array<{
     id: string;

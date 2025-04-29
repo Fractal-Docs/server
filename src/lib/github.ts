@@ -65,6 +65,7 @@ export async function getRepoContent(
             owner,
             repo,
             path: item.path,
+            ref: branch,
           });
 
           if (
@@ -159,7 +160,8 @@ export async function listUserRepos(accessToken: string) {
 
 export async function listRepoFileSystem(
   accessToken: string,
-  repoUrl: string
+  repoUrl: string,
+  branch: string
 ): Promise<FileSystemItem[]> {
   const octokit = new Octokit({ auth: accessToken });
 
@@ -168,12 +170,14 @@ export async function listRepoFileSystem(
     .replace(".git", "")
     .split("/");
 
+  console.log("Fetching file system...", { owner, repo, branch });
   async function fetchFileSystem(path: string = ""): Promise<FileSystemItem[]> {
     try {
       const response = await octokit.repos.getContent({
         owner,
         repo,
         path,
+        ref: branch,
       });
 
       if (Array.isArray(response.data)) {

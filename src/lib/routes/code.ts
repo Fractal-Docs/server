@@ -11,16 +11,7 @@ import {
   visualizeCallGraph,
   visualizeControlFlowGraphs,
 } from "../cfg-analyzer";
-
-function getParams(req, res) {
-  const { id, branch } = req.params;
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid repository ID" });
-    return {};
-  }
-
-  return { id, branch: branch || "main" };
-}
+import { getParams } from "../helpers";
 
 async function getRepoById(id: string, res) {
   const data = await storage.getRepo(id);
@@ -134,6 +125,7 @@ export function codeRoutes(app: Express) {
             await vectorStorage.storeEmbedding(vectorId, embeddings[i], {
               repoId: id,
               filePath: file.path,
+              branch,
               fileId: i,
               language: extension.slice(1) || "text",
               lastModified: new Date().toISOString(),

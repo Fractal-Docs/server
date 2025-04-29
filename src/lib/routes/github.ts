@@ -2,6 +2,7 @@ import type { Express } from "express";
 
 import { storage } from "src/storage";
 import { getRepoBranches, listRepoFileSystem, listUserRepos } from "../github";
+import { getParams } from "../helpers";
 
 interface GithubTokenResponse {
   access_token?: string;
@@ -159,7 +160,7 @@ export function githubRoutes(app: Express) {
 
   app.get("/api/github/repos/:id/files", async (req, res) => {
     try {
-      const { id } = req.params;
+      const { id, branch } = getParams(req, res);
       const auth = await storage.getGithubAuth();
       if (!auth) {
         res.status(401).json({ error: "GitHub not authenticated" });
@@ -176,9 +177,10 @@ export function githubRoutes(app: Express) {
       // Utilize the listRepoFileSystem function from /github
       const fileSystem = await listRepoFileSystem(
         auth.accessToken,
-        `https://github.com/${repo.fullName}`
+        `https://github.com/${repo.fullName}`,
+        branch
       );
-      res.json(fileSystem);
+      res.status(200).json(fileSystem);
     } catch (error: unknown) {
       const message =
         error instanceof Error
@@ -190,7 +192,7 @@ export function githubRoutes(app: Express) {
 
   app.get("/api/github/repos/:id/branches", async (req, res) => {
     try {
-      const { id } = req.params;
+      const { id } = getParams(req, res);
       const auth = await storage.getGithubAuth();
       if (!auth) {
         res.status(401).json({ error: "GitHub not authenticated" });
