@@ -121,7 +121,7 @@ export function codeRoutes(app: Express) {
 
           // Store each chunk with its embedding in vector storage
           for (let i = 0; i < chunks.length; i++) {
-            const vectorId = `${id}-${file.path}-${i}`;
+            const vectorId = `${id}-${branch}-${file.path}-${i}`;
             await vectorStorage.storeEmbedding(vectorId, embeddings[i], {
               repoId: id,
               filePath: file.path,
