@@ -9,7 +9,8 @@ interface FileSystemItem {
 export async function getRepoContent(
   accessToken: string,
   repoUrl: string,
-  fileRegexString: string
+  fileRegexString: string,
+  branch: string = "main"
 ): Promise<{ path: string; content: string }[]> {
   const octokit = new Octokit({ auth: accessToken });
   const fileRegex = new RegExp(fileRegexString);
@@ -38,6 +39,7 @@ export async function getRepoContent(
         owner,
         repo,
         path,
+        ref: branch,
       });
 
       if (!Array.isArray(response.data)) {
@@ -105,6 +107,30 @@ export async function getRepoContent(
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
     throw new Error(`Failed to fetch repo content: ${errorMessage}`);
+  }
+}
+
+export async function getRepoBranches(
+  accessToken: string,
+  repoUrl: string
+): Promise<string[]> {
+  const octokit = new Octokit({ auth: accessToken });
+  // Parse repo URL to get owner and repo name
+  const [owner, repo] = repoUrl
+    .replace("https://github.com/", "")
+    .replace(".git", "")
+    .split("/");
+  try {
+    const { data: branches } = await octokit.repos.listBranches({
+      owner,
+      repo,
+    });
+
+    return branches.map((branch) => branch.name);
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    throw new Error(`Failed to fetch repo branches: ${errorMessage}`);
   }
 }
 
@@ -178,10 +204,6 @@ export async function listRepoFileSystem(
           }
           return a.type === "folder" ? -1 : 1;
         });
-        console.log(
-          "items sorted",
-          items.map((i) => i.path)
-        );
         items.forEach((item) => {
           if (item.type === "folder" && item.children) {
             item.children.sort((a, b) => {

@@ -38,16 +38,24 @@ export interface IStorage {
   saveGithubAuth(auth: InsertGithubAuth): Promise<GithubAuth>;
 
   // Repository file analysis operations
-  getRepoFiles(repoId: string): Promise<RepoFile[]>;
+  getRepoFiles(repoId: string, branchName: string): Promise<RepoFile[]>;
   createRepoFile(file: InsertRepoFile): Promise<RepoFile>;
-  getRepoFile(repoId: string, filePath: string): Promise<RepoFile | undefined>;
-  updateRepoFile(id: number, file: Partial<InsertRepoFile>): Promise<RepoFile>;
+  getRepoFile(
+    repoId: string,
+    filePath: string,
+    branchName: string
+  ): Promise<RepoFile | undefined>;
+  updateRepoFile(
+    id: number,
+    branch: string,
+    file: Partial<InsertRepoFile>
+  ): Promise<RepoFile>;
   deleteRepoFile(id: number): Promise<void>;
 
   // Repository documentation operations
-  getRepoDocs(repoId: string): Promise<RepoDoc[]>;
+  getRepoDocs(repoId: string, branchName: string): Promise<RepoDoc[]>;
   createRepoDoc(doc: InsertRepoDoc): Promise<RepoDoc>;
-  getRepoDoc(repoId: string): Promise<RepoDoc | undefined>;
+  getRepoDoc(repoId: string, branchName: string): Promise<RepoDoc | undefined>;
   updateRepoDoc(id: number, doc: Partial<InsertRepoDoc>): Promise<RepoDoc>;
   deleteRepoDoc(id: number): Promise<void>;
 }
@@ -181,9 +189,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository file analysis operations
-  async getRepoFiles(repoId: string): Promise<RepoFile[]> {
+  async getRepoFiles(repoId: string, branchName: string): Promise<RepoFile[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(repoFiles).where(eq(repoFiles.repoId, repoId))
+      db
+        .select()
+        .from(repoFiles)
+        .where(
+          and(eq(repoFiles.repoId, repoId), eq(repoFiles.branch, branchName))
+        )
     );
   }
 
@@ -196,14 +209,19 @@ export class DatabaseStorage implements IStorage {
 
   async getRepoFile(
     repoId: string,
-    filePath: string
+    filePath: string,
+    branchName: string
   ): Promise<RepoFile | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [file] = await db
         .select()
         .from(repoFiles)
         .where(
-          and(eq(repoFiles.repoId, repoId), eq(repoFiles.filePath, filePath))
+          and(
+            eq(repoFiles.repoId, repoId),
+            eq(repoFiles.filePath, filePath),
+            eq(repoFiles.branch, branchName)
+          )
         );
       return file;
     });
@@ -211,13 +229,14 @@ export class DatabaseStorage implements IStorage {
 
   async updateRepoFile(
     id: number,
+    branch: string,
     updateFile: Partial<InsertRepoFile>
   ): Promise<RepoFile> {
     return this.handleDatabaseOperation(async () => {
       const [file] = await db
         .update(repoFiles)
         .set(updateFile)
-        .where(eq(repoFiles.id, id))
+        .where(and(eq(repoFiles.id, id), eq(repoFiles.branch, branch)))
         .returning();
       if (!file) throw new Error("Repository file not found");
       return file;
@@ -235,9 +254,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository documentation operations
-  async getRepoDocs(repoId: string): Promise<RepoDoc[]> {
+  async getRepoDocs(repoId: string, branch: string): Promise<RepoDoc[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(repoDocs).where(eq(repoDocs.repoId, repoId))
+      db
+        .select()
+        .from(repoDocs)
+        .where(and(eq(repoDocs.repoId, repoId), eq(repoDocs.branch, branch)))
     );
   }
 
@@ -248,12 +270,15 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getRepoDoc(repoId: string): Promise<RepoDoc | undefined> {
+  async getRepoDoc(
+    repoId: string,
+    branch: string
+  ): Promise<RepoDoc | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .select()
         .from(repoDocs)
-        .where(eq(repoDocs.repoId, repoId));
+        .where(and(eq(repoDocs.repoId, repoId), eq(repoDocs.branch, branch)));
       return doc;
     });
   }

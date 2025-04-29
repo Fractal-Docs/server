@@ -51,16 +51,21 @@ export const repoFiles = pgTable(
   ]
 );
 
-export const repoDocs = pgTable("repo_docs", {
-  id: serial("id").primaryKey(),
-  repoId: text("repo_id").notNull(),
-  title: text("title").notNull(),
-  content: text("content").notNull(),
-  docType: text("doc_type").notNull(), // e.g., 'overview', 'api', 'setup', 'cfg'
-  metadata: jsonb("metadata").notNull(), // Additional documentation metadata
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const repoDocs = pgTable(
+  "repo_docs",
+  {
+    id: serial("id").primaryKey(),
+    repoId: text("repo_id").notNull(),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    docType: text("doc_type").notNull(), // e.g., 'overview', 'api', 'setup', 'cfg'
+    branch: text("branch").notNull(),
+    metadata: jsonb("metadata").notNull(), // Additional documentation metadata
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.repoId, table.branch] })]
+);
 
 // Existing schemas
 export const insertPrdSchema = createInsertSchema(prds)
@@ -111,6 +116,7 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
   .pick({
     repoId: true,
     title: true,
+    branch: true,
     content: true,
     docType: true,
     metadata: true,

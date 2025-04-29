@@ -12,14 +12,14 @@ import {
   visualizeControlFlowGraphs,
 } from "../cfg-analyzer";
 
-function getIdFromParams(req, res) {
-  const { id } = req.params;
+function getParams(req, res) {
+  const { id, branch } = req.params;
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid repository ID" });
-    return;
+    return {};
   }
 
-  return id;
+  return { id, branch: branch || "main" };
 }
 
 async function getRepoById(id: string, res) {
@@ -46,7 +46,7 @@ export function codeRoutes(app: Express) {
 
   app.get("/api/repos/:id", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
+      const { id } = getParams(req, res);
       const repo = await getRepoById(id, res);
       if (!repo) return;
       res.json(repo);
@@ -59,7 +59,7 @@ export function codeRoutes(app: Express) {
 
   app.delete("/api/repos/:id", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
+      const { id } = getParams(req, res);
       await storage.deleteRepo(id.toString());
       res.status(204).end();
     } catch (error: unknown) {
@@ -71,7 +71,7 @@ export function codeRoutes(app: Express) {
 
   app.patch("/api/repos/:id", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
+      const { id } = getParams(req, res);
       const { fileFilterRegex } = req.body;
       if (!fileFilterRegex) {
         res
@@ -90,9 +90,9 @@ export function codeRoutes(app: Express) {
 
   app.get("/api/repos/:id/embeddings", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
+      const { id, branch } = getParams(req, res);
 
-      const data = await storage.getRepoFiles(id);
+      const data = await storage.getRepoFiles(id, branch);
       res.json(data);
     } catch (error: unknown) {
       const message =
@@ -106,21 +106,18 @@ export function codeRoutes(app: Express) {
   // Endpoint to analyze repository files
   app.post("/api/repos/:id/analyze", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
-      const { fileFilterRegex } = req.body;
+      const { id, branch } = getParams(req, res);
       const repo = await getRepoById(id, res);
-      if (!repo) return;
-
-      if (!fileFilterRegex) {
-        res
-          .status(400)
-          .json({ error: "Please supply a file regex for matching" });
+      if (!repo) {
+        res.status(404).json({ error: "Repository not found" });
+        return;
       }
 
       const repoContent = await getRepoContent(
         repo.accessToken,
         `https://github.com/${repo.fullName}`,
-        fileFilterRegex
+        repo.fileFilterRegex || ".*",
+        branch || "main"
       );
 
       // Process each file
@@ -146,7 +143,7 @@ export function codeRoutes(app: Express) {
           // Attempt to get existing file, handle if it doesn't exist
           let repoFile;
           try {
-            repoFile = await storage.getRepoFile(id, file.path);
+            repoFile = await storage.getRepoFile(id, file.path, branch);
           } catch (error) {
             console.log(
               `File ${file.path} not found in the database, will create it`
@@ -155,7 +152,7 @@ export function codeRoutes(app: Express) {
 
           if (repoFile) {
             // Update the file in database
-            await storage.updateRepoFile(repoFile.id, {
+            await storage.updateRepoFile(repoFile.id, branch, {
               content: file.content,
               updatedAt: new Date(),
               metadata: {
@@ -168,7 +165,7 @@ export function codeRoutes(app: Express) {
               repoId: id,
               filePath: file.path,
               content: file.content,
-              branch: "main", // TODO update this when we have a branch system
+              branch,
               metadata: {
                 size: file.content.length,
                 language: extension.slice(1) || "text",
@@ -198,10 +195,10 @@ export function codeRoutes(app: Express) {
   // Endpoint to generate documentation
   app.post("/api/repos/:id/generate-docs", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
-      const { docType, query, model = "gpt-4o" } = req.body;
+      const { id } = getParams(req, res);
+      const { docType, query, model = "gpt-4o", branch } = req.body;
 
-      const repoDoc = await storage.getRepoDoc(id);
+      const repoDoc = await storage.getRepoDoc(id, branch);
 
       // If a specific query is provided, use vector search to find relevant files
       let relevantFiles;
@@ -216,14 +213,15 @@ export function codeRoutes(app: Express) {
           similarResults.map(async (result) => {
             const file = await storage.getRepoFile(
               id,
-              result.metadata.filePath
+              result.metadata.filePath,
+              branch
             );
             return file;
           })
         );
       } else {
         // Otherwise use all files
-        relevantFiles = await storage.getRepoFiles(id);
+        relevantFiles = await storage.getRepoFiles(id, branch);
       }
 
       if (!relevantFiles.length) {
@@ -236,7 +234,7 @@ export function codeRoutes(app: Express) {
       // Try to get CFG data if it exists
       let cfgContent = "";
       try {
-        const cfgDocs = await storage.getRepoDocs(id);
+        const cfgDocs = await storage.getRepoDocs(id, branch);
         const cfgDoc = cfgDocs.find((doc) => doc.docType === "cfg");
         if (cfgDoc) {
           console.log("CFG data found, including in documentation generation");
@@ -287,6 +285,7 @@ export function codeRoutes(app: Express) {
           })
         : await storage.createRepoDoc({
             repoId: id,
+            branch,
             title: `${docType} Documentation`,
             content: documentation,
             docType,
@@ -313,8 +312,8 @@ export function codeRoutes(app: Express) {
   // Add new route to get previously generated documentation
   app.get("/api/repos/:id/docs", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
-      const docs = await storage.getRepoDocs(id);
+      const { id, branch } = getParams(req, res);
+      const docs = await storage.getRepoDocs(id, branch);
 
       // Sort by updatedAt to get the most recent doc
       const sortedDocs = docs.sort(
@@ -342,12 +341,12 @@ export function codeRoutes(app: Express) {
   // Endpoint to generate Call Graph and Control Flow Graph (CFG)
   app.post("/api/repos/:id/generate-cfg", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
+      const { id, branch } = getParams(req, res);
       const repo = await getRepoById(id, res);
       if (!repo) return;
 
       // Get all files in the repository
-      const repoFiles = await storage.getRepoFiles(id);
+      const repoFiles = await storage.getRepoFiles(id, branch);
 
       if (!repoFiles.length) {
         res.status(404).json({
@@ -376,13 +375,14 @@ export function codeRoutes(app: Express) {
       const combinedContent = `# Repository Analysis: Call Graph and Control Flow Graph\n\n${callGraphText}\n\n${cfgText}`;
 
       // Check for existing CFG doc
-      const existingDocs = await storage.getRepoDocs(id);
+      const existingDocs = await storage.getRepoDocs(id, branch);
       const cfgDoc = existingDocs.find((doc) => doc.docType === "cfg");
 
       // Store the generated CFG
       const doc = cfgDoc
         ? await storage.updateRepoDoc(cfgDoc.id, {
             repoId: id,
+            branch,
             title: "Code Structure Analysis",
             content: combinedContent,
             docType: "cfg",
@@ -396,6 +396,7 @@ export function codeRoutes(app: Express) {
           })
         : await storage.createRepoDoc({
             repoId: id,
+            branch,
             title: "Code Structure Analysis",
             content: combinedContent,
             docType: "cfg",
@@ -427,8 +428,8 @@ export function codeRoutes(app: Express) {
   // Endpoint to retrieve CFG data
   app.get("/api/repos/:id/cfg", async (req, res) => {
     try {
-      const id = getIdFromParams(req, res);
-      const docs = await storage.getRepoDocs(id);
+      const { id, branch } = getParams(req, res);
+      const docs = await storage.getRepoDocs(id, branch);
 
       // Find the most recent CFG document
       const cfgDocs = docs

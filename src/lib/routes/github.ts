@@ -1,7 +1,7 @@
 import type { Express } from "express";
 
 import { storage } from "src/storage";
-import { listRepoFileSystem, listUserRepos } from "../github";
+import { getRepoBranches, listRepoFileSystem, listUserRepos } from "../github";
 
 interface GithubTokenResponse {
   access_token?: string;
@@ -179,6 +179,36 @@ export function githubRoutes(app: Express) {
         `https://github.com/${repo.fullName}`
       );
       res.json(fileSystem);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to list repository files";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/github/repos/:id/branches", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const auth = await storage.getGithubAuth();
+      if (!auth) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+
+      const repo = await storage.getRepo(id);
+
+      if (!repo) {
+        res.status(404).json({ error: "Repository not found" });
+        return;
+      }
+
+      const branches = await getRepoBranches(
+        auth.accessToken,
+        `https://github.com/${repo.fullName}`
+      );
+      res.json(branches);
     } catch (error: unknown) {
       const message =
         error instanceof Error
