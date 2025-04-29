@@ -168,6 +168,7 @@ export function codeRoutes(app: Express) {
               repoId: id,
               filePath: file.path,
               content: file.content,
+              branch: "main", // TODO update this when we have a branch system
               metadata: {
                 size: file.content.length,
                 language: extension.slice(1) || "text",

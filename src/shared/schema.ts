@@ -40,12 +40,15 @@ export const repoFiles = pgTable(
     id: serial("id"),
     repoId: text("repo_id").notNull(),
     filePath: text("file_path").notNull(),
+    branch: text("branch").notNull(),
     content: text("content"), // Store the actual file content
     metadata: jsonb("metadata").notNull(), // Store file metadata like size, etc.
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.repoId, table.filePath] })]
+  (table) => [
+    primaryKey({ columns: [table.repoId, table.filePath, table.branch] }),
+  ]
 );
 
 export const repoDocs = pgTable("repo_docs", {
@@ -92,6 +95,7 @@ export const insertRepoFileSchema = createInsertSchema(repoFiles)
   .pick({
     repoId: true,
     filePath: true,
+    branch: true,
     content: true,
     metadata: true,
     updatedAt: true,
