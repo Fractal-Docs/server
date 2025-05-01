@@ -1,7 +1,7 @@
 import type { Express } from "express";
 
 import { storage } from "../../storage";
-import { getRepoContent } from "../github";
+import { compareBranchToDefaultBranch, getRepoContent } from "../github";
 import { generateDocumentation } from "../openai";
 import { processFileContent, generateEmbedding } from "../embeddings";
 import { vectorStorage } from "../vector-storage";
@@ -190,7 +190,7 @@ export function codeRoutes(app: Express) {
       const { id, branch } = getParams(req, res);
       const { docType, query, model = "gpt-4o" } = req.body;
 
-      const repoDoc = await storage.getRepoDoc(id, branch);
+      const repoDoc = await storage.getRepoDoc(id, branch, docType);
 
       // If a specific query is provided, use vector search to find relevant files
       let relevantFiles;
@@ -445,6 +445,115 @@ export function codeRoutes(app: Express) {
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to fetch CFG data";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/repos/:id/compare", async (req, res) => {
+    try {
+      const { id, branch } = getParams(req, res);
+      const { docType, model = "gpt-4o" } = req.body;
+      const auth = await storage.getGithubAuth();
+      if (!auth) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+
+      const repo = await storage.getRepo(id);
+
+      if (!repo) {
+        res.status(404).json({ error: "Repository not found" });
+        return;
+      }
+      const repoDoc = await storage.getRepoDoc(id, branch, "change");
+
+      const response = await compareBranchToDefaultBranch(
+        auth.accessToken,
+        `https://github.com/${repo.fullName}`,
+        branch
+      );
+
+      console.log(response.data);
+
+      const relevantFiles =
+        response.data?.files?.map(
+          ({ filename, status, additions, deletions, changes, patch }) => ({
+            filename,
+            status,
+            additions,
+            deletions,
+            changes,
+            patch,
+          })
+        ) || [];
+
+      const fileContents = relevantFiles
+        .filter((file) => file !== undefined)
+        .map(
+          (file) =>
+            `File: ${file!.filename}\n\n${JSON.stringify(
+              {
+                status: file!.status,
+                additions: file!.additions,
+                deletions: file!.deletions,
+                changes: file!.changes,
+              },
+              null,
+              2
+            )}\n\nPatch:\n${file!.patch || "No content available"}`
+        )
+        .join("\n\n");
+
+      const { content: documentation, prompts } = await generateDocumentation(
+        fileContents,
+        `Generate change documentation`,
+        model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini",
+        "change"
+      );
+
+      console.log("Documentation generated");
+
+      // Store the generated documentation with actual prompts in metadata
+      const doc = repoDoc
+        ? await storage.updateRepoDoc(repoDoc.id, {
+            repoId: id,
+            title: `${docType} Documentation`,
+            content: documentation,
+            docType,
+            updatedAt: new Date(),
+            metadata: {
+              generatedFrom: relevantFiles.map((f) => f!.filename),
+              aiModel: model,
+              timestamp: new Date().toISOString(),
+              prompts,
+            },
+          })
+        : await storage.createRepoDoc({
+            repoId: id,
+            branch,
+            title: `${docType} Documentation`,
+            content: documentation,
+            docType,
+            metadata: {
+              generatedFrom: relevantFiles.map((f) => f!.filename),
+              aiModel: model,
+              timestamp: new Date().toISOString(),
+              prompts,
+            },
+          });
+
+      console.log("Documentation stored");
+
+      res.json({
+        success: true,
+        message: "Change documentation generated successfully",
+        doc,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to list repository files";
       res.status(500).json({ error: message });
     }
   });

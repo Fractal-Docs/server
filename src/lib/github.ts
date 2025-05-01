@@ -232,3 +232,49 @@ export async function listRepoFileSystem(
 
   return await fetchFileSystem();
 }
+
+export async function getDefaultBranch(
+  accessToken: string,
+  owner: string,
+  repo: string
+) {
+  const octokit = new Octokit({ auth: accessToken });
+  const response = await octokit.repos.get({
+    owner,
+    repo,
+  });
+  return response.data.default_branch;
+}
+
+export async function compareBranches(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  base: string,
+  head: string
+) {
+  const octokit = new Octokit({ auth: accessToken });
+  const basehead = `${base}...${head}`;
+
+  const response = await octokit.repos.compareCommitsWithBasehead({
+    owner,
+    repo,
+    basehead,
+  });
+
+  return response;
+}
+
+export async function compareBranchToDefaultBranch(
+  accessToken: string,
+  repoUrl: string,
+  branch: string
+) {
+  // Parse repo URL to get owner and repo name
+  const [owner, repo] = repoUrl
+    .replace("https://github.com/", "")
+    .replace(".git", "")
+    .split("/");
+  const defaultBranch = await getDefaultBranch(accessToken, owner, repo);
+  return await compareBranches(accessToken, owner, repo, defaultBranch, branch);
+}

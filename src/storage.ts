@@ -55,7 +55,11 @@ export interface IStorage {
   // Repository documentation operations
   getRepoDocs(repoId: string, branchName: string): Promise<RepoDoc[]>;
   createRepoDoc(doc: InsertRepoDoc): Promise<RepoDoc>;
-  getRepoDoc(repoId: string, branchName: string): Promise<RepoDoc | undefined>;
+  getRepoDoc(
+    repoId: string,
+    branchName: string,
+    docType: string
+  ): Promise<RepoDoc | undefined>;
   updateRepoDoc(id: number, doc: Partial<InsertRepoDoc>): Promise<RepoDoc>;
   deleteRepoDoc(id: number): Promise<void>;
 }
@@ -272,13 +276,20 @@ export class DatabaseStorage implements IStorage {
 
   async getRepoDoc(
     repoId: string,
-    branch: string
+    branch: string,
+    docType: string
   ): Promise<RepoDoc | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .select()
         .from(repoDocs)
-        .where(and(eq(repoDocs.repoId, repoId), eq(repoDocs.branch, branch)));
+        .where(
+          and(
+            eq(repoDocs.repoId, repoId),
+            eq(repoDocs.branch, branch),
+            eq(repoDocs.docType, docType)
+          )
+        );
       return doc;
     });
   }
