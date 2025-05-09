@@ -233,17 +233,35 @@ export async function listRepoFileSystem(
   return await fetchFileSystem();
 }
 
-export async function getDefaultBranch(
-  accessToken: string,
-  owner: string,
-  repo: string
-) {
+export async function getGithubRepo(accessToken: string, repoUrl: string) {
+  const [owner, repo] = repoUrl
+    .replace("https://github.com/", "")
+    .replace(".git", "")
+    .split("/");
   const octokit = new Octokit({ auth: accessToken });
   const response = await octokit.repos.get({
     owner,
     repo,
   });
-  return response.data.default_branch;
+  return response.data;
+}
+
+export async function getLatestCommit(
+  accessToken: string,
+  repoUrl: string,
+  branch: string
+) {
+  const [owner, repo] = repoUrl
+    .replace("https://github.com/", "")
+    .replace(".git", "")
+    .split("/");
+  const octokit = new Octokit({ auth: accessToken });
+  const response = await octokit.repos.getCommit({
+    owner,
+    repo,
+    ref: branch,
+  });
+  return response.data.commit.author?.date;
 }
 
 export async function compareBranches(
@@ -275,6 +293,12 @@ export async function compareBranchToDefaultBranch(
     .replace("https://github.com/", "")
     .replace(".git", "")
     .split("/");
-  const defaultBranch = await getDefaultBranch(accessToken, owner, repo);
-  return await compareBranches(accessToken, owner, repo, defaultBranch, branch);
+  const ghRepo = await getGithubRepo(accessToken, repoUrl);
+  return await compareBranches(
+    accessToken,
+    owner,
+    repo,
+    ghRepo.default_branch,
+    branch
+  );
 }

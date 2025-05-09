@@ -1,7 +1,12 @@
 import type { Express } from "express";
 
 import { storage } from "../../storage";
-import { compareBranchToDefaultBranch, getRepoContent } from "../github";
+import {
+  compareBranchToDefaultBranch,
+  getGithubRepo,
+  getLatestCommit,
+  getRepoContent,
+} from "../github";
 import { generateDocumentation } from "../openai";
 import { processFileContent, generateEmbedding } from "../embeddings";
 import { vectorStorage } from "../vector-storage";
@@ -37,10 +42,29 @@ export function codeRoutes(app: Express) {
 
   app.get("/api/repos/:id", async (req, res) => {
     try {
-      const { id } = getParams(req, res);
+      const { id, branch } = getParams(req, res);
       const repo = await getRepoById(id, res);
+      const auth = await storage.getGithubAuth();
+      if (!auth) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
       if (!repo) return;
-      res.json(repo);
+
+      const ghRepo = await getGithubRepo(
+        auth.accessToken,
+        `https://github.com/${repo.fullName}`
+      );
+      const latestCommitDate = await getLatestCommit(
+        auth.accessToken,
+        `https://github.com/${repo.fullName}`,
+        branch
+      );
+      res.json({
+        ...repo,
+        defaultBranch: ghRepo.default_branch,
+        latestCommitDate,
+      });
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to find repository";
@@ -110,6 +134,15 @@ export function codeRoutes(app: Express) {
         repo.fileFilterRegex || ".*",
         branch || "main"
       );
+
+      // clear out old storage
+      await vectorStorage.deleteByRepoId(id, branch);
+      const repoFiles = await storage.getRepoFiles(id, branch);
+      for (const repoFile of repoFiles) {
+        if (!repoContent.find((f) => f.path === repoFile.filePath)) {
+          await storage.deleteRepoFile(repoFile.id);
+        }
+      }
 
       // Process each file
       for (const file of repoContent) {
@@ -320,7 +353,7 @@ export function codeRoutes(app: Express) {
         return;
       }
 
-      res.json(sortedDocs[0]);
+      res.json(sortedDocs);
     } catch (error: unknown) {
       const message =
         error instanceof Error

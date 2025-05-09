@@ -27,7 +27,7 @@ export interface IVectorStorage {
       metadata: VectorMetadata;
     }>
   >;
-  deleteByRepoId(repoId: string): Promise<void>;
+  deleteByRepoId(repoId: string, branch: string): Promise<void>;
 }
 
 export class LocalVectorStorage implements IVectorStorage {
@@ -61,8 +61,10 @@ export class LocalVectorStorage implements IVectorStorage {
       .slice(0, limit);
   }
 
-  async deleteByRepoId(repoId: string): Promise<void> {
-    this.vectors = this.vectors.filter((v) => v.metadata.repoId !== repoId);
+  async deleteByRepoId(repoId: string, branch: string): Promise<void> {
+    this.vectors = this.vectors.filter(
+      (v) => !(v.metadata.repoId === repoId && v.metadata.branch === branch)
+    );
   }
 }
 
@@ -142,9 +144,29 @@ export class PineconeVectorStorage implements IVectorStorage {
     }));
   }
 
-  async deleteByRepoId(repoId: string): Promise<void> {
+  async deleteByRepoId(repoId: string, branch: string): Promise<void> {
     const index = this.client.index(this.indexName);
-    await index.deleteMany({ filter: { repoId } });
+
+    let list = await index.listPaginated({
+      prefix: `${repoId}-${branch}`,
+    });
+    if (!list || !list.vectors) return;
+
+    let vectorIds = list.vectors.map((vector) => vector.id);
+
+    if (vectorIds.length === 0) return;
+
+    await index.deleteMany(vectorIds);
+
+    while (list.pagination?.next) {
+      list = await index.listPaginated({
+        prefix: `${repoId}-${branch}`,
+      });
+      if (!list || !list.vectors) return;
+
+      vectorIds = list.vectors.map((vector) => vector.id);
+      index.deleteMany(vectorIds);
+    }
   }
 }
 
