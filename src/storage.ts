@@ -31,7 +31,7 @@ export interface IStorage {
   getRepos(): Promise<GithubRepo[]>;
   getRepo(id: string): Promise<GithubRepo | undefined>;
   createRepo(repo: InsertGithubRepo): Promise<GithubRepo>;
-  deleteRepo(id: string): Promise<void>;
+  deleteRepo(id: string): Promise<void[]>;
 
   // GitHub auth operations
   getGithubAuth(): Promise<GithubAuth | undefined>;
@@ -165,14 +165,29 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async deleteRepo(id: string): Promise<void> {
-    return this.handleDatabaseOperation(async () => {
+  async deleteRepo(id: string): Promise<void[]> {
+    const deleteRepo = this.handleDatabaseOperation(async () => {
       const [repo] = await db
         .delete(githubRepos)
         .where(eq(githubRepos.repoId, id))
         .returning();
       if (!repo) throw new Error("Repository not found");
     });
+    const deleteRepoDocs = this.handleDatabaseOperation(async () => {
+      const [repo] = await db
+        .delete(repoDocs)
+        .where(eq(repoDocs.repoId, id))
+        .returning();
+      if (!repo) throw new Error("Repository not found");
+    });
+    const deleteRepoFiles = this.handleDatabaseOperation(async () => {
+      const [repo] = await db
+        .delete(repoFiles)
+        .where(eq(repoFiles.repoId, id))
+        .returning();
+      if (!repo) throw new Error("Repository not found");
+    });
+    return Promise.all([deleteRepo, deleteRepoDocs, deleteRepoFiles]);
   }
 
   async getGithubAuth(): Promise<GithubAuth | undefined> {
@@ -193,14 +208,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository file analysis operations
-  async getRepoFiles(repoId: string, branchName: string): Promise<RepoFile[]> {
+  async getRepoFiles(repoId: string, branchName?: string): Promise<RepoFile[]> {
+    const whereClause = branchName
+      ? and(eq(repoFiles.repoId, repoId), eq(repoFiles.branch, branchName))
+      : eq(repoFiles.repoId, repoId);
     return this.handleDatabaseOperation(() =>
-      db
-        .select()
-        .from(repoFiles)
-        .where(
-          and(eq(repoFiles.repoId, repoId), eq(repoFiles.branch, branchName))
-        )
+      db.select().from(repoFiles).where(whereClause)
     );
   }
 

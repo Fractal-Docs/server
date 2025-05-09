@@ -75,7 +75,10 @@ export function codeRoutes(app: Express) {
   app.delete("/api/repos/:id", async (req, res) => {
     try {
       const { id } = getParams(req, res);
+
       await storage.deleteRepo(id.toString());
+      // clear out old storage
+      await vectorStorage.deleteByRepoId(id);
       res.status(204).end();
     } catch (error: unknown) {
       const message =
