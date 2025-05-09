@@ -1,0 +1,222 @@
+import type { Express } from "express";
+
+import { storage } from "src/storage";
+import { getRepoBranches, listRepoFileSystem, listUserRepos } from "../github";
+import { getParams } from "../helpers";
+
+interface GithubTokenResponse {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+}
+
+export function githubRoutes(app: Express) {
+  // GitHub OAuth routes
+  app.get("/api/github/login", (req, res) => {
+    const redirectUri = `https://${req.hostname}/repos`;
+    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo`;
+    res.json({ url: githubAuthUrl });
+  });
+
+  // API endpoint for completing OAuth
+  app.get("/api/github/complete-oauth", async (req, res) => {
+    const { code } = req.query;
+
+    if (!code || typeof code !== "string") {
+      res.status(400).json({ error: "No code provided" });
+      return;
+    }
+
+    try {
+      const tokenRes = await fetch(
+        "https://github.com/login/oauth/access_token",
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            client_id: process.env.GITHUB_CLIENT_ID,
+            client_secret: process.env.GITHUB_CLIENT_SECRET,
+            code,
+            redirect_uri: `https://${req.hostname}/repos`,
+          }),
+        }
+      );
+
+      console.log("GitHub token response status:", tokenRes.status);
+
+      if (!tokenRes.ok) {
+        throw new Error(`GitHub token exchange failed: ${tokenRes.statusText}`);
+      }
+
+      const data = (await tokenRes.json()) as GithubTokenResponse;
+      console.log("GitHub token response:", {
+        error: data.error,
+        error_description: data.error_description,
+        has_token: !!data.access_token,
+      });
+
+      if (data.error) {
+        throw new Error(data.error_description || data.error);
+      }
+
+      if (!data.access_token) {
+        throw new Error("No access token received from GitHub");
+      }
+
+      console.log("Saving GitHub auth to database...");
+      await storage.saveGithubAuth({
+        accessToken: data.access_token,
+      });
+      console.log("GitHub auth saved successfully");
+
+      res.json({ success: true });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to authenticate with GitHub";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Gets repos for OAuth token
+  app.get("/api/github/available-repos", async (req, res) => {
+    try {
+      const auth = await storage.getGithubAuth();
+      if (!auth) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+
+      const availableRepos = await listUserRepos(auth.accessToken);
+
+      // Filter out already imported repos
+      const existingRepos = await storage.getRepos();
+      const existingRepoIds = new Set(existingRepos.map((r) => r.repoId));
+
+      const filteredRepos = availableRepos.filter(
+        (repo) => !existingRepoIds.has(String(repo.repoId))
+      );
+
+      res.json(filteredRepos);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch available repositories";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Add new route for GitHub auth status
+  app.get("/api/github/auth", async (_req, res) => {
+    try {
+      const auth = await storage.getGithubAuth();
+      res.json(auth || null);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to get GitHub auth status";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/github/import-repos", async (req, res) => {
+    try {
+      const auth = await storage.getGithubAuth();
+      if (!auth) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+
+      const { repositories } = req.body;
+      if (!Array.isArray(repositories)) {
+        res.status(400).json({ error: "Invalid repositories format" });
+        return;
+      }
+
+      const createdRepos = await Promise.all(
+        repositories.map((repo) =>
+          storage.createRepo({
+            ...repo,
+            accessToken: auth.accessToken,
+          })
+        )
+      );
+
+      res.json(createdRepos);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to import repositories";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/github/repos/:id/files", async (req, res) => {
+    try {
+      const { id, branch } = getParams(req, res);
+      const auth = await storage.getGithubAuth();
+      if (!auth) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+
+      const repo = await storage.getRepo(id);
+
+      if (!repo) {
+        res.status(404).json({ error: "Repository not found" });
+        return;
+      }
+
+      // Utilize the listRepoFileSystem function from /github
+      const fileSystem = await listRepoFileSystem(
+        auth.accessToken,
+        `https://github.com/${repo.fullName}`,
+        branch
+      );
+      res.status(200).json(fileSystem);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to list repository files";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/github/repos/:id/branches", async (req, res) => {
+    try {
+      const { id } = getParams(req, res);
+      const auth = await storage.getGithubAuth();
+      if (!auth) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+
+      const repo = await storage.getRepo(id);
+
+      if (!repo) {
+        res.status(404).json({ error: "Repository not found" });
+        return;
+      }
+
+      const branches = await getRepoBranches(
+        auth.accessToken,
+        `https://github.com/${repo.fullName}`
+      );
+      res.json(branches);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to list repository files";
+      res.status(500).json({ error: message });
+    }
+  });
+}
