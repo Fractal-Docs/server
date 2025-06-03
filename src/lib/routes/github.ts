@@ -13,7 +13,7 @@ interface GithubTokenResponse {
 export function githubRoutes(app: Express) {
   // GitHub OAuth routes
   app.get("/api/github/login", (req, res) => {
-    const redirectUri = `https://${req.hostname}/repos`;
+    const redirectUri = `https://${req.get("origin")}/repos`;
     const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo`;
     res.json({ url: githubAuthUrl });
   });
@@ -40,7 +40,7 @@ export function githubRoutes(app: Express) {
             client_id: process.env.GITHUB_CLIENT_ID,
             client_secret: process.env.GITHUB_CLIENT_SECRET,
             code,
-            redirect_uri: `https://${req.hostname}/repos`,
+            redirect_uri: `https://${req.get("origin")}/repos`,
           }),
         }
       );
