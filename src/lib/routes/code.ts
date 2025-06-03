@@ -44,7 +44,12 @@ export function codeRoutes(app: Express) {
     try {
       const { id, branch } = getParams(req, res);
       const repo = await getRepoById(id, res);
-      const auth = await storage.getGithubAuth();
+      const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const auth = await storage.getUser(userSub);
       if (!auth) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
@@ -489,7 +494,11 @@ export function codeRoutes(app: Express) {
     try {
       const { id, branch } = getParams(req, res);
       const { docType, model = "gpt-4o" } = req.body;
-      const auth = await storage.getGithubAuth();
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const auth = await storage.getUser(userSub);
       if (!auth) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;

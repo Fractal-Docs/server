@@ -20,7 +20,7 @@ export function githubRoutes(app: Express) {
 
   // API endpoint for completing OAuth
   app.get("/api/github/complete-oauth", async (req, res) => {
-    const { code } = req.query;
+    const { code, userSub } = req.query;
 
     if (!code || typeof code !== "string") {
       res.status(400).json({ error: "No code provided" });
@@ -67,9 +67,18 @@ export function githubRoutes(app: Express) {
       }
 
       console.log("Saving GitHub auth to database...");
-      await storage.saveGithubAuth({
-        accessToken: data.access_token,
-      });
+      const user = await storage.getUser(userSub as string);
+      if (user) {
+        await storage.updateUser({
+          accessToken: data.access_token,
+          userSub: userSub as string,
+        });
+      } else {
+        await storage.createUser({
+          accessToken: data.access_token,
+          userSub: userSub as string,
+        });
+      }
       console.log("GitHub auth saved successfully");
 
       res.json({ success: true });
@@ -84,8 +93,13 @@ export function githubRoutes(app: Express) {
 
   // Gets repos for OAuth token
   app.get("/api/github/available-repos", async (req, res) => {
+    const userSub = req.headers["user-sub"] as string;
     try {
-      const auth = await storage.getGithubAuth();
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const auth = await storage.getUser(userSub as string);
       if (!auth) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
@@ -112,9 +126,14 @@ export function githubRoutes(app: Express) {
   });
 
   // Add new route for GitHub auth status
-  app.get("/api/github/auth", async (_req, res) => {
+  app.get("/api/github/auth", async (req, res) => {
+    const userSub = req.headers["user-sub"] as string;
     try {
-      const auth = await storage.getGithubAuth();
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const auth = await storage.getUser(userSub as string);
       res.json(auth || null);
     } catch (error: unknown) {
       const message =
@@ -126,8 +145,13 @@ export function githubRoutes(app: Express) {
   });
 
   app.post("/api/github/import-repos", async (req, res) => {
+    const userSub = req.headers["user-sub"] as string;
     try {
-      const auth = await storage.getGithubAuth();
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const auth = await storage.getUser(userSub as string);
       if (!auth) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
@@ -160,8 +184,13 @@ export function githubRoutes(app: Express) {
 
   app.get("/api/github/repos/:id/files", async (req, res) => {
     try {
+      const userSub = req.headers["user-sub"] as string;
       const { id, branch } = getParams(req, res);
-      const auth = await storage.getGithubAuth();
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const auth = await storage.getUser(userSub as string);
       if (!auth) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
@@ -192,8 +221,13 @@ export function githubRoutes(app: Express) {
 
   app.get("/api/github/repos/:id/branches", async (req, res) => {
     try {
+      const userSub = req.headers["user-sub"] as string;
       const { id } = getParams(req, res);
-      const auth = await storage.getGithubAuth();
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const auth = await storage.getUser(userSub as string);
       if (!auth) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;

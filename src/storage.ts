@@ -1,15 +1,15 @@
 import {
   prds,
   githubRepos,
-  githubAuth,
+  users,
   repoFiles,
   repoDocs,
   type Prd,
   type InsertPrd,
   type GithubRepo,
   type InsertGithubRepo,
-  type GithubAuth,
-  type InsertGithubAuth,
+  type User,
+  type InsertUser,
   type RepoFile,
   type InsertRepoFile,
   type RepoDoc,
@@ -34,8 +34,9 @@ export interface IStorage {
   deleteRepo(id: string): Promise<void[]>;
 
   // GitHub auth operations
-  getGithubAuth(): Promise<GithubAuth | undefined>;
-  saveGithubAuth(auth: InsertGithubAuth): Promise<GithubAuth>;
+  getUser(user_sub: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(user: InsertUser): Promise<User>;
 
   // Repository file analysis operations
   getRepoFiles(repoId: string, branchName: string): Promise<RepoFile[]>;
@@ -190,20 +191,31 @@ export class DatabaseStorage implements IStorage {
     return Promise.all([deleteRepo, deleteRepoDocs, deleteRepoFiles]);
   }
 
-  async getGithubAuth(): Promise<GithubAuth | undefined> {
+  async getUser(user_sub: string): Promise<User | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [auth] = await db.select().from(githubAuth);
-      return auth;
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.userSub, user_sub));
+      return user;
     });
   }
 
-  async saveGithubAuth(insertAuth: InsertGithubAuth): Promise<GithubAuth> {
+  async createUser(insertUser: InsertUser): Promise<User> {
     return this.handleDatabaseOperation(async () => {
-      // First delete any existing auth
-      await db.delete(githubAuth);
-      // Then insert the new one
-      const [auth] = await db.insert(githubAuth).values(insertAuth).returning();
-      return auth;
+      const [user] = await db.insert(users).values(insertUser).returning();
+      return user;
+    });
+  }
+
+  async updateUser(insertUser: InsertUser): Promise<User> {
+    return this.handleDatabaseOperation(async () => {
+      const [user] = await db
+        .update(users)
+        .set(insertUser)
+        .where(eq(users.userSub, insertUser.userSub))
+        .returning();
+      return user;
     });
   }
 
