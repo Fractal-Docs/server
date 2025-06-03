@@ -30,9 +30,9 @@ export const githubRepos = pgTable("github_repos", {
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  accessToken: text("access_token").notNull(),
   userSub: text("user_sub").notNull(),
-  repos: text("repos").array().default([]),
+  accessToken: text("access_token"),
+  repos: text("repos").array().default([]).notNull(),
 });
 
 // New tables for repository analysis

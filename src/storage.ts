@@ -16,11 +16,11 @@ import {
   type InsertRepoDoc,
 } from "./shared/schema";
 import { db } from "./db";
-import { eq, like, and } from "drizzle-orm";
+import { eq, like, and, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // PRD operations
-  getPrds(): Promise<Prd[]>;
+  getPrds(userRepos: string[]): Promise<Prd[]>;
   getPrd(id: number): Promise<Prd | undefined>;
   createPrd(prd: InsertPrd): Promise<Prd>;
   updatePrd(id: number, prd: InsertPrd): Promise<Prd>;
@@ -28,7 +28,7 @@ export interface IStorage {
   searchPrds(query: string): Promise<Prd[]>;
 
   // GitHub repo operations
-  getRepos(): Promise<GithubRepo[]>;
+  getRepos(userRepos: string[]): Promise<GithubRepo[]>;
   getRepo(id: string): Promise<GithubRepo | undefined>;
   createRepo(repo: InsertGithubRepo): Promise<GithubRepo>;
   deleteRepo(id: string): Promise<void[]>;
@@ -79,8 +79,10 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPrds(): Promise<Prd[]> {
-    return this.handleDatabaseOperation(() => db.select().from(prds));
+  async getPrds(userRepos: string[]): Promise<Prd[]> {
+    return this.handleDatabaseOperation(() =>
+      db.select().from(prds).where(inArray(prds.repoId, userRepos))
+    );
   }
 
   async getPrd(id: number): Promise<Prd | undefined> {
@@ -127,8 +129,13 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getRepos(): Promise<GithubRepo[]> {
-    return this.handleDatabaseOperation(() => db.select().from(githubRepos));
+  async getRepos(userRepos: string[]): Promise<GithubRepo[]> {
+    return this.handleDatabaseOperation(() =>
+      db
+        .select()
+        .from(githubRepos)
+        .where(inArray(githubRepos.repoId, userRepos))
+    );
   }
 
   async getRepo(id: string): Promise<GithubRepo | undefined> {
