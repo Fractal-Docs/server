@@ -13,10 +13,12 @@ interface GithubTokenResponse {
 export function githubRoutes(app: Express) {
   // GitHub OAuth routes
   app.get("/api/github/login", (req, res) => {
-    const origin = req.get("origin");
+    const origin = req.get("origin") || "";
     let normalizedOrigin;
     try {
-      const url = new URL(origin.startsWith("http") ? origin : `https://${origin}`);
+      const url = new URL(
+        origin.startsWith("http") ? origin : `https://${origin}`
+      );
       normalizedOrigin = url.hostname + (url.port ? `:${url.port}` : "");
     } catch {
       res.status(400).json({ error: "Invalid origin header" });
@@ -37,6 +39,18 @@ export function githubRoutes(app: Express) {
     }
 
     try {
+      const origin = req.get("origin") || "";
+      let normalizedOrigin;
+      try {
+        const url = new URL(
+          origin.startsWith("http") ? origin : `https://${origin}`
+        );
+        normalizedOrigin = url.hostname + (url.port ? `:${url.port}` : "");
+      } catch {
+        res.status(400).json({ error: "Invalid origin header" });
+        return;
+      }
+      const redirectUri = `https://${normalizedOrigin}/repos`;
       const tokenRes = await fetch(
         "https://github.com/login/oauth/access_token",
         {
@@ -49,7 +63,7 @@ export function githubRoutes(app: Express) {
             client_id: process.env.GITHUB_CLIENT_ID,
             client_secret: process.env.GITHUB_CLIENT_SECRET,
             code,
-            redirect_uri: `https://${req.get("origin")}/repos`,
+            redirect_uri: redirectUri,
           }),
         }
       );
