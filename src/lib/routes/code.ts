@@ -187,9 +187,9 @@ export function codeRoutes(app: Express) {
           let repoFile;
           try {
             repoFile = await storage.getRepoFile(id, file.path, branch);
-          } catch (error) {
+          } catch (error: any) {
             console.log(
-              `File ${file.path} not found in the database, will create it`
+              `File ${file.path} not found in the database, will create it. Error: ${error.message}`
             );
           }
 
@@ -283,8 +283,10 @@ export function codeRoutes(app: Express) {
           console.log("CFG data found, including in documentation generation");
           cfgContent = cfgDoc.content;
         }
-      } catch (error) {
-        console.log("No CFG data found, proceeding without it");
+      } catch (error: any) {
+        console.log(
+          `No CFG data found, proceeding without it. Error: ${error.message}`
+        );
       }
 
       // Generate documentation using OpenAI

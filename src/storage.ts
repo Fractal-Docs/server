@@ -16,7 +16,7 @@ import {
   type InsertRepoDoc,
 } from "./shared/schema";
 import { db } from "./db";
-import { eq, like, inArray } from "drizzle-orm";
+import { eq, like, inArray, and } from "drizzle-orm";
 
 export interface IStorage {
   // PRD operations
@@ -84,7 +84,7 @@ export class DatabaseStorage implements IStorage {
       const operation = db.select().from(prds);
 
       if (userRepos) {
-        operation = operation.where(inArray(prds.repoId, userRepos));
+        return operation.where(inArray(prds.repoId, userRepos));
       }
 
       return operation;
