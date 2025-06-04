@@ -21,9 +21,9 @@ export async function generateDocumentation(
 
     const userPrompt =
       docType === "overview"
-        ? `Business Context: ${businessContext}\n\nCode:\n${code}\n\nGraph and Control Flow Graph: ${code.includes("## Call Graph") ? "Included in the code section above." : "Not available for this repository."}\n\nGenerate comprehensive technical documentation following the structure provided. The output must be formatted clearly in Markdown and should explain both the business purpose and the technical implementation clearly.`
+        ? `${businessContext}\n\nCode:\n${code}\n\nGraph and Control Flow Graph: ${code.includes("## Call Graph") ? "Included in the code section above." : "Not available for this repository."}\n\nGenerate comprehensive technical documentation following the structure provided. The output must be formatted clearly in Markdown and should explain both the business purpose and the technical implementation clearly.`
         : docType === "change"
-          ? `Business Context: ${businessContext}\n\nChanges:\n${code}\n\nGenerate documentation for the changes provided. The output must be formatted clearly in Markdown and should explain both the business purpose and the technical implementation clearly.`
+          ? `${businessContext}\n\nChanges:\n${code}\n\nGenerate documentation for the changes provided. The output must be formatted clearly in Markdown and should explain both the business purpose and the technical implementation clearly.`
           : "";
 
     const response = await openai.chat.completions.create({

@@ -43,8 +43,18 @@ export function prdRoutes(app: Express) {
 
   app.get("/api/prds/search", async (req, res) => {
     try {
+      const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub as string);
+      if (!user || !user.accessToken) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
       const query = req.query.q as string;
-      const results = await storage.searchPrds(query);
+      const results = await storage.searchPrds(user.repos, query);
       res.json(results);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Search failed";

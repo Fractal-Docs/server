@@ -305,9 +305,14 @@ export function codeRoutes(app: Express) {
         ? `${fileContents}\n\n${cfgContent}`
         : fileContents;
 
+      const prd = await storage.getPrdForBranch(id, branch);
+      const businessContext = prd
+        ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
+        : "";
+
       const { content: documentation, prompts } = await generateDocumentation(
         codeWithCfg,
-        `Generate ${docType} documentation`,
+        businessContext,
         model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini"
       );
 
@@ -422,8 +427,6 @@ export function codeRoutes(app: Express) {
       // Check for existing CFG doc
       const existingDocs = await storage.getRepoDocs(id, branch);
       const cfgDoc = existingDocs.find((doc) => doc.docType === "cfg");
-      console.log("Existing CFG doc:", cfgDoc);
-      console.log("Existing CFG docs:", existingDocs);
 
       // Store the generated CFG
       const doc = cfgDoc
@@ -531,8 +534,6 @@ export function codeRoutes(app: Express) {
         branch
       );
 
-      console.log(response.data);
-
       const relevantFiles =
         response.data?.files?.map(
           ({ filename, status, additions, deletions, changes, patch }) => ({
@@ -562,9 +563,14 @@ export function codeRoutes(app: Express) {
         )
         .join("\n\n");
 
+      const prd = await storage.getPrdForBranch(id, branch);
+      const businessContext = prd
+        ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
+        : "";
+
       const { content: documentation, prompts } = await generateDocumentation(
         fileContents,
-        `Generate change documentation`,
+        businessContext,
         model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini",
         "change"
       );

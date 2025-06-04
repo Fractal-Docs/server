@@ -46,7 +46,6 @@ export async function getUserRoles(
   accessToken: string,
   userSub: string
 ): Promise<string[]> {
-  console.log("Fetching roles for user:", accessToken, userSub);
   try {
     const response = await fetch(
       `https://${AUTH0_DOMAIN}/api/v2/users/${userSub}/roles`,
