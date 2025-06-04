@@ -20,7 +20,7 @@ import { eq, like, and, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // PRD operations
-  getPrds(userRepos: string[]): Promise<Prd[]>;
+  getPrds(userRepos?: string[]): Promise<Prd[]>;
   getPrd(id: number): Promise<Prd | undefined>;
   createPrd(prd: InsertPrd): Promise<Prd>;
   updatePrd(id: number, prd: InsertPrd): Promise<Prd>;
@@ -79,9 +79,17 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPrds(userRepos: string[]): Promise<Prd[]> {
-    return this.handleDatabaseOperation(() =>
-      db.select().from(prds).where(inArray(prds.repoId, userRepos))
+  async getPrds(userRepos?: string[]): Promise<Prd[]> {
+    return this.handleDatabaseOperation(() => {
+      const operation = db
+        .select()
+      .from(prds)
+
+      if (userRepos) {
+        operation.where(inArray(prds.repoId, userRepos));
+      }
+
+      return operation;
     );
   }
 
