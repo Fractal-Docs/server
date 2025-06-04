@@ -425,8 +425,6 @@ export function codeRoutes(app: Express) {
       // Check for existing CFG doc
       const existingDocs = await storage.getRepoDocs(id, branch);
       const cfgDoc = existingDocs.find((doc) => doc.docType === "cfg");
-      console.log("Existing CFG doc:", cfgDoc);
-      console.log("Existing CFG docs:", existingDocs);
 
       // Store the generated CFG
       const doc = cfgDoc
@@ -533,8 +531,6 @@ export function codeRoutes(app: Express) {
         `https://github.com/${repo.fullName}`,
         branch
       );
-
-      console.log(response.data);
 
       const relevantFiles =
         response.data?.files?.map(
