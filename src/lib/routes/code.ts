@@ -305,9 +305,12 @@ export function codeRoutes(app: Express) {
         ? `${fileContents}\n\n${cfgContent}`
         : fileContents;
 
+      const prd = await storage.getPrdForBranch(id, branch)
+      const businessContext = prd ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}` : '';
+
       const { content: documentation, prompts } = await generateDocumentation(
         codeWithCfg,
-        `Generate ${docType} documentation`,
+        businessContext,
         model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini"
       );
 
@@ -562,9 +565,12 @@ export function codeRoutes(app: Express) {
         )
         .join("\n\n");
 
+      const prd = await storage.getPrdForBranch(id, branch)
+      const businessContext = prd ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}` : '';
+
       const { content: documentation, prompts } = await generateDocumentation(
         fileContents,
-        `Generate change documentation`,
+        businessContext,
         model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini",
         "change"
       );

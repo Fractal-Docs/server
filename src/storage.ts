@@ -92,6 +92,19 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  async getPrdForBranch(
+    repoId: string,
+    branchName: string
+  ): Promise<Prd | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [prd] = await db
+        .select()
+        .from(prds)
+        .where(and(eq(prds.repoId, repoId), eq(prds.branch, branchName)));
+      return prd;
+    });
+  }
+
   async createPrd(insertPrd: InsertPrd): Promise<Prd> {
     return this.handleDatabaseOperation(async () => {
       const [prd] = await db.insert(prds).values(insertPrd).returning();
@@ -118,7 +131,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async searchPrds(userRepos: string[],query: string): Promise<Prd[]> {
+  async searchPrds(userRepos: string[], query: string): Promise<Prd[]> {
     return this.handleDatabaseOperation(async () => {
       if (!query) return this.getPrds(userRepos);
       return db
