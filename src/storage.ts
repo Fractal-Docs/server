@@ -20,12 +20,12 @@ import { eq, like, inArray, and } from "drizzle-orm";
 
 export interface IStorage {
   // PRD operations
-  getPrds(userRepos?: string[]): Promise<Prd[]>;
+  getPrds(userRepos: string[]): Promise<Prd[]>;
   getPrd(id: number): Promise<Prd | undefined>;
   createPrd(prd: InsertPrd): Promise<Prd>;
   updatePrd(id: number, prd: InsertPrd): Promise<Prd>;
   deletePrd(id: number): Promise<void>;
-  searchPrds(query: string): Promise<Prd[]>;
+  searchPrds(userRepos: string[], query: string): Promise<Prd[]>;
 
   // GitHub repo operations
   getRepos(userRepos: string[]): Promise<GithubRepo[]>;
@@ -79,15 +79,9 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPrds(userRepos?: string[]): Promise<Prd[]> {
+  async getPrds(userRepos: string[]): Promise<Prd[]> {
     return this.handleDatabaseOperation(() => {
-      const operation = db.select().from(prds);
-
-      if (userRepos) {
-        return operation.where(inArray(prds.repoId, userRepos));
-      }
-
-      return operation;
+      return db.select().from(prds).where(inArray(prds.repoId, userRepos));
     });
   }
 
@@ -124,9 +118,9 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async searchPrds(query: string): Promise<Prd[]> {
+  async searchPrds(userRepos: string[],query: string): Promise<Prd[]> {
     return this.handleDatabaseOperation(async () => {
-      if (!query) return this.getPrds();
+      if (!query) return this.getPrds(userRepos);
       return db
         .select()
         .from(prds)
