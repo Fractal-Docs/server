@@ -11,7 +11,7 @@ interface GithubTokenResponse {
 }
 
 export function githubRoutes(app: Express) {
-  // GitHub OAuth routes
+  // GitHub Ouser routes
   app.get("/api/github/login", (req, res) => {
     const origin = req.get("origin") || "";
     let normalizedOrigin;
@@ -31,7 +31,7 @@ export function githubRoutes(app: Express) {
 
   // API endpoint for completing OAuth
   app.get("/api/github/complete-oauth", async (req, res) => {
-    const { code } = req.query;
+    const { code, userSub } = req.query;
 
     if (!code || typeof code !== "string") {
       res.status(400).json({ error: "No code provided" });
@@ -89,11 +89,20 @@ export function githubRoutes(app: Express) {
         throw new Error("No access token received from GitHub");
       }
 
-      console.log("Saving GitHub auth to database...");
-      await storage.saveGithubAuth({
-        accessToken: data.access_token,
-      });
-      console.log("GitHub auth saved successfully");
+      console.log("Saving GitHub user to database...");
+      const user = await storage.getUser(userSub as string);
+      if (user) {
+        await storage.updateUser({
+          accessToken: data.access_token,
+          userSub: userSub as string,
+        });
+      } else {
+        await storage.createUser({
+          accessToken: data.access_token,
+          userSub: userSub as string,
+        });
+      }
+      console.log("GitHub user saved successfully");
 
       res.json({ success: true });
     } catch (error: unknown) {
@@ -105,19 +114,24 @@ export function githubRoutes(app: Express) {
     }
   });
 
-  // Gets repos for OAuth token
+  // Gets repos for Ouser token
   app.get("/api/github/available-repos", async (req, res) => {
+    const userSub = req.headers["user-sub"] as string;
     try {
-      const auth = await storage.getGithubAuth();
-      if (!auth) {
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub as string);
+      if (!user || !user.accessToken) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
       }
 
-      const availableRepos = await listUserRepos(auth.accessToken);
+      const availableRepos = await listUserRepos(user.accessToken);
 
       // Filter out already imported repos
-      const existingRepos = await storage.getRepos();
+      const existingRepos = await storage.getRepos(user.repos);
       const existingRepoIds = new Set(existingRepos.map((r) => r.repoId));
 
       const filteredRepos = availableRepos.filter(
@@ -134,24 +148,34 @@ export function githubRoutes(app: Express) {
     }
   });
 
-  // Add new route for GitHub auth status
-  app.get("/api/github/auth", async (_req, res) => {
+  // Add new route for GitHub user status
+  app.get("/api/github/auth", async (req, res) => {
+    const userSub = req.headers["user-sub"] as string;
     try {
-      const auth = await storage.getGithubAuth();
-      res.json(auth || null);
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub as string);
+      res.json(user || null);
     } catch (error: unknown) {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to get GitHub auth status";
+          : "Failed to get GitHub user status";
       res.status(500).json({ error: message });
     }
   });
 
   app.post("/api/github/import-repos", async (req, res) => {
+    const userSub = req.headers["user-sub"] as string;
     try {
-      const auth = await storage.getGithubAuth();
-      if (!auth) {
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub as string);
+      if (!user) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
       }
@@ -166,10 +190,15 @@ export function githubRoutes(app: Express) {
         repositories.map((repo) =>
           storage.createRepo({
             ...repo,
-            accessToken: auth.accessToken,
+            accessToken: user.accessToken,
           })
         )
       );
+
+      await storage.updateUser({
+        userSub,
+        repos: [...(user.repos || []), ...createdRepos.map((r) => r.repoId)],
+      });
 
       res.json(createdRepos);
     } catch (error: unknown) {
@@ -183,9 +212,14 @@ export function githubRoutes(app: Express) {
 
   app.get("/api/github/repos/:id/files", async (req, res) => {
     try {
+      const userSub = req.headers["user-sub"] as string;
       const { id, branch } = getParams(req, res);
-      const auth = await storage.getGithubAuth();
-      if (!auth) {
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub as string);
+      if (!user || !user.accessToken) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
       }
@@ -199,7 +233,7 @@ export function githubRoutes(app: Express) {
 
       // Utilize the listRepoFileSystem function from /github
       const fileSystem = await listRepoFileSystem(
-        auth.accessToken,
+        user.accessToken,
         `https://github.com/${repo.fullName}`,
         branch
       );
@@ -215,9 +249,14 @@ export function githubRoutes(app: Express) {
 
   app.get("/api/github/repos/:id/branches", async (req, res) => {
     try {
+      const userSub = req.headers["user-sub"] as string;
       const { id } = getParams(req, res);
-      const auth = await storage.getGithubAuth();
-      if (!auth) {
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub as string);
+      if (!user || !user.accessToken) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
       }
@@ -230,7 +269,7 @@ export function githubRoutes(app: Express) {
       }
 
       const branches = await getRepoBranches(
-        auth.accessToken,
+        user.accessToken,
         `https://github.com/${repo.fullName}`
       );
       res.json(branches);

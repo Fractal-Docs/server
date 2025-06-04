@@ -29,9 +29,19 @@ async function getRepoById(id: string, res) {
 }
 
 export function codeRoutes(app: Express) {
-  app.get("/api/repos", async (_req, res) => {
+  app.get("/api/repos", async (req, res) => {
     try {
-      const repos = await storage.getRepos();
+      const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub);
+      if (!user || !user.accessToken) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+      const repos = await storage.getRepos(user.repos);
       res.json(repos);
     } catch (error: unknown) {
       const message =
@@ -44,19 +54,24 @@ export function codeRoutes(app: Express) {
     try {
       const { id, branch } = getParams(req, res);
       const repo = await getRepoById(id, res);
-      const auth = await storage.getGithubAuth();
-      if (!auth) {
+      const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub);
+      if (!user || !user.accessToken) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
       }
       if (!repo) return;
 
       const ghRepo = await getGithubRepo(
-        auth.accessToken,
+        user.accessToken,
         `https://github.com/${repo.fullName}`
       );
       const latestCommitDate = await getLatestCommit(
-        auth.accessToken,
+        user.accessToken,
         `https://github.com/${repo.fullName}`,
         branch
       );
@@ -489,8 +504,13 @@ export function codeRoutes(app: Express) {
     try {
       const { id, branch } = getParams(req, res);
       const { docType, model = "gpt-4o" } = req.body;
-      const auth = await storage.getGithubAuth();
-      if (!auth) {
+      const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub);
+      if (!user || !user.accessToken) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
       }
@@ -504,7 +524,7 @@ export function codeRoutes(app: Express) {
       const repoDoc = await storage.getRepoDoc(id, branch, "change");
 
       const response = await compareBranchToDefaultBranch(
-        auth.accessToken,
+        user.accessToken,
         `https://github.com/${repo.fullName}`,
         branch
       );

@@ -1,26 +1,26 @@
 import {
   prds,
   githubRepos,
-  githubAuth,
+  users,
   repoFiles,
   repoDocs,
   type Prd,
   type InsertPrd,
   type GithubRepo,
   type InsertGithubRepo,
-  type GithubAuth,
-  type InsertGithubAuth,
+  type User,
+  type InsertUser,
   type RepoFile,
   type InsertRepoFile,
   type RepoDoc,
   type InsertRepoDoc,
 } from "./shared/schema";
 import { db } from "./db";
-import { eq, like, and } from "drizzle-orm";
+import { eq, like, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // PRD operations
-  getPrds(): Promise<Prd[]>;
+  getPrds(userRepos?: string[]): Promise<Prd[]>;
   getPrd(id: number): Promise<Prd | undefined>;
   createPrd(prd: InsertPrd): Promise<Prd>;
   updatePrd(id: number, prd: InsertPrd): Promise<Prd>;
@@ -28,14 +28,15 @@ export interface IStorage {
   searchPrds(query: string): Promise<Prd[]>;
 
   // GitHub repo operations
-  getRepos(): Promise<GithubRepo[]>;
+  getRepos(userRepos: string[]): Promise<GithubRepo[]>;
   getRepo(id: string): Promise<GithubRepo | undefined>;
   createRepo(repo: InsertGithubRepo): Promise<GithubRepo>;
   deleteRepo(id: string): Promise<void[]>;
 
   // GitHub auth operations
-  getGithubAuth(): Promise<GithubAuth | undefined>;
-  saveGithubAuth(auth: InsertGithubAuth): Promise<GithubAuth>;
+  getUser(user_sub: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(user: InsertUser): Promise<User>;
 
   // Repository file analysis operations
   getRepoFiles(repoId: string, branchName: string): Promise<RepoFile[]>;
@@ -78,8 +79,16 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPrds(): Promise<Prd[]> {
-    return this.handleDatabaseOperation(() => db.select().from(prds));
+  async getPrds(userRepos?: string[]): Promise<Prd[]> {
+    return this.handleDatabaseOperation(() => {
+      const operation = db.select().from(prds);
+
+      if (userRepos) {
+        operation = operation.where(inArray(prds.repoId, userRepos));
+      }
+
+      return operation;
+    });
   }
 
   async getPrd(id: number): Promise<Prd | undefined> {
@@ -126,8 +135,13 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getRepos(): Promise<GithubRepo[]> {
-    return this.handleDatabaseOperation(() => db.select().from(githubRepos));
+  async getRepos(userRepos: string[]): Promise<GithubRepo[]> {
+    return this.handleDatabaseOperation(() =>
+      db
+        .select()
+        .from(githubRepos)
+        .where(inArray(githubRepos.repoId, userRepos))
+    );
   }
 
   async getRepo(id: string): Promise<GithubRepo | undefined> {
@@ -190,20 +204,31 @@ export class DatabaseStorage implements IStorage {
     return Promise.all([deleteRepo, deleteRepoDocs, deleteRepoFiles]);
   }
 
-  async getGithubAuth(): Promise<GithubAuth | undefined> {
+  async getUser(user_sub: string): Promise<User | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [auth] = await db.select().from(githubAuth);
-      return auth;
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.userSub, user_sub));
+      return user;
     });
   }
 
-  async saveGithubAuth(insertAuth: InsertGithubAuth): Promise<GithubAuth> {
+  async createUser(insertUser: InsertUser): Promise<User> {
     return this.handleDatabaseOperation(async () => {
-      // First delete any existing auth
-      await db.delete(githubAuth);
-      // Then insert the new one
-      const [auth] = await db.insert(githubAuth).values(insertAuth).returning();
-      return auth;
+      const [user] = await db.insert(users).values(insertUser).returning();
+      return user;
+    });
+  }
+
+  async updateUser(insertUser: InsertUser): Promise<User> {
+    return this.handleDatabaseOperation(async () => {
+      const [user] = await db
+        .update(users)
+        .set(insertUser)
+        .where(eq(users.userSub, insertUser.userSub))
+        .returning();
+      return user;
     });
   }
 

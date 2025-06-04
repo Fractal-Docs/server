@@ -4,9 +4,19 @@ import { storage } from "src/storage";
 
 export function prdRoutes(app: Express) {
   // PRD routes
-  app.get("/api/prds", async (_req, res) => {
+  app.get("/api/prds", async (req, res) => {
     try {
-      const prds = await storage.getPrds();
+      const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub as string);
+      if (!user || !user.accessToken) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
+      const prds = await storage.getPrds(user.repos || []);
       res.json(prds);
     } catch (error: unknown) {
       const message =

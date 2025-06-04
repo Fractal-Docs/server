@@ -27,7 +27,7 @@ export interface IVectorStorage {
       metadata: VectorMetadata;
     }>
   >;
-  deleteByRepoId(repoId: string, branch: string): Promise<void>;
+  deleteByRepoId(repoId: string, branch?: string): Promise<void>;
 }
 
 export class LocalVectorStorage implements IVectorStorage {
@@ -61,9 +61,13 @@ export class LocalVectorStorage implements IVectorStorage {
       .slice(0, limit);
   }
 
-  async deleteByRepoId(repoId: string, branch: string): Promise<void> {
+  async deleteByRepoId(repoId: string, branch?: string): Promise<void> {
     this.vectors = this.vectors.filter(
-      (v) => !(v.metadata.repoId === repoId && v.metadata.branch === branch)
+      (v) =>
+        !(
+          v.metadata.repoId === repoId &&
+          (branch ? v.metadata.branch === branch : true)
+        )
     );
   }
 }

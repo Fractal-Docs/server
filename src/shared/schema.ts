@@ -28,9 +28,11 @@ export const githubRepos = pgTable("github_repos", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const githubAuth = pgTable("github_auth", {
+export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  accessToken: text("access_token").notNull(),
+  userSub: text("user_sub").notNull(),
+  accessToken: text("access_token"),
+  repos: text("repos").array().default([]).notNull(),
 });
 
 // New tables for repository analysis
@@ -93,8 +95,10 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   fileFilterRegex: true,
 });
 
-export const insertGithubAuthSchema = createInsertSchema(githubAuth).pick({
+export const insertUserSchema = createInsertSchema(users).pick({
   accessToken: true,
+  userSub: true,
+  repos: true,
 });
 
 // New schemas for repository analysis
@@ -139,8 +143,8 @@ export type InsertPrd = z.infer<typeof insertPrdSchema>;
 export type Prd = typeof prds.$inferSelect;
 export type InsertGithubRepo = z.infer<typeof insertGithubRepoSchema>;
 export type GithubRepo = typeof githubRepos.$inferSelect;
-export type InsertGithubAuth = z.infer<typeof insertGithubAuthSchema>;
-export type GithubAuth = typeof githubAuth.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
 
 // New types for repository analysis
 export type InsertRepoFile = z.infer<typeof insertRepoFileSchema>;
