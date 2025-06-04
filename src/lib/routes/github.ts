@@ -175,7 +175,7 @@ export function githubRoutes(app: Express) {
         return;
       }
       const user = await storage.getUser(userSub as string);
-      if (!auth) {
+      if (!user) {
         res.status(401).json({ error: "GitHub not authenticated" });
         return;
       }
