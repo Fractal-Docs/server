@@ -81,16 +81,14 @@ export class DatabaseStorage implements IStorage {
 
   async getPrds(userRepos?: string[]): Promise<Prd[]> {
     return this.handleDatabaseOperation(() => {
-      const operation = db
-        .select()
-      .from(prds)
+      const operation = db.select().from(prds);
 
       if (userRepos) {
         operation.where(inArray(prds.repoId, userRepos));
       }
 
       return operation;
-    );
+    });
   }
 
   async getPrd(id: number): Promise<Prd | undefined> {
