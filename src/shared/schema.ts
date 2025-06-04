@@ -15,6 +15,7 @@ export const prds = pgTable("prds", {
   content: text("content").notNull(),
   businessContext: text("business_context").notNull(),
   repoId: text("repo_id").notNull(),
+  branch: text("branch"),
 });
 
 export const githubRepos = pgTable("github_repos", {
@@ -78,6 +79,7 @@ export const insertPrdSchema = createInsertSchema(prds)
     content: true,
     businessContext: true,
     repoId: true,
+    branch: true,
   })
   .extend({
     content: z.string().min(1, "Content is required"),
