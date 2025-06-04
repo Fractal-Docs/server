@@ -98,6 +98,7 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
 export const insertUserSchema = createInsertSchema(users).pick({
   accessToken: true,
   userSub: true,
+  repos: true,
 });
 
 // New schemas for repository analysis

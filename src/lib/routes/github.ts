@@ -195,6 +195,11 @@ export function githubRoutes(app: Express) {
         )
       );
 
+      await storage.updateUser({
+        userSub,
+        repos: [...(user.repos || []), ...createdRepos.map((r) => r.repoId)],
+      });
+
       res.json(createdRepos);
     } catch (error: unknown) {
       const message =
