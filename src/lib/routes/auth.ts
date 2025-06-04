@@ -7,6 +7,10 @@ export function authRoutes(app: Express) {
   app.get("/api/user", async (req, res) => {
     try {
       const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
       const user = await storage.getUser(userSub);
       res.json(user);
     } catch (error: unknown) {
@@ -20,6 +24,10 @@ export function authRoutes(app: Express) {
     try {
       const accessToken = await getAccessToken();
       const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
       const roles = await getUserRoles(accessToken, userSub as string);
       res.json(roles);
     } catch (error: unknown) {
