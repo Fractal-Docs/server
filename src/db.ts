@@ -43,9 +43,7 @@ const connectWithRetry = async (retries = 3, delay = 2000) => {
 
   // Test DNS resolution first
   try {
-    console.log(`Testing DNS resolution for host: ${dbUrl.hostname}`);
     await lookup(dbUrl.hostname);
-    console.log("DNS resolution successful");
   } catch (err: any) {
     console.error("DNS resolution failed:", err.message);
     throw new Error(`DNS resolution failed for ${dbUrl.hostname}`);

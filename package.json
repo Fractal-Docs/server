@@ -34,6 +34,7 @@
     "express": "^5.1.0",
     "express-session": "^1.18.1",
     "memorystore": "^1.6.7",
+    "node-cron": "^4.1.1",
     "node-fetch": "^3.3.2",
     "openai": "^4.91.0",
     "passport": "^0.7.0",

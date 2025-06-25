@@ -1,6 +1,7 @@
 import express, { NextFunction, type Request, Response } from "express";
 import cors from "cors";
 import "dotenv/config";
+import "./supabase-keep-alive";
 
 import { registerRoutes } from "./routes";
 
