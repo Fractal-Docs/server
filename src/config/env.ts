@@ -49,10 +49,7 @@ export const isTest = () => NODE_ENV === "test";
 // Validate required environment variables
 export function validateEnvironment() {
   // For testing role document generation, only require essential variables
-  const requiredVars = [
-    "DATABASE_URL",
-    "OPENAI_API_KEY",
-  ];
+  const requiredVars = ["DATABASE_URL", "OPENAI_API_KEY"];
 
   const missing = requiredVars.filter((varName) => !process.env[varName]);
 

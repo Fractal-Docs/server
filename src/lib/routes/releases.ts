@@ -3,6 +3,8 @@ import { db } from "src/db";
 import { releases } from "src/shared/schema";
 import { nanoid } from "nanoid";
 import { storage } from "src/storage";
+import { z } from "zod";
+import { eq } from "drizzle-orm";
 
 export function releaseRoutes(app: Express) {
   app.post("/api/releases", async (req, res) => {
@@ -80,7 +82,7 @@ export function releaseRoutes(app: Express) {
     }
   });
 
-  app.post("/api/releases/:id/generate-roles", async (req, res) => {
+  app.post("/api/releases/:id/generate-roles", async (req: any, res: any) => {
     try {
       const { id } = req.params;
       const { roles: selectedRoles } = z
@@ -92,7 +94,7 @@ export function releaseRoutes(app: Express) {
       const [release] = await db
         .select()
         .from(releases)
-        .where(eq(releases.id, id));
+        .where(eq(releases.releaseId, id));
 
       if (!release) {
         return res.status(404).json({ error: "Release not found" });
@@ -115,7 +117,7 @@ export function releaseRoutes(app: Express) {
       }
 
       const updateData: any = {
-        roleDocuments: { ...release.roleDocuments, ...roleDocuments },
+        roleDocuments: { ...(release.roleDocuments || {}), ...roleDocuments },
       };
 
       if (selectedRoles.includes("csm")) {
@@ -131,7 +133,7 @@ export function releaseRoutes(app: Express) {
       const [updatedRelease] = await db
         .update(releases)
         .set(updateData)
-        .where(eq(releases.id, id))
+        .where(eq(releases.releaseId, id))
         .returning();
 
       res.json(updatedRelease);

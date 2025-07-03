@@ -128,7 +128,7 @@ export function roleRoutes(app: Express) {
     }
   });
 
-  app.get("/api/roles/:roleId", async (req, res) => {
+  app.get("/api/roles/:roleId", async (req: any, res: any) => {
     try {
       const { roleId } = req.params;
       const role = AVAILABLE_ROLES.find((r) => r.id === roleId);
@@ -151,7 +151,7 @@ export function roleRoutes(app: Express) {
     }
   });
 
-  app.post("/api/roles/:roleId/template", async (req, res) => {
+  app.post("/api/roles/:roleId/template", async (req: any, res: any) => {
     try {
       const { roleId } = req.params;
       const { context } = roleTemplateSchema.parse(req.body);
@@ -176,7 +176,7 @@ export function roleRoutes(app: Express) {
     }
   });
 
-  app.post("/api/roles/:roleId/revert", async (req, res) => {
+  app.post("/api/roles/:roleId/revert", async (req: any, res: any) => {
     try {
       const { roleId } = req.params;
       const role = AVAILABLE_ROLES.find((r) => r.id === roleId);
