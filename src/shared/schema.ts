@@ -24,7 +24,6 @@ export const githubRepos = pgTable("github_repos", {
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
   repoId: text("repo_id").notNull(),
-  accessToken: text("access_token").notNull(),
   fileFilterRegex: text("file_filter_regex"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
