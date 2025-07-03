@@ -1,14 +1,14 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 
-export type ModelType =
-  | "gpt-4o"
-  | "gpt-3.5-turbo"
-  | "o1-2024-12-17"
+export type ModelType = 
+  | "gpt-4o" 
+  | "gpt-3.5-turbo" 
+  | "o1-2024-12-17" 
   | "o1-mini"
-  | "claude-3-5-sonnet"
-  | "claude-3-haiku"
-  | "claude-3-opus";
+  | "claude-3-5-sonnet-20241022"
+  | "claude-3-haiku-20240307"
+  | "claude-3-opus-20240229";
 
 export interface AIProvider {
   generateCompletion(
