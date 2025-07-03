@@ -138,19 +138,9 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
     }),
   });
 
-// Existing types
-export type InsertPrd = z.infer<typeof insertPrdSchema>;
-export type Prd = typeof prds.$inferSelect;
-export type InsertGithubRepo = z.infer<typeof insertGithubRepoSchema>;
-export type GithubRepo = typeof githubRepos.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
-
-// New types for repository analysis
-export type InsertRepoFile = z.infer<typeof insertRepoFileSchema>;
-export type RepoFile = typeof repoFiles.$inferSelect;
 export const releases = pgTable("releases", {
-  id: text("id").primaryKey(),
+  id: serial("id").primaryKey(),
+  releaseId: text("release_id").notNull().unique(),
   title: text("title").notNull(),
   prd: text("prd").notNull(),
   repoId: text("repo_id").notNull(),
@@ -169,6 +159,7 @@ export const releases = pgTable("releases", {
 
 export const insertReleaseSchema = createInsertSchema(releases)
   .pick({
+    releaseId: true,
     title: true,
     prd: true,
     repoId: true,
@@ -190,6 +181,17 @@ export const insertReleaseSchema = createInsertSchema(releases)
     branch: z.string().min(1, "Branch is required"),
   });
 
+// Existing types
+export type InsertPrd = z.infer<typeof insertPrdSchema>;
+export type Prd = typeof prds.$inferSelect;
+export type InsertGithubRepo = z.infer<typeof insertGithubRepoSchema>;
+export type GithubRepo = typeof githubRepos.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+
+// New types for repository analysis
+export type InsertRepoFile = z.infer<typeof insertRepoFileSchema>;
+export type RepoFile = typeof repoFiles.$inferSelect;
 export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
 export type RepoDoc = typeof repoDocs.$inferSelect;
 export type InsertRelease = z.infer<typeof insertReleaseSchema>;

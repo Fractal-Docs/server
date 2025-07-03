@@ -14,6 +14,9 @@ import {
   type InsertRepoFile,
   type RepoDoc,
   type InsertRepoDoc,
+  Release,
+  InsertRelease,
+  releases,
 } from "./shared/schema";
 import { db } from "./db";
 import { eq, like, inArray, and } from "drizzle-orm";
@@ -63,6 +66,15 @@ export interface IStorage {
   ): Promise<RepoDoc | undefined>;
   updateRepoDoc(id: number, doc: Partial<InsertRepoDoc>): Promise<RepoDoc>;
   deleteRepoDoc(id: number): Promise<void>;
+
+  // Release operations
+  getRelease(releaseId: string): Promise<Release | undefined>;
+  createRelease(release: InsertRelease): Promise<Release>;
+  updateRelease(
+    releaseId: string,
+    release: Partial<InsertRelease>
+  ): Promise<Release>;
+  deleteRelease(releaseId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -359,6 +371,48 @@ export class DatabaseStorage implements IStorage {
       const [doc] = await db
         .delete(repoDocs)
         .where(eq(repoDocs.id, id))
+        .returning();
+      if (!doc) throw new Error("Repository documentation not found");
+    });
+  }
+
+  async createRelease(insertRelease: InsertRelease): Promise<Release> {
+    return this.handleDatabaseOperation(async () => {
+      const [doc] = await db.insert(releases).values(insertRelease).returning();
+      return doc;
+    });
+  }
+
+  async getRelease(releaseId: string): Promise<Release | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [doc] = await db
+        .select()
+        .from(releases)
+        .where(eq(releases.releaseId, releaseId));
+      return doc;
+    });
+  }
+
+  async updateRelease(
+    releaseId: string,
+    updateDoc: Partial<InsertRelease>
+  ): Promise<Release> {
+    return this.handleDatabaseOperation(async () => {
+      const [doc] = await db
+        .update(releases)
+        .set(updateDoc)
+        .where(eq(releases.releaseId, releaseId))
+        .returning();
+      if (!doc) throw new Error("Release documentation not found");
+      return doc;
+    });
+  }
+
+  async deleteRelease(releaseId: string): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      const [doc] = await db
+        .delete(releases)
+        .where(eq(releases.releaseId, releaseId))
         .returning();
       if (!doc) throw new Error("Repository documentation not found");
     });
