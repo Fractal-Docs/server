@@ -151,5 +151,40 @@ export type User = typeof users.$inferSelect;
 // New types for repository analysis
 export type InsertRepoFile = z.infer<typeof insertRepoFileSchema>;
 export type RepoFile = typeof repoFiles.$inferSelect;
+export const releases = pgTable("releases", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  prd: text("prd").notNull(),
+  repoId: text("repo_id").notNull(),
+  branch: text("branch").notNull(),
+  diffAnalysis: text("diff_analysis").notNull(),
+  releaseDocument: text("release_document").notNull(),
+  salesDocument: text("sales_document").notNull(),
+  marketingDocument: text("marketing_document").notNull(),
+  customerSuccessDocument: text("customer_success_document").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertReleaseSchema = createInsertSchema(releases)
+  .pick({
+    title: true,
+    prd: true,
+    repoId: true,
+    branch: true,
+    diffAnalysis: true,
+    releaseDocument: true,
+    salesDocument: true,
+    marketingDocument: true,
+    customerSuccessDocument: true,
+  })
+  .extend({
+    title: z.string().min(1, "Title is required"),
+    prd: z.string().min(1, "PRD content is required"),
+    repoId: z.string().min(1, "Repository is required"),
+    branch: z.string().min(1, "Branch is required"),
+  });
+
 export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
 export type RepoDoc = typeof repoDocs.$inferSelect;
+export type InsertRelease = z.infer<typeof insertReleaseSchema>;
+export type Release = typeof releases.$inferSelect;
