@@ -3,26 +3,34 @@ import { db } from "src/db";
 import { releases } from "src/shared/schema";
 import { nanoid } from "nanoid";
 import { storage } from "src/storage";
+import { getAIProvider, type ModelType } from "../ai-providers";
 
 export function releaseRoutes(app: Express) {
   app.post("/api/releases", async (req, res) => {
     try {
-      const { title, prd, repoId, branch } = req.body;
+      const { title, prd, repoId, branch, model = "gpt-4o" } = req.body;
       const diffAnalysis = await analyzeDiff(repoId, branch);
 
-      const releaseDocument = await generateReleaseDocument(prd, diffAnalysis);
+      const releaseDocument = await generateReleaseDocument(
+        prd,
+        diffAnalysis,
+        model as ModelType
+      );
 
       const salesDocument = await generateRoleDocument(
         releaseDocument,
-        "sales"
+        "sales",
+        model as ModelType
       );
       const marketingDocument = await generateRoleDocument(
         releaseDocument,
-        "marketing"
+        "marketing",
+        model as ModelType
       );
       const customerSuccessDocument = await generateRoleDocument(
         releaseDocument,
-        "customer-success"
+        "customer-success",
+        model as ModelType
       );
 
       const releaseId = nanoid();
@@ -127,7 +135,8 @@ async function analyzeDiff(repoId: string, branch: string): Promise<string> {
 
 async function generateReleaseDocument(
   prd: string,
-  diffAnalysis: string
+  diffAnalysis: string,
+  model: ModelType = "gpt-4o"
 ): Promise<string> {
   try {
     const prompt = `
@@ -150,38 +159,14 @@ ${diffAnalysis}
 Format the response in HTML with proper headings and structure for display in a web interface.
 `;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a technical product manager creating release documentation. Always respond in well-formatted HTML.",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        max_tokens: 2000,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return (
-      data.choices[0]?.message?.content || "Failed to generate release document"
+    const provider = getAIProvider(model);
+    const content = await provider.generateCompletion(
+      "You are a technical product manager creating release documentation. Always respond in well-formatted HTML.",
+      prompt,
+      model
     );
+
+    return content || "Failed to generate release document";
   } catch (error) {
     console.error("Error generating release document:", error);
     return `<p>Error generating release document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
@@ -190,7 +175,8 @@ Format the response in HTML with proper headings and structure for display in a 
 
 async function generateRoleDocument(
   releaseDocument: string,
-  role: string
+  role: string,
+  model: ModelType = "gpt-4o"
 ): Promise<string> {
   try {
     const roleContexts = {
@@ -241,37 +227,14 @@ ${releaseDocument}
 **Task:** Create a role-specific document that extracts and highlights the information most relevant to this role. Format the response in HTML with proper headings and structure.
 `;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content: `You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.`,
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        max_tokens: 1500,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return (
-      data.choices[0]?.message?.content || `Failed to generate ${role} document`
+    const provider = getAIProvider(model);
+    const content = await provider.generateCompletion(
+      `You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.`,
+      prompt,
+      model
     );
+
+    return content || `Failed to generate ${role} document`;
   } catch (error) {
     console.error(`Error generating ${role} document:`, error);
     return `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;

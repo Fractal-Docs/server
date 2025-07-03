@@ -1,9 +1,4 @@
-import OpenAI from "openai";
-
-// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-type ModelType = "gpt-4o" | "gpt-3.5-turbo" | "o1-2024-12-17" | "o1-mini";
+import { getAIProvider, type ModelType } from "./ai-providers";
 
 export async function generateDocumentation(
   code: string,
@@ -26,27 +21,15 @@ export async function generateDocumentation(
           ? `${businessContext}\n\nChanges:\n${code}\n\nGenerate documentation for the changes provided. The output must be formatted clearly in Markdown and should explain both the business purpose and the technical implementation clearly.`
           : "";
 
-    const response = await openai.chat.completions.create({
-      model,
-      messages: [
-        {
-          role: "developer",
-          content: developerPrompt,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-    });
-
-    const resContent = response.choices[0].message.content;
-    if (!resContent) {
-      throw new Error("No content in OpenAI response");
-    }
+    const provider = getAIProvider(model);
+    const content = await provider.generateCompletion(
+      developerPrompt,
+      userPrompt,
+      model
+    );
 
     return {
-      content: resContent,
+      content,
       prompts: {
         developer: developerPrompt,
         user: userPrompt,
