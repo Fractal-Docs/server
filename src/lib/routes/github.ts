@@ -2,7 +2,7 @@ import type { Express } from "express";
 
 import { storage } from "src/storage";
 import { getRepoBranches, listRepoFileSystem, listUserRepos } from "../github";
-import { getParams } from "../helpers";
+import { getOrigin, getParams } from "../helpers";
 
 interface GithubTokenResponse {
   access_token?: string;
@@ -13,18 +13,13 @@ interface GithubTokenResponse {
 export function githubRoutes(app: Express) {
   // GitHub Ouser routes
   app.get("/api/github/login", (req, res) => {
-    const origin = req.get("origin") || "";
-    let normalizedOrigin;
-    try {
-      const url = new URL(
-        origin.startsWith("http") ? origin : `https://${origin}`
-      );
-      normalizedOrigin = url.hostname + (url.port ? `:${url.port}` : "");
-    } catch {
-      res.status(400).json({ error: "Invalid origin header" });
+    const { origin, normalizedOrigin } = getOrigin(req, res);
+    if (!origin || !normalizedOrigin) {
       return;
     }
-    const redirectUri = `https://${normalizedOrigin}/repos`;
+    const redirectUri = origin.startsWith("https")
+      ? `https://${normalizedOrigin}/repos`
+      : `http://${normalizedOrigin}/repos`;
     const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo`;
     res.json({ url: githubAuthUrl });
   });
@@ -38,19 +33,19 @@ export function githubRoutes(app: Express) {
       return;
     }
 
+    if (!userSub) {
+      res.status(400).json({ error: "User sub not provided" });
+      return;
+    }
+
     try {
-      const origin = req.get("origin") || "";
-      let normalizedOrigin;
-      try {
-        const url = new URL(
-          origin.startsWith("http") ? origin : `https://${origin}`
-        );
-        normalizedOrigin = url.hostname + (url.port ? `:${url.port}` : "");
-      } catch {
-        res.status(400).json({ error: "Invalid origin header" });
+      const { origin, normalizedOrigin } = getOrigin(req, res);
+      if (!origin || !normalizedOrigin) {
         return;
       }
-      const redirectUri = `https://${normalizedOrigin}/repos`;
+      const redirectUri = origin.startsWith("https")
+        ? `https://${normalizedOrigin}/repos`
+        : `http://${normalizedOrigin}/repos`;
       const tokenRes = await fetch(
         "https://github.com/login/oauth/access_token",
         {
@@ -100,6 +95,7 @@ export function githubRoutes(app: Express) {
         await storage.createUser({
           accessToken: data.access_token,
           userSub: userSub as string,
+          repos: [],
         });
       }
       console.log("GitHub user saved successfully");
