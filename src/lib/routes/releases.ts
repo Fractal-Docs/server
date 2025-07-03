@@ -1,58 +1,62 @@
 import type { Express } from "express";
-import { z } from "zod";
-import { db } from "../../db";
-import { releases } from "../../shared/schema";
-import { eq } from "drizzle-orm";
+import { db } from "src/db";
+import { releases } from "src/shared/schema";
 import { nanoid } from "nanoid";
-
-const createReleaseSchema = z.object({
-  title: z.string().min(1),
-  prd: z.string().min(1),
-  repoId: z.string().min(1),
-  branch: z.string().min(1),
-});
+import { storage } from "src/storage";
 
 export function releaseRoutes(app: Express) {
   app.post("/api/releases", async (req, res) => {
     try {
-      const { title, prd, repoId, branch } = createReleaseSchema.parse(req.body);
-      
+      const { title, prd, repoId, branch } = req.body;
       const diffAnalysis = await analyzeDiff(repoId, branch);
-      
+
       const releaseDocument = await generateReleaseDocument(prd, diffAnalysis);
-      
-      const salesDocument = await generateRoleDocument(releaseDocument, "sales");
-      const marketingDocument = await generateRoleDocument(releaseDocument, "marketing");
-      const customerSuccessDocument = await generateRoleDocument(releaseDocument, "customer-success");
-      
+
+      const salesDocument = await generateRoleDocument(
+        releaseDocument,
+        "sales"
+      );
+      const marketingDocument = await generateRoleDocument(
+        releaseDocument,
+        "marketing"
+      );
+      const customerSuccessDocument = await generateRoleDocument(
+        releaseDocument,
+        "customer-success"
+      );
+
       const releaseId = nanoid();
-      
-      const [newRelease] = await db.insert(releases).values({
-        id: releaseId,
+
+      const newRelease = await storage.createRelease({
+        releaseId,
         title,
         prd,
-        repoId: parseInt(repoId),
+        repoId,
         branch,
         diffAnalysis,
         releaseDocument,
         salesDocument,
         marketingDocument,
         customerSuccessDocument,
-        createdAt: new Date(),
-      }).returning();
-      
+      });
+
       res.json(newRelease);
     } catch (error) {
       console.error("Error creating release:", error);
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : "Failed to create release" 
+      res.status(500).json({
+        error:
+          error instanceof Error ? error.message : "Failed to create release",
       });
     }
   });
 
   app.get("/api/releases", async (req, res) => {
     try {
-      const allReleases = await db.select().from(releases).orderBy(releases.createdAt);
+      // need to get the releases for a users repos
+      const allReleases = await db
+        .select()
+        .from(releases)
+        .orderBy(releases.createdAt);
       res.json(allReleases);
     } catch (error) {
       console.error("Error fetching releases:", error);
@@ -63,12 +67,12 @@ export function releaseRoutes(app: Express) {
   app.get("/api/releases/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const [release] = await db.select().from(releases).where(eq(releases.id, id));
-      
+      const release = await storage.getRelease(id);
+
       if (!release) {
-        return res.status(404).json({ error: "Release not found" });
+        res.status(404).json({ error: "Release not found" });
       }
-      
+
       res.json(release);
     } catch (error) {
       console.error("Error fetching release:", error);
@@ -79,23 +83,26 @@ export function releaseRoutes(app: Express) {
 
 async function analyzeDiff(repoId: string, branch: string): Promise<string> {
   try {
-    const response = await fetch(`${process.env.GITHUB_API_URL || 'https://api.github.com'}/repos/${repoId}/compare/main...${branch}`, {
-      headers: {
-        'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-      },
-    });
+    const response = await fetch(
+      `${process.env.GITHUB_API_URL || "https://api.github.com"}/repos/${repoId}/compare/main...${branch}`,
+      {
+        headers: {
+          Authorization: `token ${process.env.GITHUB_TOKEN}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`GitHub API error: ${response.statusText}`);
     }
 
     const data = await response.json();
-    
+
     let diffSummary = `Comparing main branch to ${branch}:\n\n`;
     diffSummary += `Files changed: ${data.files?.length || 0}\n`;
     diffSummary += `Commits: ${data.commits?.length || 0}\n\n`;
-    
+
     if (data.files && data.files.length > 0) {
       diffSummary += "Changed files:\n";
       data.files.forEach((file: any) => {
@@ -103,25 +110,28 @@ async function analyzeDiff(repoId: string, branch: string): Promise<string> {
       });
       diffSummary += "\n";
     }
-    
+
     if (data.commits && data.commits.length > 0) {
       diffSummary += "Recent commits:\n";
       data.commits.slice(0, 10).forEach((commit: any) => {
-        diffSummary += `- ${commit.commit.message.split('\n')[0]}\n`;
+        diffSummary += `- ${commit.commit.message.split("\n")[0]}\n`;
       });
     }
-    
+
     return diffSummary;
   } catch (error) {
     console.error("Error analyzing diff:", error);
-    return `Error analyzing diff: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    return `Error analyzing diff: ${error instanceof Error ? error.message : "Unknown error"}`;
   }
 }
 
-async function generateReleaseDocument(prd: string, diffAnalysis: string): Promise<string> {
+async function generateReleaseDocument(
+  prd: string,
+  diffAnalysis: string
+): Promise<string> {
   try {
     const prompt = `
-You are a technical product manager creating a comprehensive release document. 
+You are a technical product manager creating a comprehensive release document.
 
 **PRD (Product Requirements Document):**
 ${prd}
@@ -140,23 +150,24 @@ ${diffAnalysis}
 Format the response in HTML with proper headings and structure for display in a web interface.
 `;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: "gpt-4",
         messages: [
           {
-            role: 'system',
-            content: 'You are a technical product manager creating release documentation. Always respond in well-formatted HTML.'
+            role: "system",
+            content:
+              "You are a technical product manager creating release documentation. Always respond in well-formatted HTML.",
           },
           {
-            role: 'user',
-            content: prompt
-          }
+            role: "user",
+            content: prompt,
+          },
         ],
         max_tokens: 2000,
         temperature: 0.7,
@@ -168,14 +179,19 @@ Format the response in HTML with proper headings and structure for display in a 
     }
 
     const data = await response.json();
-    return data.choices[0]?.message?.content || 'Failed to generate release document';
+    return (
+      data.choices[0]?.message?.content || "Failed to generate release document"
+    );
   } catch (error) {
     console.error("Error generating release document:", error);
-    return `<p>Error generating release document: ${error instanceof Error ? error.message : 'Unknown error'}</p>`;
+    return `<p>Error generating release document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
   }
 }
 
-async function generateRoleDocument(releaseDocument: string, role: string): Promise<string> {
+async function generateRoleDocument(
+  releaseDocument: string,
+  role: string
+): Promise<string> {
   try {
     const roleContexts = {
       sales: `
@@ -210,10 +226,11 @@ You are analyzing a software release from a Customer Success perspective. Focus 
 - Potential customer confusion or support burden
 
 Create a document specifically for the customer success team with onboarding considerations, training needs, and customer communication templates.
-`
+`,
     };
 
-    const roleContext = roleContexts[role as keyof typeof roleContexts] || roleContexts.sales;
+    const roleContext =
+      roleContexts[role as keyof typeof roleContexts] || roleContexts.sales;
 
     const prompt = `
 ${roleContext}
@@ -224,23 +241,23 @@ ${releaseDocument}
 **Task:** Create a role-specific document that extracts and highlights the information most relevant to this role. Format the response in HTML with proper headings and structure.
 `;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: "gpt-4",
         messages: [
           {
-            role: 'system',
-            content: `You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.`
+            role: "system",
+            content: `You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.`,
           },
           {
-            role: 'user',
-            content: prompt
-          }
+            role: "user",
+            content: prompt,
+          },
         ],
         max_tokens: 1500,
         temperature: 0.7,
@@ -252,9 +269,11 @@ ${releaseDocument}
     }
 
     const data = await response.json();
-    return data.choices[0]?.message?.content || `Failed to generate ${role} document`;
+    return (
+      data.choices[0]?.message?.content || `Failed to generate ${role} document`
+    );
   } catch (error) {
     console.error(`Error generating ${role} document:`, error);
-    return `<p>Error generating ${role} document: ${error instanceof Error ? error.message : 'Unknown error'}</p>`;
+    return `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
   }
 }
