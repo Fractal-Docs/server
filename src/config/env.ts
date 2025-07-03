@@ -48,16 +48,10 @@ export const isTest = () => NODE_ENV === "test";
 
 // Validate required environment variables
 export function validateEnvironment() {
+  // For testing role document generation, only require essential variables
   const requiredVars = [
     "DATABASE_URL",
-    "GITHUB_CLIENT_ID",
-    "GITHUB_CLIENT_SECRET",
     "OPENAI_API_KEY",
-    "PINECONE_API_KEY",
-    "PINECONE_ENVIRONMENT",
-    "AUTH0_DOMAIN",
-    "AUTH0_CLIENT_ID",
-    "AUTH0_CLIENT_SECRET",
   ];
 
   const missing = requiredVars.filter((varName) => !process.env[varName]);

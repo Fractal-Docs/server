@@ -92,7 +92,6 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   fullName: true,
   owner: true,
   repoId: true,
-  accessToken: true,
   fileFilterRegex: true,
 });
 
@@ -158,9 +157,13 @@ export const releases = pgTable("releases", {
   branch: text("branch").notNull(),
   diffAnalysis: text("diff_analysis").notNull(),
   releaseDocument: text("release_document").notNull(),
-  salesDocument: text("sales_document").notNull(),
-  marketingDocument: text("marketing_document").notNull(),
-  customerSuccessDocument: text("customer_success_document").notNull(),
+  salesDocument: text("sales_document"),
+  marketingDocument: text("marketing_document"),
+  customerSuccessDocument: text("customer_success_document"),
+  csmDocument: text("csm_document"),
+  revopsDocument: text("revops_document"),
+  psDocument: text("ps_document"),
+  roleDocuments: jsonb("role_documents"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -175,6 +178,10 @@ export const insertReleaseSchema = createInsertSchema(releases)
     salesDocument: true,
     marketingDocument: true,
     customerSuccessDocument: true,
+    csmDocument: true,
+    revopsDocument: true,
+    psDocument: true,
+    roleDocuments: true,
   })
   .extend({
     title: z.string().min(1, "Title is required"),
