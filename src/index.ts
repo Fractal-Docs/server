@@ -1,7 +1,14 @@
 import express, { NextFunction, type Request, Response } from "express";
 import cors from "cors";
-import "dotenv/config";
-import "./supabase-keep-alive";
+import { env, isProduction, validateEnvironment } from "./config/env";
+
+// Validate environment variables
+validateEnvironment();
+
+// Only import supabase-keep-alive in production
+if (isProduction()) {
+  import("./supabase-keep-alive");
+}
 
 import { registerRoutes } from "./routes";
 
@@ -51,7 +58,7 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  const port = process.env.PORT || 8888;
+  const port = env.PORT;
   server.listen({
     port,
     host: "0.0.0.0",

@@ -176,12 +176,6 @@ export class PineconeVectorStorage implements IVectorStorage {
 
 // Export a factory function that creates the appropriate storage implementation
 export function createVectorStorage(): IVectorStorage {
-  // Use LocalVectorStorage for development/testing
-  if (process.env.NODE_ENV === "development") {
-    console.log("Using local vector storage for development");
-    return new LocalVectorStorage();
-  }
-
   // Use Pinecone for production
   return new PineconeVectorStorage();
 }
