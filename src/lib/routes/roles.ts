@@ -8,47 +8,52 @@ const roleTemplateSchema = z.object({
 
 export const AVAILABLE_ROLES = [
   {
-    id: 'sales',
-    name: 'Sales',
-    description: 'Focus on selling opportunities, customer benefits, and ROI propositions',
-    icon: 'TrendingUp',
-    color: 'blue'
+    id: "sales",
+    name: "Sales",
+    description:
+      "Focus on selling opportunities, customer benefits, and ROI propositions",
+    icon: "TrendingUp",
+    color: "blue",
   },
   {
-    id: 'marketing',
-    name: 'Marketing',
-    description: 'Campaign ideas, messaging frameworks, and promotional angles',
-    icon: 'Users',
-    color: 'purple'
+    id: "marketing",
+    name: "Marketing",
+    description: "Campaign ideas, messaging frameworks, and promotional angles",
+    icon: "Users",
+    color: "purple",
   },
   {
-    id: 'customer-success',
-    name: 'Customer Success',
-    description: 'Onboarding considerations, training needs, and customer communication',
-    icon: 'Heart',
-    color: 'green'
+    id: "customer-success",
+    name: "Customer Success",
+    description:
+      "Onboarding considerations, training needs, and customer communication",
+    icon: "Heart",
+    color: "green",
   },
   {
-    id: 'csm',
-    name: 'Customer Success Manager',
-    description: 'Knowledge base articles, customer communication templates, and success metrics',
-    icon: 'UserCheck',
-    color: 'teal'
+    id: "csm",
+    name: "Customer Success Manager",
+    description:
+      "Knowledge base articles, customer communication templates, and success metrics",
+    icon: "UserCheck",
+    color: "teal",
   },
   {
-    id: 'revops',
-    name: 'Revenue Operations',
-    description: 'Pricing updates, revenue forecasts, and operational considerations',
-    icon: 'DollarSign',
-    color: 'orange'
+    id: "revops",
+    name: "Revenue Operations",
+    description:
+      "Pricing updates, revenue forecasts, and operational considerations",
+    icon: "DollarSign",
+    color: "orange",
   },
   {
-    id: 'ps',
-    name: 'Professional Services',
-    description: 'Implementation guides, risk assessments, and validation procedures',
-    icon: 'Settings',
-    color: 'gray'
-  }
+    id: "ps",
+    name: "Professional Services",
+    description:
+      "Implementation guides, risk assessments, and validation procedures",
+    icon: "Settings",
+    color: "gray",
+  },
 ];
 
 export const DEFAULT_ROLE_CONTEXTS = {
@@ -61,7 +66,7 @@ export const DEFAULT_ROLE_CONTEXTS = {
 - Demo-worthy features and capabilities
 
 Create a document specifically for the sales team with talking points, customer benefits, and selling opportunities.`,
-  
+
   marketing: `You are analyzing a software release from a Marketing perspective. Focus on:
 - Features that can drive marketing campaigns
 - User experience improvements worth promoting
@@ -71,7 +76,7 @@ Create a document specifically for the sales team with talking points, customer 
 - Brand differentiation opportunities
 
 Create a document specifically for the marketing team with campaign ideas, messaging frameworks, and promotional angles.`,
-  
+
   "customer-success": `You are analyzing a software release from a Customer Success perspective. Focus on:
 - Features that improve customer onboarding
 - User experience enhancements that reduce friction
@@ -81,7 +86,7 @@ Create a document specifically for the marketing team with campaign ideas, messa
 - Potential customer confusion or support burden
 
 Create a document specifically for the customer success team with onboarding considerations, training needs, and customer communication templates.`,
-  
+
   csm: `You are analyzing a software release from a Customer Success Manager perspective. Focus on:
 - Knowledge base articles and in-app tooltips needed
 - Release-day communication with current customers
@@ -91,7 +96,7 @@ Create a document specifically for the customer success team with onboarding con
 - Risk register and rollback plan considerations
 
 Create a document specifically for CSMs with customer communication templates, training materials, and success metrics.`,
-  
+
   revops: `You are analyzing a software release from a Revenue Operations perspective. Focus on:
 - Updated price books and SKU listings in CRM
 - Forecast model adjustments with new capabilities
@@ -101,7 +106,7 @@ Create a document specifically for CSMs with customer communication templates, t
 - Contract and billing system constraints
 
 Create a document specifically for RevOps with pricing updates, revenue forecasts, and operational considerations.`,
-  
+
   ps: `You are analyzing a software release from a Professional Services perspective. Focus on:
 - Updated implementation runbooks and templates
 - Migration scripts and configuration templates
@@ -110,7 +115,7 @@ Create a document specifically for RevOps with pricing updates, revenue forecast
 - Post-go-live validation checklist
 - Lessons-learned log for feedback to Product and Engineering
 
-Create a document specifically for Professional Services with implementation guides, risk assessments, and validation procedures.`
+Create a document specifically for Professional Services with implementation guides, risk assessments, and validation procedures.`,
 };
 
 export function roleRoutes(app: Express) {
@@ -126,18 +131,19 @@ export function roleRoutes(app: Express) {
   app.get("/api/roles/:roleId", async (req, res) => {
     try {
       const { roleId } = req.params;
-      const role = AVAILABLE_ROLES.find(r => r.id === roleId);
-      
+      const role = AVAILABLE_ROLES.find((r) => r.id === roleId);
+
       if (!role) {
         return res.status(404).json({ error: "Role not found" });
       }
-      
-      const context = DEFAULT_ROLE_CONTEXTS[roleId as keyof typeof DEFAULT_ROLE_CONTEXTS];
-      
+
+      const context =
+        DEFAULT_ROLE_CONTEXTS[roleId as keyof typeof DEFAULT_ROLE_CONTEXTS];
+
       res.json({
         ...role,
         context,
-        template: context
+        template: context,
       });
     } catch (error) {
       console.error("Error fetching role:", error);
@@ -149,22 +155,23 @@ export function roleRoutes(app: Express) {
     try {
       const { roleId } = req.params;
       const { context } = roleTemplateSchema.parse(req.body);
-      
-      const role = AVAILABLE_ROLES.find(r => r.id === roleId);
+
+      const role = AVAILABLE_ROLES.find((r) => r.id === roleId);
       if (!role) {
         return res.status(404).json({ error: "Role not found" });
       }
-      
+
       res.json({
         success: true,
         message: "Template updated successfully",
         roleId,
-        context
+        context,
       });
     } catch (error) {
       console.error("Error updating role template:", error);
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : "Failed to update template" 
+      res.status(500).json({
+        error:
+          error instanceof Error ? error.message : "Failed to update template",
       });
     }
   });
@@ -172,19 +179,20 @@ export function roleRoutes(app: Express) {
   app.post("/api/roles/:roleId/revert", async (req, res) => {
     try {
       const { roleId } = req.params;
-      const role = AVAILABLE_ROLES.find(r => r.id === roleId);
-      
+      const role = AVAILABLE_ROLES.find((r) => r.id === roleId);
+
       if (!role) {
         return res.status(404).json({ error: "Role not found" });
       }
-      
-      const defaultContext = DEFAULT_ROLE_CONTEXTS[roleId as keyof typeof DEFAULT_ROLE_CONTEXTS];
-      
+
+      const defaultContext =
+        DEFAULT_ROLE_CONTEXTS[roleId as keyof typeof DEFAULT_ROLE_CONTEXTS];
+
       res.json({
         success: true,
         message: "Template reverted to default",
         roleId,
-        context: defaultContext
+        context: defaultContext,
       });
     } catch (error) {
       console.error("Error reverting role template:", error);

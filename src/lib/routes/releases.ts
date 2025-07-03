@@ -83,43 +83,53 @@ export function releaseRoutes(app: Express) {
   app.post("/api/releases/:id/generate-roles", async (req, res) => {
     try {
       const { id } = req.params;
-      const { roles: selectedRoles } = z.object({
-        roles: z.array(z.string())
-      }).parse(req.body);
+      const { roles: selectedRoles } = z
+        .object({
+          roles: z.array(z.string()),
+        })
+        .parse(req.body);
 
-      const [release] = await db.select().from(releases).where(eq(releases.id, id));
-      
+      const [release] = await db
+        .select()
+        .from(releases)
+        .where(eq(releases.id, id));
+
       if (!release) {
         return res.status(404).json({ error: "Release not found" });
       }
 
       const roleDocuments: Record<string, string> = {};
-      
+
       for (const role of selectedRoles) {
         try {
-          const document = await generateRoleDocumentWithContext(release.releaseDocument, role);
+          const document = await generateRoleDocumentWithContext(
+            release.releaseDocument,
+            role
+          );
           roleDocuments[role] = document;
         } catch (error) {
           console.error(`Error generating document for role ${role}:`, error);
-          roleDocuments[role] = `<p>Error generating ${role} document: ${error instanceof Error ? error.message : 'Unknown error'}</p>`;
+          roleDocuments[role] =
+            `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
         }
       }
 
       const updateData: any = {
-        roleDocuments: { ...release.roleDocuments, ...roleDocuments }
+        roleDocuments: { ...release.roleDocuments, ...roleDocuments },
       };
 
-      if (selectedRoles.includes('csm')) {
+      if (selectedRoles.includes("csm")) {
         updateData.csmDocument = roleDocuments.csm;
       }
-      if (selectedRoles.includes('revops')) {
+      if (selectedRoles.includes("revops")) {
         updateData.revopsDocument = roleDocuments.revops;
       }
-      if (selectedRoles.includes('ps')) {
+      if (selectedRoles.includes("ps")) {
         updateData.psDocument = roleDocuments.ps;
       }
 
-      const [updatedRelease] = await db.update(releases)
+      const [updatedRelease] = await db
+        .update(releases)
         .set(updateData)
         .where(eq(releases.id, id))
         .returning();
@@ -127,8 +137,11 @@ export function releaseRoutes(app: Express) {
       res.json(updatedRelease);
     } catch (error) {
       console.error("Error generating role documents:", error);
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : "Failed to generate role documents" 
+      res.status(500).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate role documents",
       });
     }
   });
@@ -241,11 +254,17 @@ Format the response in HTML with proper headings and structure for display in a 
   }
 }
 
-async function generateRoleDocument(releaseDocument: string, role: string): Promise<string> {
+async function generateRoleDocument(
+  releaseDocument: string,
+  role: string
+): Promise<string> {
   return generateRoleDocumentWithContext(releaseDocument, role);
 }
 
-async function generateRoleDocumentWithContext(releaseDocument: string, role: string): Promise<string> {
+async function generateRoleDocumentWithContext(
+  releaseDocument: string,
+  role: string
+): Promise<string> {
   try {
     const roleContexts = {
       sales: `
@@ -313,7 +332,7 @@ You are analyzing a software release from a Professional Services perspective. F
 - Lessons-learned log for feedback to Product and Engineering
 
 Create a document specifically for Professional Services with implementation guides, risk assessments, and validation procedures.
-`
+`,
     };
 
     const roleContext =
