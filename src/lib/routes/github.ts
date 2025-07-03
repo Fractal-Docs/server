@@ -182,11 +182,13 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const existingRepos = await storage.getRepos(
-        repositories.map((repo) => repo.repoId)
+      const existingRepos = new Set(
+        await storage.getRepos(
+          repositories.map((repo) => repo.repoId)
+        )
       );
       const filteredRepos = repositories.filter(
-        (repo) => !existingRepos.includes(repo.repoId)
+        (repo) => !existingRepos.has(repo.repoId)
       );
 
       const createdRepos = await Promise.all(
