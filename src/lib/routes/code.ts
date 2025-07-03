@@ -145,9 +145,19 @@ export function codeRoutes(app: Express) {
         res.status(404).json({ error: "Repository not found" });
         return;
       }
+      const userSub = req.headers["user-sub"] as string;
+      if (!userSub) {
+        res.status(401).json({ error: "User sub not provided" });
+        return;
+      }
+      const user = await storage.getUser(userSub);
+      if (!user || !user.accessToken) {
+        res.status(401).json({ error: "GitHub not authenticated" });
+        return;
+      }
 
       const repoContent = await getRepoContent(
-        repo.accessToken,
+        user.accessToken,
         `https://github.com/${repo.fullName}`,
         repo.fileFilterRegex || ".*",
         branch || "main"
