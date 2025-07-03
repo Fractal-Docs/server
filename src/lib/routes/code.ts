@@ -7,7 +7,7 @@ import {
   getLatestCommit,
   getRepoContent,
 } from "../github";
-import { generateDocumentation } from "../openai";
+import { generateDocumentation, type ModelType } from "../openai";
 import { processFileContent, generateEmbedding } from "../embeddings";
 import { vectorStorage } from "../vector-storage";
 import { extname } from "path";
@@ -323,7 +323,7 @@ export function codeRoutes(app: Express) {
       const { content: documentation, prompts } = await generateDocumentation(
         codeWithCfg,
         businessContext,
-        model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini"
+        model as ModelType
       );
 
       console.log("Documentation generated");
@@ -581,7 +581,7 @@ export function codeRoutes(app: Express) {
       const { content: documentation, prompts } = await generateDocumentation(
         fileContents,
         businessContext,
-        model as "gpt-4o" | "gpt-3.5-turbo" | "o1-mini",
+        model as ModelType,
         "change"
       );
 
