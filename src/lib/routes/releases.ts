@@ -3,8 +3,13 @@ import { db } from "src/db";
 import { releases } from "src/shared/schema";
 import { nanoid } from "nanoid";
 import { storage } from "src/storage";
-import { getAIProvider, type ModelType } from "../ai-providers";
-import { analyzeDiff, generateRoleDocumentWithContext } from "../releases";
+import { type ModelType } from "../ai-providers";
+import {
+  analyzeDiff,
+  generateReleaseDocument,
+  generateRoleDocument,
+  generateRoleDocumentWithContext,
+} from "../releases";
 
 export function releaseRoutes(app: Express) {
   app.post("/api/releases", async (req, res) => {
