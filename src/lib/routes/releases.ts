@@ -7,6 +7,7 @@ import {
   analyzeDiff,
   generateReleaseDocument,
   generateRoleDocument,
+  generateRoleDocumentWithContext,
 } from "src/lib/releases";
 
 export function releaseRoutes(app: Express) {
@@ -82,6 +83,61 @@ export function releaseRoutes(app: Express) {
     } catch (error) {
       console.error("Error fetching release:", error);
       res.status(500).json({ error: "Failed to fetch release" });
+    }
+  });
+
+  app.post("/api/releases/:id/generate-roles", async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const { roles: selectedRoles } = req.body;
+
+      const release = await storage.getRelease(id);
+
+      if (!release) {
+        return res.status(404).json({ error: "Release not found" });
+      }
+
+      const roleDocuments: Record<string, string> = {};
+
+      for (const role of selectedRoles) {
+        try {
+          const document = await generateRoleDocumentWithContext(
+            release.releaseDocument,
+            role
+          );
+          roleDocuments[role] = document;
+        } catch (error) {
+          console.error(`Error generating document for role ${role}:`, error);
+          roleDocuments[role] =
+            `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
+        }
+      }
+
+      const updateData: any = {
+        roleDocuments: { ...(release.roleDocuments || {}), ...roleDocuments },
+      };
+
+      if (selectedRoles.includes("csm")) {
+        updateData.csmDocument = roleDocuments.csm;
+      }
+      if (selectedRoles.includes("revops")) {
+        updateData.revopsDocument = roleDocuments.revops;
+      }
+      if (selectedRoles.includes("ps")) {
+        updateData.psDocument = roleDocuments.ps;
+      }
+
+      const updatedRelease = await storage.updateRelease(id, updateData);
+
+      res.json(updatedRelease);
+    } catch (error) {
+      console.error("Error generating role documents:", error);
+      res.status(500).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate role documents",
+      });
     }
   });
 }
