@@ -17,6 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.3",
     "@neondatabase/serverless": "^1.0.0",
     "@octokit/rest": "^21.1.1",
     "@pinecone-database/pinecone": "^5.1.1",

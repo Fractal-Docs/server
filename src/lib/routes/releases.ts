@@ -3,32 +3,40 @@ import { db } from "src/db";
 import { releases } from "src/shared/schema";
 import { nanoid } from "nanoid";
 import { storage } from "src/storage";
+import { type ModelType } from "../ai-providers";
 import {
   analyzeDiff,
   generateReleaseDocument,
   generateRoleDocument,
   generateRoleDocumentWithContext,
-} from "src/lib/releases";
+} from "../releases";
 
 export function releaseRoutes(app: Express) {
   app.post("/api/releases", async (req, res) => {
     try {
-      const { title, prd, repoId, branch } = req.body;
+      const { title, prd, repoId, branch, model = "gpt-4o" } = req.body;
       const diffAnalysis = await analyzeDiff(repoId, branch);
 
-      const releaseDocument = await generateReleaseDocument(prd, diffAnalysis);
+      const releaseDocument = await generateReleaseDocument(
+        prd,
+        diffAnalysis,
+        model as ModelType
+      );
 
       const salesDocument = await generateRoleDocument(
         releaseDocument,
-        "sales"
+        "sales",
+        model as ModelType
       );
       const marketingDocument = await generateRoleDocument(
         releaseDocument,
-        "marketing"
+        "marketing",
+        model as ModelType
       );
       const customerSuccessDocument = await generateRoleDocument(
         releaseDocument,
-        "customer-success"
+        "customer-success",
+        model as ModelType
       );
 
       const releaseId = nanoid();

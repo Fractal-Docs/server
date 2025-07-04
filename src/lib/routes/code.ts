@@ -7,7 +7,8 @@ import {
   getLatestCommit,
   getRepoContent,
 } from "../github";
-import { generateDocumentation, type ModelType } from "../openai";
+import { generateDocumentation } from "../openai";
+import { type ModelType } from "../ai-providers";
 import { processFileContent, generateEmbedding } from "../embeddings";
 import { vectorStorage } from "../vector-storage";
 import { extname } from "path";
