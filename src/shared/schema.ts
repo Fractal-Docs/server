@@ -139,8 +139,8 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
   });
 
 export const releases = pgTable("releases", {
-  id: serial("id").primaryKey(),
-  releaseId: text("release_id").notNull().unique(),
+  id: serial("id").notNull(),
+  releaseId: text("release_id").primaryKey(),
   title: text("title").notNull(),
   prd: text("prd").notNull(),
   repoId: text("repo_id").notNull(),
