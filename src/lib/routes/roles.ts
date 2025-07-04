@@ -1,11 +1,5 @@
 import type { Express } from "express";
-import { z } from "zod";
 import { AVAILABLE_ROLES, DEFAULT_ROLE_CONTEXTS } from "src/lib/roles";
-
-const roleTemplateSchema = z.object({
-  role: z.string().min(1),
-  context: z.string().min(1),
-});
 
 export function roleRoutes(app: Express) {
   app.get("/api/roles", async (req, res) => {
@@ -43,7 +37,7 @@ export function roleRoutes(app: Express) {
   app.post("/api/roles/:roleId/template", async (req: any, res: any) => {
     try {
       const { roleId } = req.params;
-      const { context } = roleTemplateSchema.parse(req.body);
+      const { context } = req.body;
 
       const role = AVAILABLE_ROLES.find((r) => r.id === roleId);
       if (!role) {
