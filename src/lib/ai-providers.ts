@@ -3,6 +3,13 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export type ModelType =
   | "gpt-4o"
+  | "gpt-4.1"
+  | "o4-mini"
+  | "o3"
+  | "gpt-4o-mini"
+  | "gpt-4.1-mini"
+  | "gpt-4.1-nano"
+  | "o1"
   | "gpt-3.5-turbo"
   | "o1-2024-12-17"
   | "o1-mini"
