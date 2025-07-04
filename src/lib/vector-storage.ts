@@ -176,6 +176,9 @@ export class PineconeVectorStorage implements IVectorStorage {
 
 // Export a factory function that creates the appropriate storage implementation
 export function createVectorStorage(): IVectorStorage {
+  if (!process.env.PINECONE_API_KEY) {
+    return new LocalVectorStorage();
+  }
   // Use Pinecone for production
   return new PineconeVectorStorage();
 }

@@ -4,6 +4,7 @@ import { releases } from "src/shared/schema";
 import { nanoid } from "nanoid";
 import { storage } from "src/storage";
 import { getAIProvider, type ModelType } from "../ai-providers";
+import { analyzeDiff, generateRoleDocumentWithContext } from "../releases";
 
 export function releaseRoutes(app: Express) {
   app.post("/api/releases", async (req, res) => {
@@ -87,50 +88,61 @@ export function releaseRoutes(app: Express) {
       res.status(500).json({ error: "Failed to fetch release" });
     }
   });
-}
 
-async function analyzeDiff(repoId: string, branch: string): Promise<string> {
-  try {
-    const response = await fetch(
-      `${process.env.GITHUB_API_URL || "https://api.github.com"}/repos/${repoId}/compare/main...${branch}`,
-      {
-        headers: {
-          Authorization: `token ${process.env.GITHUB_TOKEN}`,
-          Accept: "application/vnd.github.v3+json",
-        },
+  app.post("/api/releases/:id/generate-roles", async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const { roles: selectedRoles } = req.body;
+
+      const release = await storage.getRelease(id);
+
+      if (!release) {
+        return res.status(404).json({ error: "Release not found" });
       }
-    );
 
-    if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.statusText}`);
-    }
+      const roleDocuments: Record<string, string> = {};
 
-    const data = await response.json();
+      for (const role of selectedRoles) {
+        try {
+          const document = await generateRoleDocumentWithContext(
+            release.releaseDocument,
+            role
+          );
+          roleDocuments[role] = document;
+        } catch (error) {
+          console.error(`Error generating document for role ${role}:`, error);
+          roleDocuments[role] =
+            `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
+        }
+      }
 
-    let diffSummary = `Comparing main branch to ${branch}:\n\n`;
-    diffSummary += `Files changed: ${data.files?.length || 0}\n`;
-    diffSummary += `Commits: ${data.commits?.length || 0}\n\n`;
+      const updateData: any = {
+        roleDocuments: { ...(release.roleDocuments || {}), ...roleDocuments },
+      };
 
-    if (data.files && data.files.length > 0) {
-      diffSummary += "Changed files:\n";
-      data.files.forEach((file: any) => {
-        diffSummary += `- ${file.filename} (+${file.additions} -${file.deletions})\n`;
+      if (selectedRoles.includes("csm")) {
+        updateData.csmDocument = roleDocuments.csm;
+      }
+      if (selectedRoles.includes("revops")) {
+        updateData.revopsDocument = roleDocuments.revops;
+      }
+      if (selectedRoles.includes("ps")) {
+        updateData.psDocument = roleDocuments.ps;
+      }
+
+      const updatedRelease = await storage.updateRelease(id, updateData);
+
+      res.json(updatedRelease);
+    } catch (error) {
+      console.error("Error generating role documents:", error);
+      res.status(500).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate role documents",
       });
-      diffSummary += "\n";
     }
-
-    if (data.commits && data.commits.length > 0) {
-      diffSummary += "Recent commits:\n";
-      data.commits.slice(0, 10).forEach((commit: any) => {
-        diffSummary += `- ${commit.commit.message.split("\n")[0]}\n`;
-      });
-    }
-
-    return diffSummary;
-  } catch (error) {
-    console.error("Error analyzing diff:", error);
-    return `Error analyzing diff: ${error instanceof Error ? error.message : "Unknown error"}`;
-  }
+  });
 }
 
 async function generateReleaseDocument(

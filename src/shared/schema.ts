@@ -71,21 +71,6 @@ export const repoDocs = pgTable(
   ]
 );
 
-export const releases = pgTable("releases", {
-  id: serial("id").primaryKey(),
-  releaseId: text("release_id").primaryKey(),
-  title: text("title").notNull(),
-  prd: text("prd").notNull(),
-  repoId: text("repo_id").notNull(),
-  branch: text("branch").notNull(),
-  diffAnalysis: text("diff_analysis").notNull(),
-  releaseDocument: text("release_document").notNull(),
-  salesDocument: text("sales_document").notNull(),
-  marketingDocument: text("marketing_document").notNull(),
-  customerSuccessDocument: text("customer_success_document").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 // Existing schemas
 export const insertPrdSchema = createInsertSchema(prds)
   .pick({
@@ -153,6 +138,25 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
     }),
   });
 
+export const releases = pgTable("releases", {
+  id: serial("id").primaryKey(),
+  releaseId: text("release_id").notNull().unique(),
+  title: text("title").notNull(),
+  prd: text("prd").notNull(),
+  repoId: text("repo_id").notNull(),
+  branch: text("branch").notNull(),
+  diffAnalysis: text("diff_analysis").notNull(),
+  releaseDocument: text("release_document").notNull(),
+  salesDocument: text("sales_document"),
+  marketingDocument: text("marketing_document"),
+  customerSuccessDocument: text("customer_success_document"),
+  csmDocument: text("csm_document"),
+  revopsDocument: text("revops_document"),
+  psDocument: text("ps_document"),
+  roleDocuments: jsonb("role_documents"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertReleaseSchema = createInsertSchema(releases)
   .pick({
     releaseId: true,
@@ -165,6 +169,10 @@ export const insertReleaseSchema = createInsertSchema(releases)
     salesDocument: true,
     marketingDocument: true,
     customerSuccessDocument: true,
+    csmDocument: true,
+    revopsDocument: true,
+    psDocument: true,
+    roleDocuments: true,
   })
   .extend({
     title: z.string().min(1, "Title is required"),
