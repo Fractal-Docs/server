@@ -541,6 +541,7 @@ export function codeRoutes(app: Express) {
 
       const response = await compareBranchToDefaultBranch(
         user.accessToken,
+
         `https://github.com/${repo.fullName}`,
         branch
       );

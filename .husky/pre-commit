@@ -1,12 +1,1 @@
-echo "Running pre-commit checks..."
-
-echo "1. Running TypeScript type check..."
-npm run check
-
-echo "2. Running ESLint with auto-fix..."
-npm run lint:fix
-
-echo "3. Running build..."
-npm run build
-
-echo "Pre-commit checks completed successfully!"
+npm run lint-staged
