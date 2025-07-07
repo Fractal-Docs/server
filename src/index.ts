@@ -50,6 +50,12 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // _next is required here to solve res.status is not a function error
+  // Express.js uses the **arity** (number of parameters) to distinguish between:
+  // - **Regular middleware**: `(req, res, next) => {}`  (3 parameters)
+  // - **Error middleware**: `(err, req, res, next) => {}` (4 parameters)
+  // If you have fewer than 4 parameters, Express assumes it's regular middleware
+  // and passes `(req, res, next)` instead of `(err, req, res, next)`.
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
