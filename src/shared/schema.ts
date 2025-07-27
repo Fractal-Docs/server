@@ -33,6 +33,7 @@ export const users = pgTable("users", {
   userSub: text("user_sub").notNull(),
   accessToken: text("access_token"),
   repos: text("repos").array().default([]).notNull(),
+  themePreferences: jsonb("theme_preferences"),
 });
 
 // New tables for repository analysis
@@ -95,11 +96,22 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   fileFilterRegex: true,
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  accessToken: true,
-  userSub: true,
-  repos: true,
+export const themePreferencesSchema = z.object({
+  accentColor: z.string().optional(),
+  grayColor: z.string().optional(),
+  mode: z.enum(["light", "dark", "system"]).optional(),
 });
+
+export const insertUserSchema = createInsertSchema(users)
+  .pick({
+    accessToken: true,
+    userSub: true,
+    repos: true,
+    themePreferences: true,
+  })
+  .extend({
+    themePreferences: themePreferencesSchema.optional(),
+  });
 
 // New schemas for repository analysis
 export const insertRepoFileSchema = createInsertSchema(repoFiles)
@@ -196,3 +208,4 @@ export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
 export type RepoDoc = typeof repoDocs.$inferSelect;
 export type InsertRelease = z.infer<typeof insertReleaseSchema>;
 export type Release = typeof releases.$inferSelect;
+export type ThemePreferences = z.infer<typeof themePreferencesSchema>;
