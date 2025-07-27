@@ -135,14 +135,12 @@ export async function getRepoBranches(
   }
 }
 
-export async function listUserRepos(accessToken: string) {
+export async function listOrganizationRepos(accessToken: string, org: string) {
   const octokit = new Octokit({ auth: accessToken });
 
   try {
-    const { data: repos } = await octokit.repos.listForAuthenticatedUser({
-      visibility: "all",
-      sort: "updated",
-      per_page: 100,
+    const { data: repos } = await octokit.repos.listForOrg({
+      org,
     });
 
     return repos.map((repo) => ({

@@ -24,7 +24,9 @@ export const githubRepos = pgTable("github_repos", {
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
   repoId: text("repo_id").notNull(),
-  organizationId: serial("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  organizationId: serial("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
   fileFilterRegex: text("file_filter_regex"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -34,6 +36,7 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description"),
+  accessToken: text("access_token").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -42,20 +45,21 @@ export const userOrganizations = pgTable(
   "user_organizations",
   {
     id: serial("id").primaryKey(),
-    userId: serial("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    organizationId: serial("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    userId: serial("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: serial("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("member"), // owner, admin, member
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
-  (table) => [
-    primaryKey({ columns: [table.userId, table.organizationId] }),
-  ]
+  (table) => [primaryKey({ columns: [table.userId, table.organizationId] })]
 );
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   userSub: text("user_sub").notNull().unique(),
-  accessToken: text("access_token"),
   email: text("email"),
   name: text("name"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -117,9 +121,12 @@ export const insertOrganizationSchema = createInsertSchema(organizations).pick({
   name: true,
   slug: true,
   description: true,
+  accessToken: true,
 });
 
-export const insertUserOrganizationSchema = createInsertSchema(userOrganizations).pick({
+export const insertUserOrganizationSchema = createInsertSchema(
+  userOrganizations
+).pick({
   userId: true,
   organizationId: true,
   role: true,
@@ -135,7 +142,6 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
-  accessToken: true,
   userSub: true,
   email: true,
   name: true,
@@ -224,7 +230,9 @@ export const insertReleaseSchema = createInsertSchema(releases)
 // Organization types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
-export type InsertUserOrganization = z.infer<typeof insertUserOrganizationSchema>;
+export type InsertUserOrganization = z.infer<
+  typeof insertUserOrganizationSchema
+>;
 export type UserOrganization = typeof userOrganizations.$inferSelect;
 
 // Existing types

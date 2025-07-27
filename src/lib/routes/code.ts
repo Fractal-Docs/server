@@ -32,17 +32,17 @@ async function getRepoById(id: string, res) {
 export function codeRoutes(app: Express) {
   app.get("/api/repos", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string;
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
-      const repos = await storage.getRepos(user.repos);
+      const repos = await storage.getRepos(organization.id);
       res.json(repos);
     } catch (error: unknown) {
       const message =
@@ -55,24 +55,24 @@ export function codeRoutes(app: Express) {
     try {
       const { id, branch } = getParams(req, res);
       const repo = await getRepoById(id, res);
-      const userSub = req.headers["user-sub"] as string;
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
       if (!repo) return;
 
       const ghRepo = await getGithubRepo(
-        user.accessToken,
+        organization.accessToken,
         `https://github.com/${repo.fullName}`
       );
       const latestCommitDate = await getLatestCommit(
-        user.accessToken,
+        organization.accessToken,
         `https://github.com/${repo.fullName}`,
         branch
       );
@@ -146,19 +146,19 @@ export function codeRoutes(app: Express) {
         res.status(404).json({ error: "Repository not found" });
         return;
       }
-      const userSub = req.headers["user-sub"] as string;
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
 
       const repoContent = await getRepoContent(
-        user.accessToken,
+        organization.accessToken,
         `https://github.com/${repo.fullName}`,
         repo.fileFilterRegex || ".*",
         branch || "main"
@@ -520,17 +520,16 @@ export function codeRoutes(app: Express) {
     try {
       const { id, branch } = getParams(req, res);
       const { docType, model = "gpt-4o" } = req.body;
-      const userSub = req.headers["user-sub"] as string;
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
-
       const repo = await storage.getRepo(id);
 
       if (!repo) {
@@ -540,7 +539,7 @@ export function codeRoutes(app: Express) {
       const repoDoc = await storage.getRepoDoc(id, branch, "change");
 
       const response = await compareBranchToDefaultBranch(
-        user.accessToken,
+        organization.accessToken,
         `https://github.com/${repo.fullName}`,
         branch
       );
