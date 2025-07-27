@@ -31,7 +31,7 @@ export function authRoutes(app: Express) {
       res.json(user);
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : "Failed to fetch repositories";
+        error instanceof Error ? error.message : "Failed to update user";
       res.status(500).json({ error: message });
     }
   });
