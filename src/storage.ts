@@ -17,21 +17,27 @@ import {
   Release,
   InsertRelease,
   releases,
+  organizations,
+  userOrganizations,
+  type Organization,
+  type InsertOrganization,
+  type UserOrganization,
+  type InsertUserOrganization,
 } from "./shared/schema";
 import { db } from "./db";
 import { eq, like, inArray, and } from "drizzle-orm";
 
 export interface IStorage {
   // PRD operations
-  getPrds(userRepos: string[]): Promise<Prd[]>;
+  getPrds(organizationIds: number[]): Promise<Prd[]>;
   getPrd(id: number): Promise<Prd | undefined>;
   createPrd(prd: InsertPrd): Promise<Prd>;
   updatePrd(id: number, prd: InsertPrd): Promise<Prd>;
   deletePrd(id: number): Promise<void>;
-  searchPrds(userRepos: string[], query: string): Promise<Prd[]>;
+  searchPrds(organizationIds: number[], query: string): Promise<Prd[]>;
 
   // GitHub repo operations
-  getRepos(userRepos: string[]): Promise<GithubRepo[]>;
+  getRepos(organizationIds: number[]): Promise<GithubRepo[]>;
   getRepo(id: string): Promise<GithubRepo | undefined>;
   createRepo(repo: InsertGithubRepo): Promise<GithubRepo>;
   deleteRepo(id: string): Promise<void[]>;
@@ -75,6 +81,19 @@ export interface IStorage {
     release: Partial<InsertRelease>
   ): Promise<Release>;
   deleteRelease(releaseId: string): Promise<void>;
+
+  // Organization operations
+  createUserWithOrganization(user: InsertUser, orgName: string): Promise<{ user: User; organization: Organization }>;
+  getOrganizations(userId: number): Promise<Organization[]>;
+  getOrganization(id: number): Promise<Organization | undefined>;
+  getOrganizationBySlug(slug: string): Promise<Organization | undefined>;
+  createOrganization(org: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: number, org: Partial<InsertOrganization>): Promise<Organization>;
+  deleteOrganization(id: number): Promise<void>;
+  getUserOrganizations(userId: number): Promise<UserOrganization[]>;
+  addUserToOrganization(userOrg: InsertUserOrganization): Promise<UserOrganization>;
+  removeUserFromOrganization(userId: number, organizationId: number): Promise<void>;
+  updateUserOrganizationRole(userId: number, organizationId: number, role: string): Promise<UserOrganization>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -91,9 +110,21 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPrds(userRepos: string[]): Promise<Prd[]> {
-    return this.handleDatabaseOperation(() => {
-      return db.select().from(prds).where(inArray(prds.repoId, userRepos));
+  async getPrds(organizationIds: number[]): Promise<Prd[]> {
+    return this.handleDatabaseOperation(async () => {
+      const repos = await db
+        .select({ repoId: githubRepos.repoId })
+        .from(githubRepos)
+        .where(inArray(githubRepos.organizationId, organizationIds));
+
+      const repoIds = repos.map(r => r.repoId);
+      if (repoIds.length === 0) return [];
+
+      return db
+        .select()
+        .from(prds)
+        .where(inArray(prds.repoId, repoIds))
+        .orderBy(prds.id);
     });
   }
 
@@ -143,23 +174,32 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async searchPrds(userRepos: string[], query: string): Promise<Prd[]> {
+  async searchPrds(organizationIds: number[], query: string): Promise<Prd[]> {
     return this.handleDatabaseOperation(async () => {
-      if (!query) return this.getPrds(userRepos);
+      if (!query) return this.getPrds(organizationIds);
+
+      const repos = await db
+        .select({ repoId: githubRepos.repoId })
+        .from(githubRepos)
+        .where(inArray(githubRepos.organizationId, organizationIds));
+
+      const repoIds = repos.map(r => r.repoId);
+      if (repoIds.length === 0) return [];
+
       return db
         .select()
         .from(prds)
-        .where(like(prds.title, `%${query}%`))
+        .where(and(inArray(prds.repoId, repoIds), like(prds.title, `%${query}%`)))
         .orderBy(prds.id);
     });
   }
 
-  async getRepos(userRepos: string[]): Promise<GithubRepo[]> {
+  async getRepos(organizationIds: number[]): Promise<GithubRepo[]> {
     return this.handleDatabaseOperation(() =>
       db
         .select()
         .from(githubRepos)
-        .where(inArray(githubRepos.repoId, userRepos))
+        .where(inArray(githubRepos.organizationId, organizationIds))
     );
   }
 
@@ -240,181 +280,149 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async updateUser(insertUser: InsertUser): Promise<User> {
+  async updateUser(user: InsertUser): Promise<User> {
     return this.handleDatabaseOperation(async () => {
-      const [user] = await db
+      const [updatedUser] = await db
         .update(users)
-        .set(insertUser)
-        .where(eq(users.userSub, insertUser.userSub))
+        .set(user)
+        .where(eq(users.userSub, user.userSub))
         .returning();
-      return user;
+      if (!updatedUser) throw new Error("User not found");
+      return updatedUser;
     });
   }
 
-  // Repository file analysis operations
-  async getRepoFiles(repoId: string, branchName?: string): Promise<RepoFile[]> {
-    const whereClause = branchName
-      ? and(eq(repoFiles.repoId, repoId), eq(repoFiles.branch, branchName))
-      : eq(repoFiles.repoId, repoId);
+  async createUserWithOrganization(user: InsertUser, orgName: string): Promise<{ user: User; organization: Organization }> {
+    return this.handleDatabaseOperation(async () => {
+      // Create user first
+      const [createdUser] = await db.insert(users).values(user).returning();
+
+      // Create organization with a unique slug
+      const slug = orgName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+      const [createdOrg] = await db.insert(organizations).values({
+        name: orgName,
+        slug,
+        description: `${orgName}'s personal organization`,
+      }).returning();
+
+      // Add user to organization as owner
+      await db.insert(userOrganizations).values({
+        userId: createdUser.id,
+        organizationId: createdOrg.id,
+        role: 'owner',
+      });
+
+      return { user: createdUser, organization: createdOrg };
+    });
+  }
+
+  async getOrganizations(userId: number): Promise<Organization[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(repoFiles).where(whereClause)
+      db
+        .select({
+          id: organizations.id,
+          name: organizations.name,
+          slug: organizations.slug,
+          description: organizations.description,
+          createdAt: organizations.createdAt,
+          updatedAt: organizations.updatedAt,
+        })
+        .from(organizations)
+        .innerJoin(userOrganizations, eq(organizations.id, userOrganizations.organizationId))
+        .where(eq(userOrganizations.userId, userId))
     );
   }
 
-  async createRepoFile(insertFile: InsertRepoFile): Promise<RepoFile> {
+  async getOrganization(id: number): Promise<Organization | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [file] = await db.insert(repoFiles).values(insertFile).returning();
-      return file;
-    });
-  }
-
-  async getRepoFile(
-    repoId: string,
-    filePath: string,
-    branchName: string
-  ): Promise<RepoFile | undefined> {
-    return this.handleDatabaseOperation(async () => {
-      const [file] = await db
+      const [org] = await db
         .select()
-        .from(repoFiles)
-        .where(
-          and(
-            eq(repoFiles.repoId, repoId),
-            eq(repoFiles.filePath, filePath),
-            eq(repoFiles.branch, branchName)
-          )
-        );
-      return file;
+        .from(organizations)
+        .where(eq(organizations.id, id));
+      return org;
     });
   }
 
-  async updateRepoFile(
-    id: number,
-    branch: string,
-    updateFile: Partial<InsertRepoFile>
-  ): Promise<RepoFile> {
+  async getOrganizationBySlug(slug: string): Promise<Organization | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [file] = await db
-        .update(repoFiles)
-        .set(updateFile)
-        .where(and(eq(repoFiles.id, id), eq(repoFiles.branch, branch)))
-        .returning();
-      if (!file) throw new Error("Repository file not found");
-      return file;
+      const [org] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.slug, slug));
+      return org;
     });
   }
 
-  async deleteRepoFile(id: number): Promise<void> {
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
     return this.handleDatabaseOperation(async () => {
-      const [file] = await db
-        .delete(repoFiles)
-        .where(eq(repoFiles.id, id))
-        .returning();
-      if (!file) throw new Error("Repository file not found");
+      const [organization] = await db.insert(organizations).values(org).returning();
+      return organization;
     });
   }
 
-  // Repository documentation operations
-  async getRepoDocs(repoId: string, branch: string): Promise<RepoDoc[]> {
+  async updateOrganization(id: number, org: Partial<InsertOrganization>): Promise<Organization> {
+    return this.handleDatabaseOperation(async () => {
+      const [organization] = await db
+        .update(organizations)
+        .set({ ...org, updatedAt: new Date() })
+        .where(eq(organizations.id, id))
+        .returning();
+      if (!organization) throw new Error("Organization not found");
+      return organization;
+    });
+  }
+
+  async deleteOrganization(id: number): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      const [org] = await db
+        .delete(organizations)
+        .where(eq(organizations.id, id))
+        .returning();
+      if (!org) throw new Error("Organization not found");
+    });
+  }
+
+  async getUserOrganizations(userId: number): Promise<UserOrganization[]> {
     return this.handleDatabaseOperation(() =>
       db
         .select()
-        .from(repoDocs)
-        .where(and(eq(repoDocs.repoId, repoId), eq(repoDocs.branch, branch)))
+        .from(userOrganizations)
+        .where(eq(userOrganizations.userId, userId))
     );
   }
 
-  async createRepoDoc(insertDoc: InsertRepoDoc): Promise<RepoDoc> {
+  async addUserToOrganization(userOrg: InsertUserOrganization): Promise<UserOrganization> {
     return this.handleDatabaseOperation(async () => {
-      const [doc] = await db.insert(repoDocs).values(insertDoc).returning();
-      return doc;
+      const [userOrganization] = await db.insert(userOrganizations).values(userOrg).returning();
+      return userOrganization;
     });
   }
 
-  async getRepoDoc(
-    repoId: string,
-    branch: string,
-    docType: string
-  ): Promise<RepoDoc | undefined> {
+  async removeUserFromOrganization(userId: number, organizationId: number): Promise<void> {
     return this.handleDatabaseOperation(async () => {
-      const [doc] = await db
-        .select()
-        .from(repoDocs)
-        .where(
-          and(
-            eq(repoDocs.repoId, repoId),
-            eq(repoDocs.branch, branch),
-            eq(repoDocs.docType, docType)
-          )
-        );
-      return doc;
-    });
-  }
-
-  async updateRepoDoc(
-    id: number,
-    updateDoc: Partial<InsertRepoDoc>
-  ): Promise<RepoDoc> {
-    return this.handleDatabaseOperation(async () => {
-      const [doc] = await db
-        .update(repoDocs)
-        .set(updateDoc)
-        .where(eq(repoDocs.id, id))
+      const [userOrg] = await db
+        .delete(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ))
         .returning();
-      if (!doc) throw new Error("Repository documentation not found");
-      return doc;
+      if (!userOrg) throw new Error("User organization relationship not found");
     });
   }
 
-  async deleteRepoDoc(id: number): Promise<void> {
+  async updateUserOrganizationRole(userId: number, organizationId: number, role: string): Promise<UserOrganization> {
     return this.handleDatabaseOperation(async () => {
-      const [doc] = await db
-        .delete(repoDocs)
-        .where(eq(repoDocs.id, id))
+      const [userOrg] = await db
+        .update(userOrganizations)
+        .set({ role })
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ))
         .returning();
-      if (!doc) throw new Error("Repository documentation not found");
-    });
-  }
-
-  async createRelease(insertRelease: InsertRelease): Promise<Release> {
-    return this.handleDatabaseOperation(async () => {
-      const [doc] = await db.insert(releases).values(insertRelease).returning();
-      return doc;
-    });
-  }
-
-  async getRelease(releaseId: string): Promise<Release | undefined> {
-    return this.handleDatabaseOperation(async () => {
-      const [doc] = await db
-        .select()
-        .from(releases)
-        .where(eq(releases.releaseId, releaseId));
-      return doc;
-    });
-  }
-
-  async updateRelease(
-    releaseId: string,
-    updateDoc: Partial<InsertRelease>
-  ): Promise<Release> {
-    return this.handleDatabaseOperation(async () => {
-      const [doc] = await db
-        .update(releases)
-        .set(updateDoc)
-        .where(eq(releases.releaseId, releaseId))
-        .returning();
-      if (!doc) throw new Error("Release documentation not found");
-      return doc;
-    });
-  }
-
-  async deleteRelease(releaseId: string): Promise<void> {
-    return this.handleDatabaseOperation(async () => {
-      const [doc] = await db
-        .delete(releases)
-        .where(eq(releases.releaseId, releaseId))
-        .returning();
-      if (!doc) throw new Error("Repository documentation not found");
+      if (!userOrg) throw new Error("User organization relationship not found");
+      return userOrg;
     });
   }
 }
