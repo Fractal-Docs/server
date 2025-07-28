@@ -148,14 +148,18 @@ export function githubRoutes(app: Express) {
 
   // Add new route for GitHub user status
   app.get("/api/github/auth", async (req, res) => {
-    const userSub = req.headers["user-sub"] as string;
     try {
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub as string);
-      res.json(user || null);
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+      res.json(organization || null);
     } catch (error: unknown) {
       const message =
         error instanceof Error
