@@ -188,9 +188,11 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const existingRepos = new Set(await storage.getRepos(organization.id));
+      const existingRepos = await storage.getRepos(organization.id);
+      const existingRepoIds = new Set(existingRepos.map((r) => r.repoId));
+
       const filteredRepos = repositories.filter(
-        (repo) => !existingRepos.has(repo.repoId)
+        (repo) => !existingRepoIds.has(repo.repoId)
       );
 
       const createdRepos = await Promise.all(
