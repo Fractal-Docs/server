@@ -46,7 +46,6 @@ export const organizations = pgTable("organizations", {
 export const userOrganizations = pgTable(
   "user_organizations",
   {
-    id: serial("id").primaryKey(),
     userId: serial("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
