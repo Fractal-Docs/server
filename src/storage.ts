@@ -82,8 +82,8 @@ export interface IStorage {
   ): Promise<Release>;
   deleteRelease(releaseId: string): Promise<void>;
 
-  getOrganizations(userId: number): Promise<Organization[]>;
   getOrganization(id: number): Promise<Organization | undefined>;
+  getOrganizationsByUserId(userId: number): Promise<Organization[]>;
   getOrganizationBySlug(slug: string): Promise<Organization | undefined>;
   createOrganization(org: InsertOrganization): Promise<Organization>;
   updateOrganization(
@@ -91,7 +91,6 @@ export interface IStorage {
     org: Partial<InsertOrganization>
   ): Promise<Organization>;
   deleteOrganization(id: number): Promise<void>;
-  getUserOrganizations(userId: number): Promise<UserOrganization[]>;
   addUserToOrganization(
     userOrg: InsertUserOrganization
   ): Promise<UserOrganization>;
@@ -474,7 +473,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getOrganizations(userId: number): Promise<Organization[]> {
+  async getOrganizationsByUserId(userId: number): Promise<Organization[]> {
     return this.handleDatabaseOperation(() =>
       db
         .select({
@@ -485,6 +484,7 @@ export class DatabaseStorage implements IStorage {
           createdAt: organizations.createdAt,
           updatedAt: organizations.updatedAt,
           accessToken: organizations.accessToken,
+          isPersonal: organizations.isPersonal,
         })
         .from(organizations)
         .innerJoin(
@@ -548,15 +548,6 @@ export class DatabaseStorage implements IStorage {
         .returning();
       if (!org) throw new Error("Organization not found");
     });
-  }
-
-  async getUserOrganizations(userId: number): Promise<UserOrganization[]> {
-    return this.handleDatabaseOperation(() =>
-      db
-        .select()
-        .from(userOrganizations)
-        .where(eq(userOrganizations.userId, userId))
-    );
   }
 
   async addUserToOrganization(

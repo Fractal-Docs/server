@@ -1,7 +1,9 @@
-
 import type { Express } from "express";
 import { storage } from "../../storage";
-import { insertOrganizationSchema, insertUserOrganizationSchema } from "../../shared/schema";
+import {
+  insertOrganizationSchema,
+  insertUserOrganizationSchema,
+} from "../../shared/schema";
 import { fromZodError } from "zod-validation-error";
 
 export function organizationRoutes(app: Express) {
@@ -13,17 +15,20 @@ export function organizationRoutes(app: Express) {
         res.status(401).json({ error: "User sub not provided" });
         return;
       }
-
       const user = await storage.getUser(userSub);
       if (!user) {
         res.status(404).json({ error: "User not found" });
         return;
       }
-
-      const organizations = await storage.getOrganizations(user.id);
-      res.json(organizations);
+      const userOrganizations = await storage.getOrganizationsByUserId(
+        user?.id
+      );
+      res.json(userOrganizations);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to fetch organizations";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch organizations";
       res.status(500).json({ error: message });
     }
   });
@@ -33,7 +38,7 @@ export function organizationRoutes(app: Express) {
     try {
       const orgId = parseInt(req.params.id);
       const organization = await storage.getOrganization(orgId);
-      
+
       if (!organization) {
         res.status(404).json({ error: "Organization not found" });
         return;
@@ -41,7 +46,8 @@ export function organizationRoutes(app: Express) {
 
       res.json(organization);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to fetch organization";
+      const message =
+        error instanceof Error ? error.message : "Failed to fetch organization";
       res.status(500).json({ error: message });
     }
   });
@@ -68,17 +74,20 @@ export function organizationRoutes(app: Express) {
       }
 
       const organization = await storage.createOrganization(result.data);
-      
+
       // Add user as owner
       await storage.addUserToOrganization({
         userId: user.id,
         organizationId: organization.id,
-        role: 'owner',
+        role: "owner",
       });
 
       res.json(organization);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to create organization";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to create organization";
       res.status(500).json({ error: message });
     }
   });
@@ -88,7 +97,7 @@ export function organizationRoutes(app: Express) {
     try {
       const orgId = parseInt(req.params.id);
       const result = insertOrganizationSchema.partial().safeParse(req.body);
-      
+
       if (!result.success) {
         res.status(400).json({ error: fromZodError(result.error).toString() });
         return;
@@ -97,7 +106,10 @@ export function organizationRoutes(app: Express) {
       const organization = await storage.updateOrganization(orgId, result.data);
       res.json(organization);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to update organization";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update organization";
       res.status(500).json({ error: message });
     }
   });
@@ -109,7 +121,10 @@ export function organizationRoutes(app: Express) {
       await storage.deleteOrganization(orgId);
       res.json({ success: true });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to delete organization";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to delete organization";
       res.status(500).json({ error: message });
     }
   });
@@ -122,7 +137,7 @@ export function organizationRoutes(app: Express) {
         ...req.body,
         organizationId: orgId,
       });
-      
+
       if (!result.success) {
         res.status(400).json({ error: fromZodError(result.error).toString() });
         return;
@@ -131,7 +146,10 @@ export function organizationRoutes(app: Express) {
       const userOrganization = await storage.addUserToOrganization(result.data);
       res.json(userOrganization);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to add user to organization";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to add user to organization";
       res.status(500).json({ error: message });
     }
   });
@@ -141,11 +159,14 @@ export function organizationRoutes(app: Express) {
     try {
       const orgId = parseInt(req.params.id);
       const userId = parseInt(req.params.userId);
-      
+
       await storage.removeUserFromOrganization(userId, orgId);
       res.json({ success: true });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to remove user from organization";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to remove user from organization";
       res.status(500).json({ error: message });
     }
   });
@@ -156,16 +177,21 @@ export function organizationRoutes(app: Express) {
       const orgId = parseInt(req.params.id);
       const userId = parseInt(req.params.userId);
       const { role } = req.body;
-      
-      if (!role || typeof role !== 'string') {
+
+      if (!role || typeof role !== "string") {
         res.status(400).json({ error: "Role is required" });
         return;
       }
 
-      const userOrganization = await storage.updateUserOrganizationRole(userId, orgId, role);
+      const userOrganization = await storage.updateUserOrganizationRole(
+        userId,
+        orgId,
+        role
+      );
       res.json(userOrganization);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to update user role";
+      const message =
+        error instanceof Error ? error.message : "Failed to update user role";
       res.status(500).json({ error: message });
     }
   });

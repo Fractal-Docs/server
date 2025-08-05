@@ -5,6 +5,7 @@ import {
   timestamp,
   jsonb,
   primaryKey,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -34,8 +35,9 @@ export const githubRepos = pgTable("github_repos", {
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
   description: text("description"),
+  isPersonal: boolean("is_personal").notNull().default(true),
+  slug: text("slug").notNull().unique(),
   accessToken: text("access_token").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -52,7 +54,7 @@ export const userOrganizations = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("member"), // owner, admin, member
-    joinedAt: timestamp("joined_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.organizationId] })]
 );
@@ -60,9 +62,7 @@ export const userOrganizations = pgTable(
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   userSub: text("user_sub").notNull().unique(),
-  email: text("email"),
-  name: text("name"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  themePreferences: jsonb("theme_preferences"),
 });
 
 // New tables for repository analysis
@@ -122,6 +122,7 @@ export const insertOrganizationSchema = createInsertSchema(organizations).pick({
   slug: true,
   description: true,
   accessToken: true,
+  isPersonal: true,
 });
 
 export const insertUserOrganizationSchema = createInsertSchema(
@@ -141,11 +142,20 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   fileFilterRegex: true,
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  userSub: true,
-  email: true,
-  name: true,
+export const themePreferencesSchema = z.object({
+  accentColor: z.string().optional(),
+  grayColor: z.string().optional(),
+  mode: z.enum(["light", "dark", "system"]).optional(),
 });
+
+export const insertUserSchema = createInsertSchema(users)
+  .pick({
+    userSub: true,
+    themePreferences: true,
+  })
+  .extend({
+    themePreferences: themePreferencesSchema.optional(),
+  });
 
 // New schemas for repository analysis
 export const insertRepoFileSchema = createInsertSchema(repoFiles)
@@ -250,3 +260,4 @@ export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
 export type RepoDoc = typeof repoDocs.$inferSelect;
 export type InsertRelease = z.infer<typeof insertReleaseSchema>;
 export type Release = typeof releases.$inferSelect;
+export type ThemePreferences = z.infer<typeof themePreferencesSchema>;
