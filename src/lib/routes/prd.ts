@@ -6,17 +6,17 @@ export function prdRoutes(app: Express) {
   // PRD routes
   app.get("/api/prds", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string;
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub as string);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
-      const prds = await storage.getPrds(user.repos || []);
+      const prds = await storage.getPrds(organization.id);
       res.json(prds);
     } catch (error: unknown) {
       const message =
@@ -43,18 +43,18 @@ export function prdRoutes(app: Express) {
 
   app.get("/api/prds/search", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string;
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub as string);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
       const query = req.query.q as string;
-      const results = await storage.searchPrds(user.repos, query);
+      const results = await storage.searchPrds(organization.id, query);
       res.json(results);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Search failed";

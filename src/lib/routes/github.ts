@@ -1,7 +1,11 @@
 import type { Express } from "express";
 
 import { storage } from "src/storage";
-import { getRepoBranches, listRepoFileSystem, listUserRepos } from "../github";
+import {
+  getRepoBranches,
+  listRepoFileSystem,
+  listOrganizationRepos,
+} from "../github";
 import { getOrigin, getParams } from "../helpers";
 
 interface GithubTokenResponse {
@@ -70,11 +74,6 @@ export function githubRoutes(app: Express) {
       }
 
       const data = (await tokenRes.json()) as GithubTokenResponse;
-      console.log("GitHub token response:", {
-        error: data.error,
-        error_description: data.error_description,
-        has_token: !!data.access_token,
-      });
 
       if (data.error) {
         throw new Error(data.error_description || data.error);
@@ -84,18 +83,18 @@ export function githubRoutes(app: Express) {
         throw new Error("No access token received from GitHub");
       }
 
-      console.log("Saving GitHub user to database...");
       const user = await storage.getUser(userSub as string);
       if (user) {
+        // TODO: update the organization with the access token
         await storage.updateUser({
-          accessToken: data.access_token,
+          // accessToken: data.access_token,
           userSub: userSub as string,
         });
       } else {
+        // TODO: the organization with the access token
         await storage.createUser({
-          accessToken: data.access_token,
+          // accessToken: data.access_token,
           userSub: userSub as string,
-          repos: [],
         });
       }
       console.log("GitHub user saved successfully");
@@ -112,22 +111,25 @@ export function githubRoutes(app: Express) {
 
   // Gets repos for Ouser token
   app.get("/api/github/available-repos", async (req, res) => {
-    const userSub = req.headers["user-sub"] as string;
     try {
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub as string);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
 
-      const availableRepos = await listUserRepos(user.accessToken);
+      const availableRepos = await listOrganizationRepos(
+        organization.accessToken,
+        organization.name
+      );
 
       // Filter out already imported repos
-      const existingRepos = await storage.getRepos(user.repos);
+      const existingRepos = await storage.getRepos(organization.id);
       const existingRepoIds = new Set(existingRepos.map((r) => r.repoId));
 
       const filteredRepos = availableRepos.filter(
@@ -146,14 +148,18 @@ export function githubRoutes(app: Express) {
 
   // Add new route for GitHub user status
   app.get("/api/github/auth", async (req, res) => {
-    const userSub = req.headers["user-sub"] as string;
     try {
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub as string);
-      res.json(user || null);
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+      res.json(organization || null);
     } catch (error: unknown) {
       const message =
         error instanceof Error
@@ -164,15 +170,15 @@ export function githubRoutes(app: Express) {
   });
 
   app.post("/api/github/import-repos", async (req, res) => {
-    const userSub = req.headers["user-sub"] as string;
     try {
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub as string);
-      if (!user) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
 
@@ -182,21 +188,18 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const existingRepos = new Set(
-        await storage.getRepos(repositories.map((repo) => repo.repoId))
-      );
+      const existingRepos = await storage.getRepos(organization.id);
+      const existingRepoIds = new Set(existingRepos.map((r) => r.repoId));
+
       const filteredRepos = repositories.filter(
-        (repo) => !existingRepos.has(repo.repoId)
+        (repo) => !existingRepoIds.has(repo.repoId)
       );
 
       const createdRepos = await Promise.all(
-        filteredRepos.map((repo) => storage.createRepo(repo))
+        filteredRepos.map((repo) =>
+          storage.createRepo({ ...repo, organizationId: organization.id })
+        )
       );
-
-      await storage.updateUser({
-        userSub,
-        repos: [...(user.repos || []), ...createdRepos.map((r) => r.repoId)],
-      });
 
       res.json(createdRepos);
     } catch (error: unknown) {
@@ -210,15 +213,15 @@ export function githubRoutes(app: Express) {
 
   app.get("/api/github/repos/:id/files", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string;
       const { id, branch } = getParams(req, res);
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub as string);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
 
@@ -231,7 +234,7 @@ export function githubRoutes(app: Express) {
 
       // Utilize the listRepoFileSystem function from /github
       const fileSystem = await listRepoFileSystem(
-        user.accessToken,
+        organization.accessToken,
         `https://github.com/${repo.fullName}`,
         branch
       );
@@ -247,15 +250,15 @@ export function githubRoutes(app: Express) {
 
   app.get("/api/github/repos/:id/branches", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string;
       const { id } = getParams(req, res);
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
+      const orgSlug = req.headers["org-slug"] as string;
+      if (!orgSlug) {
+        res.status(401).json({ error: "Organization not provided" });
         return;
       }
-      const user = await storage.getUser(userSub as string);
-      if (!user || !user.accessToken) {
-        res.status(401).json({ error: "GitHub not authenticated" });
+      const organization = await storage.getOrganizationBySlug(orgSlug);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
 
@@ -267,7 +270,7 @@ export function githubRoutes(app: Express) {
       }
 
       const branches = await getRepoBranches(
-        user.accessToken,
+        organization.accessToken,
         `https://github.com/${repo.fullName}`
       );
       res.json(branches);

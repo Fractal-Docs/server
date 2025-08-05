@@ -5,6 +5,7 @@ import {
   timestamp,
   jsonb,
   primaryKey,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -24,15 +25,42 @@ export const githubRepos = pgTable("github_repos", {
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
   repoId: text("repo_id").notNull(),
+  organizationId: serial("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
   fileFilterRegex: text("file_filter_regex"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isPersonal: boolean("is_personal").notNull().default(true),
+  slug: text("slug").notNull().unique(),
+  accessToken: text("access_token").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const userOrganizations = pgTable(
+  "user_organizations",
+  {
+    userId: serial("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: serial("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"), // owner, admin, member
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.organizationId] })]
+);
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  userSub: text("user_sub").notNull(),
-  accessToken: text("access_token"),
-  repos: text("repos").array().default([]).notNull(),
+  userSub: text("user_sub").notNull().unique(),
   themePreferences: jsonb("theme_preferences"),
 });
 
@@ -88,11 +116,28 @@ export const insertPrdSchema = createInsertSchema(prds)
     repoId: z.string().min(1, "Please select a GitHub repository"),
   });
 
+export const insertOrganizationSchema = createInsertSchema(organizations).pick({
+  name: true,
+  slug: true,
+  description: true,
+  accessToken: true,
+  isPersonal: true,
+});
+
+export const insertUserOrganizationSchema = createInsertSchema(
+  userOrganizations
+).pick({
+  userId: true,
+  organizationId: true,
+  role: true,
+});
+
 export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   name: true,
   fullName: true,
   owner: true,
   repoId: true,
+  organizationId: true,
   fileFilterRegex: true,
 });
 
@@ -104,9 +149,7 @@ export const themePreferencesSchema = z.object({
 
 export const insertUserSchema = createInsertSchema(users)
   .pick({
-    accessToken: true,
     userSub: true,
-    repos: true,
     themePreferences: true,
   })
   .extend({
@@ -192,6 +235,14 @@ export const insertReleaseSchema = createInsertSchema(releases)
     repoId: z.string().min(1, "Repository is required"),
     branch: z.string().min(1, "Branch is required"),
   });
+
+// Organization types
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type Organization = typeof organizations.$inferSelect;
+export type InsertUserOrganization = z.infer<
+  typeof insertUserOrganizationSchema
+>;
+export type UserOrganization = typeof userOrganizations.$inferSelect;
 
 // Existing types
 export type InsertPrd = z.infer<typeof insertPrdSchema>;
