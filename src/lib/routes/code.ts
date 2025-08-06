@@ -30,7 +30,7 @@ async function getRepoById(id: string, res) {
 }
 
 export function codeRoutes(app: Express) {
-  app.get("/api/organizations/:org_id/repos", async (req, res) => {
+  app.get("/api/organization/:org_id/repos", async (req, res) => {
     try {
       const { org_id } = getParams(req, res, ["org_id"]);
       const organization = await storage.getOrganization(org_id);
@@ -47,7 +47,7 @@ export function codeRoutes(app: Express) {
     }
   });
 
-  app.get("/api/organizations/:org_id/repos/:repo_id", async (req, res) => {
+  app.get("/api/organization/:org_id/repos/:repo_id", async (req, res) => {
     try {
       const { org_id, repo_id, branch } = getParams(req, res, [
         "org_id",
@@ -89,7 +89,7 @@ export function codeRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/organizations/:org_id/repos/:repo_id", async (req, res) => {
+  app.delete("/api/organization/:org_id/repos/:repo_id", async (req, res) => {
     try {
       const { org_id, repo_id } = getParams(req, res, ["org_id", "repo_id"]);
       const organization = await storage.getOrganization(org_id);
@@ -116,7 +116,7 @@ export function codeRoutes(app: Express) {
     }
   });
 
-  app.patch("/api/organizations/:org_id/repos/:repo_id", async (req, res) => {
+  app.patch("/api/organization/:org_id/repos/:repo_id", async (req, res) => {
     try {
       const { org_id, repo_id } = getParams(req, res, ["org_id", "repo_id"]);
       const organization = await storage.getOrganization(org_id);
@@ -150,7 +150,7 @@ export function codeRoutes(app: Express) {
   });
 
   app.get(
-    "/api/organizations/:org_id/repos/:repo_id/embeddings",
+    "/api/organization/:org_id/repos/:repo_id/embeddings",
     async (req, res) => {
       try {
         const { org_id, repo_id, branch } = getParams(req, res, [
@@ -186,7 +186,7 @@ export function codeRoutes(app: Express) {
 
   // Endpoint to analyze repository files
   app.post(
-    "/api/organizations/:org_id/repos/:repo_id/analyze",
+    "/api/organization/:org_id/repos/:repo_id/analyze",
     async (req, res) => {
       try {
         const { org_id, repo_id, branch } = getParams(req, res, [
@@ -304,7 +304,7 @@ export function codeRoutes(app: Express) {
 
   // Endpoint to generate documentation
   app.post(
-    "/api/organizations/:org_id/repos/:repo_id/generate-docs",
+    "/api/organization/:org_id/repos/:repo_id/generate-docs",
     async (req, res) => {
       try {
         const { org_id, repo_id, branch } = getParams(req, res, [
@@ -448,57 +448,54 @@ export function codeRoutes(app: Express) {
     }
   );
 
-  app.get(
-    "/api/organizations/:org_id/repos/:repo_id/docs",
-    async (req, res) => {
-      try {
-        const { org_id, repo_id, branch } = getParams(req, res, [
-          "org_id",
-          "repo_id",
-          "branch",
-        ]);
-        const organization = await storage.getOrganization(org_id);
-        if (!organization) {
-          res.status(404).json({ error: "Organization not found" });
-          return;
-        }
-        const repo = await getRepoById(repo_id, res);
-        if (!repo) {
-          res.status(404).json({ error: "Repo not found" });
-          return;
-        } else if (repo.organizationId !== organization.id) {
-          res.status(403).json({ error: "Repo not part of organization" });
-          return;
-        }
-        const docs = await storage.getRepoDocs(repo_id, branch);
-
-        // Sort by updatedAt to get the most recent doc
-        const sortedDocs = docs.sort(
-          (a, b) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
-
-        if (!sortedDocs.length) {
-          res.status(404).json({
-            error: "No documentation found for this repository",
-          });
-          return;
-        }
-
-        res.json(sortedDocs);
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to fetch repository documentation";
-        res.status(500).json({ error: message });
+  app.get("/api/organization/:org_id/repos/:repo_id/docs", async (req, res) => {
+    try {
+      const { org_id, repo_id, branch } = getParams(req, res, [
+        "org_id",
+        "repo_id",
+        "branch",
+      ]);
+      const organization = await storage.getOrganization(org_id);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
       }
+      const repo = await getRepoById(repo_id, res);
+      if (!repo) {
+        res.status(404).json({ error: "Repo not found" });
+        return;
+      } else if (repo.organizationId !== organization.id) {
+        res.status(403).json({ error: "Repo not part of organization" });
+        return;
+      }
+      const docs = await storage.getRepoDocs(repo_id, branch);
+
+      // Sort by updatedAt to get the most recent doc
+      const sortedDocs = docs.sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+
+      if (!sortedDocs.length) {
+        res.status(404).json({
+          error: "No documentation found for this repository",
+        });
+        return;
+      }
+
+      res.json(sortedDocs);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch repository documentation";
+      res.status(500).json({ error: message });
     }
-  );
+  });
 
   // Endpoint to generate Call Graph and Control Flow Graph (CFG)
   app.post(
-    "/api/organizations/:org_id/repos/:repo_id/generate-cfg",
+    "/api/organization/:org_id/repos/:repo_id/generate-cfg",
     async (req, res) => {
       try {
         const { org_id, repo_id, branch } = getParams(req, res, [
@@ -602,7 +599,7 @@ export function codeRoutes(app: Express) {
   );
 
   // Endpoint to retrieve CFG data
-  app.get("/api/organizations/:org_id/repos/:repo_id/cfg", async (req, res) => {
+  app.get("/api/organization/:org_id/repos/:repo_id/cfg", async (req, res) => {
     try {
       const { org_id, repo_id, branch } = getParams(req, res, [
         "org_id",
@@ -649,7 +646,7 @@ export function codeRoutes(app: Express) {
   });
 
   app.post(
-    "/api/organizations/:org_id/repos/:repo_id/compare",
+    "/api/organization/:org_id/repos/:repo_id/compare",
     async (req, res) => {
       try {
         const { org_id, repo_id, branch } = getParams(req, res, [
