@@ -211,9 +211,9 @@ export function githubRoutes(app: Express) {
     }
   });
 
-  app.get("/api/github/repos/:id/files", async (req, res) => {
+  app.get("/api/github/repos/:repo_id/files", async (req, res) => {
     try {
-      const { id, branch } = getParams(req, res);
+      const { repo_id, branch } = getParams(req, res, ["repo_id", "branch"]);
       const orgSlug = req.headers["org-slug"] as string;
       if (!orgSlug) {
         res.status(401).json({ error: "Organization not provided" });
@@ -225,7 +225,7 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const repo = await storage.getRepo(id);
+      const repo = await storage.getRepo(repo_id);
 
       if (!repo) {
         res.status(404).json({ error: "Repository not found" });
@@ -248,9 +248,9 @@ export function githubRoutes(app: Express) {
     }
   });
 
-  app.get("/api/github/repos/:id/branches", async (req, res) => {
+  app.get("/api/github/repos/:repo_id/branches", async (req, res) => {
     try {
-      const { id } = getParams(req, res);
+      const { repo_id } = getParams(req, res, ["repo_id"]);
       const orgSlug = req.headers["org-slug"] as string;
       if (!orgSlug) {
         res.status(401).json({ error: "Organization not provided" });
@@ -262,7 +262,7 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const repo = await storage.getRepo(id);
+      const repo = await storage.getRepo(repo_id);
 
       if (!repo) {
         res.status(404).json({ error: "Repository not found" });
