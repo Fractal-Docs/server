@@ -1,7 +1,7 @@
-type Params = "org_id" | "repo_id" | "branch";
+type Params = "org_id" | "repo_id" | "prd_id" | "branch";
 
 export function getParams(req, res, fieldsToReturn: Params[]) {
-  const { org_id, repo_id } = req.params;
+  const { org_id, repo_id, prd_id } = req.params;
   // get branch from search params
   const branch = req.query.branch;
   if (fieldsToReturn.includes("repo_id") && isNaN(repo_id)) {
@@ -12,8 +12,12 @@ export function getParams(req, res, fieldsToReturn: Params[]) {
     res.status(404).json({ error: "Invalid organization ID" });
     return {};
   }
+  if (fieldsToReturn.includes("prd_id") && isNaN(prd_id)) {
+    res.status(404).json({ error: "Invalid PRD ID" });
+    return {};
+  }
 
-  return { org_id, repo_id, branch: branch || "main" };
+  return { org_id, repo_id, prd_id, branch: branch || "main" };
 }
 
 export function getOrigin(req, res) {

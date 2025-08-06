@@ -1,17 +1,14 @@
 import type { Express } from "express";
 import { insertPrdSchema } from "src/shared/schema";
 import { storage } from "src/storage";
+import { getParams } from "../helpers";
 
 export function prdRoutes(app: Express) {
   // PRD routes
-  app.get("/api/prds", async (req, res) => {
+  app.get("/api/organization/:org_id/prds", async (req, res) => {
     try {
-      const orgSlug = req.headers["org-slug"] as string;
-      if (!orgSlug) {
-        res.status(401).json({ error: "Organization not provided" });
-        return;
-      }
-      const organization = await storage.getOrganizationBySlug(orgSlug);
+      const { org_id } = getParams(req, res, ["org_id"]);
+      const organization = await storage.getOrganization(org_id);
       if (!organization) {
         res.status(404).json({ error: "Organization not found" });
         return;
@@ -25,14 +22,15 @@ export function prdRoutes(app: Express) {
     }
   });
 
-  app.get("/api/prds/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      res.status(400).json({ error: "Invalid PRD ID" });
+  app.get("/api/organization/:org_id/prds/:prd_id", async (req, res) => {
+    const { org_id, prd_id } = getParams(req, res, ["org_id", "prd_id"]);
+    const organization = await storage.getOrganization(org_id);
+    if (!organization) {
+      res.status(404).json({ error: "Organization not found" });
       return;
     }
 
-    const prd = await storage.getPrd(id);
+    const prd = await storage.getPrd(prd_id);
     if (!prd) {
       res.status(404).json({ error: "PRD not found" });
       return;
@@ -41,14 +39,10 @@ export function prdRoutes(app: Express) {
     res.json(prd);
   });
 
-  app.get("/api/prds/search", async (req, res) => {
+  app.get("/api/organization/:org_id/prds/search", async (req, res) => {
     try {
-      const orgSlug = req.headers["org-slug"] as string;
-      if (!orgSlug) {
-        res.status(401).json({ error: "Organization not provided" });
-        return;
-      }
-      const organization = await storage.getOrganizationBySlug(orgSlug);
+      const { org_id } = getParams(req, res, ["org_id"]);
+      const organization = await storage.getOrganization(org_id);
       if (!organization) {
         res.status(404).json({ error: "Organization not found" });
         return;
@@ -62,8 +56,14 @@ export function prdRoutes(app: Express) {
     }
   });
 
-  app.post("/api/prds", async (req, res) => {
+  app.post("/api/organization/:org_id/prds", async (req, res) => {
     try {
+      const { org_id } = getParams(req, res, ["org_id"]);
+      const organization = await storage.getOrganization(org_id);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
       const result = insertPrdSchema.safeParse(req.body);
       if (!result.success) {
         res.status(400).json({
@@ -82,15 +82,16 @@ export function prdRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/prds/:id", async (req, res) => {
+  app.delete("/api/organization/:org_id/prds/:prd_id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        res.status(400).json({ error: "Invalid PRD ID" });
+      const { org_id, prd_id } = getParams(req, res, ["org_id", "prd_id"]);
+      const organization = await storage.getOrganization(org_id);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
 
-      await storage.deletePrd(id);
+      await storage.deletePrd(prd_id);
       res.status(204).end();
     } catch (error: unknown) {
       const message =
@@ -99,12 +100,12 @@ export function prdRoutes(app: Express) {
     }
   });
 
-  // Add PATCH endpoint for updating PRDs
-  app.patch("/api/prds/:id", async (req, res) => {
+  app.patch("/api/organization/:org_id/prds/:prd_id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        res.status(400).json({ error: "Invalid PRD ID" });
+      const { org_id, prd_id } = getParams(req, res, ["org_id", "prd_id"]);
+      const organization = await storage.getOrganization(org_id);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
         return;
       }
 
@@ -117,7 +118,7 @@ export function prdRoutes(app: Express) {
         return;
       }
 
-      const prd = await storage.updatePrd(id, result.data);
+      const prd = await storage.updatePrd(prd_id, result.data);
       res.json(prd);
     } catch (error: unknown) {
       const message =
