@@ -495,6 +495,7 @@ export class DatabaseStorage implements IStorage {
           accessToken: organizations.accessToken,
           isPersonal: organizations.isPersonal,
           profileImageUrl: organizations.profileImageUrl,
+          installationId: organizations.installationId,
         })
         .from(organizations)
         .innerJoin(

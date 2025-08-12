@@ -6,6 +6,7 @@ import {
   jsonb,
   primaryKey,
   boolean,
+  integer,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -39,6 +40,7 @@ export const organizations = pgTable("organizations", {
   isPersonal: boolean("is_personal").notNull().default(true),
   slug: text("slug").notNull().unique(),
   profileImageUrl: text("profile_image_url"),
+  installationId: integer("installation_id").notNull(),
   accessToken: text("access_token").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -125,6 +127,7 @@ export const insertOrganizationSchema = createInsertSchema(organizations).pick({
   description: true,
   accessToken: true,
   profileImageUrl: true,
+  installationId: true,
   isPersonal: true,
 });
 

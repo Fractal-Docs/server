@@ -16,7 +16,7 @@ interface GithubTokenResponse {
 }
 
 export function githubRoutes(app: Express) {
-  // GitHub Ouser routes
+  // GitHub OAuth routes
   app.get("/api/github/login", (req, res) => {
     const { origin, normalizedOrigin } = getOrigin(req, res);
     if (!origin || !normalizedOrigin) {
@@ -28,8 +28,6 @@ export function githubRoutes(app: Express) {
     const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo`;
     res.json({ url: githubAuthUrl });
   });
-
-  // API endpoint for completing OAuth
   app.get("/api/github/complete-oauth", async (req, res) => {
     const { code, userSub } = req.query;
     const orgSlug = req.headers["org-slug"] as string;
@@ -105,7 +103,34 @@ export function githubRoutes(app: Express) {
     }
   });
 
-  // Gets repos for Ouser token
+  // Github App routes
+  app.get("/api/github/app/install/start", (_, res) => {
+    const githubAppSlug = process.env.GITHUB_APP_SLUG;
+
+    res.json({
+      url: `https://github.com/apps/${githubAppSlug}/installations/new`,
+    });
+  });
+
+  app.get("/api/github/app/install/callback", async (req, res) => {
+    const { installation_id } = req.query;
+    const orgSlug = req.headers["org-slug"] as string;
+    const organization = await storage.getOrganizationBySlug(orgSlug);
+    if (!organization) {
+      res.status(404).json({ error: "Organization not found" });
+      return;
+    }
+
+    console.log("Installation ID:", installation_id);
+
+    await storage.updateOrganization(orgSlug, {
+      installationId: parseInt(installation_id as string),
+    });
+
+    res.json({ success: true });
+  });
+
+  // Gets repos
   app.get("/api/github/available-repos", async (req, res) => {
     try {
       const orgSlug = req.headers["org-slug"] as string;
@@ -119,22 +144,14 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      if (!organization.accessToken) {
+      if (!organization.accessToken || !organization.installationId) {
         res.status(401).json({ error: "Organization not authenticated" });
-        return;
-      }
-
-      if (!organization.isPersonal) {
-        res.status(400).json({ error: "Organization name not provided" });
         return;
       }
 
       const availableRepos = organization.isPersonal
         ? await listUserRepos(organization.accessToken)
-        : await listOrganizationRepos(
-            organization.accessToken,
-            organization.name
-          );
+        : await listOrganizationRepos(organization.installationId);
 
       // Filter out already imported repos
       const existingRepos = await storage.getRepos(organization.id);

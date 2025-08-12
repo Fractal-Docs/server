@@ -1,9 +1,22 @@
 import { Octokit } from "@octokit/rest";
+import { App } from "@octokit/app";
 
 interface FileSystemItem {
   path: string;
   type: "file" | "folder";
   children?: FileSystemItem[];
+}
+
+const appId = process.env.GITHUB_APP_ID;
+const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
+
+async function getGithubAppInstallation(installationId: number) {
+  if (!appId || !privateKey) {
+    throw new Error("Missing GitHub App ID or Private Key");
+  }
+  const appOctokit = new App({ appId, privateKey });
+
+  return await appOctokit.getInstallationOctokit(installationId);
 }
 
 export async function getRepoContent(
@@ -159,25 +172,18 @@ export async function listUserRepos(accessToken: string) {
   }
 }
 
-export async function listOrganizationRepos(accessToken: string, org: string) {
-  const octokit = new Octokit({ auth: accessToken });
+export async function listOrganizationRepos(installationId: number) {
+  const installationOctokit = await getGithubAppInstallation(installationId);
+  const { data } = await installationOctokit.request(
+    "GET /installation/repositories"
+  );
 
-  try {
-    const { data: repos } = await octokit.repos.listForOrg({
-      org,
-    });
-
-    return repos.map((repo) => ({
-      name: repo.name,
-      fullName: repo.full_name,
-      owner: repo.owner.login,
-      repoId: repo.id.toString(),
-    }));
-  } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error occurred";
-    throw new Error(`Failed to list repositories: ${errorMessage}`);
-  }
+  return data.repositories.map((repo) => ({
+    name: repo.name,
+    fullName: repo.full_name,
+    owner: repo.owner.login,
+    repoId: repo.id.toString(),
+  }));
 }
 
 export async function listRepoFileSystem(
