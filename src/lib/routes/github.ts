@@ -5,6 +5,7 @@ import {
   getRepoBranches,
   listRepoFileSystem,
   listOrganizationRepos,
+  listUserRepos,
 } from "../github";
 import { getOrigin, getParams } from "../helpers";
 
@@ -31,6 +32,7 @@ export function githubRoutes(app: Express) {
   // API endpoint for completing OAuth
   app.get("/api/github/complete-oauth", async (req, res) => {
     const { code, userSub } = req.query;
+    const orgSlug = req.headers["org-slug"] as string;
 
     if (!code || typeof code !== "string") {
       res.status(400).json({ error: "No code provided" });
@@ -85,19 +87,11 @@ export function githubRoutes(app: Express) {
 
       const user = await storage.getUser(userSub as string);
       if (user) {
-        // TODO: update the organization with the access token
-        await storage.updateUser({
-          // accessToken: data.access_token,
-          userSub: userSub as string,
+        await storage.updateOrganization(orgSlug, {
+          accessToken: data.access_token,
         });
       } else {
-        // TODO: the organization with the access token
-        await storage.createUser({
-          // accessToken: data.access_token,
-          userSub: userSub as string,
-          name: "",
-          email: "",
-        });
+        throw new Error("Organization not found");
       }
       console.log("GitHub user saved successfully");
 
@@ -125,10 +119,22 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const availableRepos = await listOrganizationRepos(
-        organization.accessToken,
-        organization.name
-      );
+      if (!organization.accessToken) {
+        res.status(401).json({ error: "Organization not authenticated" });
+        return;
+      }
+
+      if (!organization.isPersonal) {
+        res.status(400).json({ error: "Organization name not provided" });
+        return;
+      }
+
+      const availableRepos = organization.isPersonal
+        ? await listUserRepos(organization.accessToken)
+        : await listOrganizationRepos(
+            organization.accessToken,
+            organization.name
+          );
 
       // Filter out already imported repos
       const existingRepos = await storage.getRepos(organization.id);
@@ -161,7 +167,7 @@ export function githubRoutes(app: Express) {
         res.status(404).json({ error: "Organization not found" });
         return;
       }
-      res.json(organization || null);
+      res.json(!!organization.accessToken || null);
     } catch (error: unknown) {
       const message =
         error instanceof Error

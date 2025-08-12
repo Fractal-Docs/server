@@ -93,7 +93,7 @@ export interface IStorage {
   getOrganizationBySlug(slug: string): Promise<Organization | undefined>;
   createOrganization(org: InsertOrganization): Promise<Organization>;
   updateOrganization(
-    id: number,
+    orgSlug: string,
     org: Partial<InsertOrganization>
   ): Promise<Organization>;
   deleteOrganization(id: number): Promise<void>;
@@ -536,14 +536,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOrganization(
-    id: number,
+    orgSlug: string,
     org: Partial<InsertOrganization>
   ): Promise<Organization> {
     return this.handleDatabaseOperation(async () => {
       const [organization] = await db
         .update(organizations)
         .set({ ...org, updatedAt: new Date() })
-        .where(eq(organizations.id, id))
+        .where(eq(organizations.slug, orgSlug))
         .returning();
       if (!organization) throw new Error("Organization not found");
       return organization;

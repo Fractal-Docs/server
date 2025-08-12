@@ -5,6 +5,7 @@ import {
   insertUserOrganizationSchema,
 } from "../../shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { getParams } from "../helpers";
 
 export function organizationRoutes(app: Express) {
   // Get user's organizations
@@ -93,9 +94,9 @@ export function organizationRoutes(app: Express) {
   });
 
   // Update organization
-  app.put("/api/organization/:id", async (req, res) => {
+  app.put("/api/organization/:org_id", async (req, res) => {
     try {
-      const orgId = parseInt(req.params.id);
+      const { org_id } = getParams(req, res, ["org_id"]);
       const result = insertOrganizationSchema.partial().safeParse(req.body);
 
       if (!result.success) {
@@ -103,7 +104,10 @@ export function organizationRoutes(app: Express) {
         return;
       }
 
-      const organization = await storage.updateOrganization(orgId, result.data);
+      const organization = await storage.updateOrganization(
+        org_id,
+        result.data
+      );
       res.json(organization);
     } catch (error: unknown) {
       const message =

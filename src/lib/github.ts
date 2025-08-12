@@ -135,6 +135,30 @@ export async function getRepoBranches(
   }
 }
 
+export async function listUserRepos(accessToken: string) {
+  const octokit = new Octokit({ auth: accessToken });
+
+  try {
+    const { data: repos } = await octokit.repos.listForAuthenticatedUser({
+      visibility: "all",
+      sort: "updated",
+      per_page: 100,
+      affiliation: "owner",
+    });
+
+    return repos.map((repo) => ({
+      name: repo.name,
+      fullName: repo.full_name,
+      owner: repo.owner.login,
+      repoId: repo.id.toString(),
+    }));
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    throw new Error(`Failed to list repositories: ${errorMessage}`);
+  }
+}
+
 export async function listOrganizationRepos(accessToken: string, org: string) {
   const octokit = new Octokit({ auth: accessToken });
 
