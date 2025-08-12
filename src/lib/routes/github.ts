@@ -89,9 +89,9 @@ export function githubRoutes(app: Express) {
           accessToken: data.access_token,
         });
       } else {
-        throw new Error("Organization not found");
+        throw new Error("User not found");
       }
-      console.log("GitHub user saved successfully");
+      console.log("GitHub organization saved successfully");
 
       res.json({ success: true });
     } catch (error: unknown) {
