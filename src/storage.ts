@@ -27,6 +27,12 @@ import {
 import { db } from "./db";
 import { eq, like, inArray, and } from "drizzle-orm";
 
+type Role = "owner" | "admin" | "member";
+
+interface OrganizationMember extends Omit<User, "themePreferences"> {
+  role: Role;
+}
+
 export interface IStorage {
   // PRD operations
   getPrds(organizationId: number): Promise<Prd[]>;
@@ -91,6 +97,7 @@ export interface IStorage {
     org: Partial<InsertOrganization>
   ): Promise<Organization>;
   deleteOrganization(id: number): Promise<void>;
+  getUsersInOrganization(id: number): Promise<OrganizationMember[]>;
   addUserToOrganization(
     userOrg: InsertUserOrganization
   ): Promise<UserOrganization>;
@@ -291,7 +298,9 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async updateUser(user: InsertUser): Promise<User> {
+  async updateUser(
+    user: Partial<InsertUser> & { userSub: string }
+  ): Promise<User> {
     return this.handleDatabaseOperation(async () => {
       const [updatedUser] = await db
         .update(users)
@@ -485,6 +494,7 @@ export class DatabaseStorage implements IStorage {
           updatedAt: organizations.updatedAt,
           accessToken: organizations.accessToken,
           isPersonal: organizations.isPersonal,
+          profileImageUrl: organizations.profileImageUrl,
         })
         .from(organizations)
         .innerJoin(
@@ -547,6 +557,29 @@ export class DatabaseStorage implements IStorage {
         .where(eq(organizations.id, id))
         .returning();
       if (!org) throw new Error("Organization not found");
+    });
+  }
+
+  async getUsersInOrganization(id: number): Promise<OrganizationMember[]> {
+    return this.handleDatabaseOperation(async () => {
+      const members = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          role: userOrganizations.role,
+          userSub: users.userSub,
+        })
+        .from(users)
+        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .where(eq(userOrganizations.organizationId, id));
+      return members.map((member) => ({
+        id: member.id,
+        email: member.email,
+        name: member.name,
+        role: member.role as Role,
+        userSub: member.userSub,
+      }));
     });
   }
 

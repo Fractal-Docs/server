@@ -95,6 +95,8 @@ export function githubRoutes(app: Express) {
         await storage.createUser({
           // accessToken: data.access_token,
           userSub: userSub as string,
+          name: "",
+          email: "",
         });
       }
       console.log("GitHub user saved successfully");
