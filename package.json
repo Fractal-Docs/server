@@ -21,6 +21,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.3",
     "@neondatabase/serverless": "^1.0.0",
+    "@octokit/app": "^16.0.1",
     "@octokit/rest": "^21.1.1",
     "@pinecone-database/pinecone": "^5.1.1",
     "@types/cors": "^2.8.17",

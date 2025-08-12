@@ -5,6 +5,7 @@ import {
   insertUserOrganizationSchema,
 } from "../../shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { getParams } from "../helpers";
 
 export function organizationRoutes(app: Express) {
   // Get user's organizations
@@ -34,7 +35,7 @@ export function organizationRoutes(app: Express) {
   });
 
   // Get specific organization
-  app.get("/api/organizations/:id", async (req, res) => {
+  app.get("/api/organization/:id", async (req, res) => {
     try {
       const orgId = parseInt(req.params.id);
       const organization = await storage.getOrganization(orgId);
@@ -93,9 +94,9 @@ export function organizationRoutes(app: Express) {
   });
 
   // Update organization
-  app.put("/api/organizations/:id", async (req, res) => {
+  app.put("/api/organization/:org_id", async (req, res) => {
     try {
-      const orgId = parseInt(req.params.id);
+      const { org_id } = getParams(req, res, ["org_id"]);
       const result = insertOrganizationSchema.partial().safeParse(req.body);
 
       if (!result.success) {
@@ -103,7 +104,10 @@ export function organizationRoutes(app: Express) {
         return;
       }
 
-      const organization = await storage.updateOrganization(orgId, result.data);
+      const organization = await storage.updateOrganization(
+        org_id,
+        result.data
+      );
       res.json(organization);
     } catch (error: unknown) {
       const message =
@@ -115,7 +119,7 @@ export function organizationRoutes(app: Express) {
   });
 
   // Delete organization
-  app.delete("/api/organizations/:id", async (req, res) => {
+  app.delete("/api/organization/:id", async (req, res) => {
     try {
       const orgId = parseInt(req.params.id);
       await storage.deleteOrganization(orgId);
@@ -129,8 +133,23 @@ export function organizationRoutes(app: Express) {
     }
   });
 
+  // Get all users in organization
+  app.get("/api/organization/:id/users", async (req, res) => {
+    try {
+      const orgId = parseInt(req.params.id);
+      const users = await storage.getUsersInOrganization(orgId);
+      res.json(users);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to get users in organization";
+      res.status(500).json({ error: message });
+    }
+  });
+
   // Add user to organization
-  app.post("/api/organizations/:id/users", async (req, res) => {
+  app.post("/api/organization/:id/users", async (req, res) => {
     try {
       const orgId = parseInt(req.params.id);
       const result = insertUserOrganizationSchema.safeParse({
@@ -155,7 +174,7 @@ export function organizationRoutes(app: Express) {
   });
 
   // Remove user from organization
-  app.delete("/api/organizations/:id/users/:userId", async (req, res) => {
+  app.delete("/api/organization/:id/users/:userId", async (req, res) => {
     try {
       const orgId = parseInt(req.params.id);
       const userId = parseInt(req.params.userId);
@@ -172,7 +191,7 @@ export function organizationRoutes(app: Express) {
   });
 
   // Update user role in organization
-  app.put("/api/organizations/:id/users/:userId/role", async (req, res) => {
+  app.put("/api/organization/:id/users/:userId/role", async (req, res) => {
     try {
       const orgId = parseInt(req.params.id);
       const userId = parseInt(req.params.userId);

@@ -6,6 +6,7 @@ import {
   jsonb,
   primaryKey,
   boolean,
+  integer,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -38,6 +39,8 @@ export const organizations = pgTable("organizations", {
   description: text("description"),
   isPersonal: boolean("is_personal").notNull().default(true),
   slug: text("slug").notNull().unique(),
+  profileImageUrl: text("profile_image_url"),
+  installationId: integer("installation_id"),
   accessToken: text("access_token").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -61,6 +64,8 @@ export const userOrganizations = pgTable(
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   userSub: text("user_sub").notNull().unique(),
+  name: text("name").notNull(),
+  email: text("email"),
   themePreferences: jsonb("theme_preferences"),
 });
 
@@ -121,6 +126,8 @@ export const insertOrganizationSchema = createInsertSchema(organizations).pick({
   slug: true,
   description: true,
   accessToken: true,
+  profileImageUrl: true,
+  installationId: true,
   isPersonal: true,
 });
 
@@ -151,6 +158,8 @@ export const insertUserSchema = createInsertSchema(users)
   .pick({
     userSub: true,
     themePreferences: true,
+    name: true,
+    email: true,
   })
   .extend({
     themePreferences: themePreferencesSchema.optional(),

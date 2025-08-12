@@ -5,6 +5,7 @@ import {
   getRepoBranches,
   listRepoFileSystem,
   listOrganizationRepos,
+  listUserRepos,
 } from "../github";
 import { getOrigin, getParams } from "../helpers";
 
@@ -15,7 +16,7 @@ interface GithubTokenResponse {
 }
 
 export function githubRoutes(app: Express) {
-  // GitHub Ouser routes
+  // GitHub OAuth routes
   app.get("/api/github/login", (req, res) => {
     const { origin, normalizedOrigin } = getOrigin(req, res);
     if (!origin || !normalizedOrigin) {
@@ -27,10 +28,9 @@ export function githubRoutes(app: Express) {
     const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo`;
     res.json({ url: githubAuthUrl });
   });
-
-  // API endpoint for completing OAuth
   app.get("/api/github/complete-oauth", async (req, res) => {
     const { code, userSub } = req.query;
+    const orgSlug = req.headers["org-slug"] as string;
 
     if (!code || typeof code !== "string") {
       res.status(400).json({ error: "No code provided" });
@@ -85,19 +85,13 @@ export function githubRoutes(app: Express) {
 
       const user = await storage.getUser(userSub as string);
       if (user) {
-        // TODO: update the organization with the access token
-        await storage.updateUser({
-          // accessToken: data.access_token,
-          userSub: userSub as string,
+        await storage.updateOrganization(orgSlug, {
+          accessToken: data.access_token,
         });
       } else {
-        // TODO: the organization with the access token
-        await storage.createUser({
-          // accessToken: data.access_token,
-          userSub: userSub as string,
-        });
+        throw new Error("User not found");
       }
-      console.log("GitHub user saved successfully");
+      console.log("GitHub organization saved successfully");
 
       res.json({ success: true });
     } catch (error: unknown) {
@@ -109,7 +103,34 @@ export function githubRoutes(app: Express) {
     }
   });
 
-  // Gets repos for Ouser token
+  // Github App routes
+  app.get("/api/github/app/install/start", (_, res) => {
+    const githubAppSlug = process.env.GITHUB_APP_SLUG;
+
+    res.json({
+      url: `https://github.com/apps/${githubAppSlug}/installations/new`,
+    });
+  });
+
+  app.get("/api/github/app/install/callback", async (req, res) => {
+    const { installation_id } = req.query;
+    const orgSlug = req.headers["org-slug"] as string;
+    const organization = await storage.getOrganizationBySlug(orgSlug);
+    if (!organization) {
+      res.status(404).json({ error: "Organization not found" });
+      return;
+    }
+
+    console.log("Installation ID:", installation_id);
+
+    await storage.updateOrganization(orgSlug, {
+      installationId: parseInt(installation_id as string),
+    });
+
+    res.json({ success: true });
+  });
+
+  // Gets repos
   app.get("/api/github/available-repos", async (req, res) => {
     try {
       const orgSlug = req.headers["org-slug"] as string;
@@ -123,10 +144,17 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const availableRepos = await listOrganizationRepos(
-        organization.accessToken,
-        organization.name
-      );
+      if (
+        (organization.isPersonal && !organization.accessToken) ||
+        !organization.installationId
+      ) {
+        res.status(401).json({ error: "Organization not authenticated" });
+        return;
+      }
+
+      const availableRepos = organization.isPersonal
+        ? await listUserRepos(organization.accessToken)
+        : await listOrganizationRepos(organization.installationId);
 
       // Filter out already imported repos
       const existingRepos = await storage.getRepos(organization.id);
@@ -159,7 +187,7 @@ export function githubRoutes(app: Express) {
         res.status(404).json({ error: "Organization not found" });
         return;
       }
-      res.json(organization || null);
+      res.json(!!organization.accessToken || !!organization.installationId);
     } catch (error: unknown) {
       const message =
         error instanceof Error
@@ -211,9 +239,9 @@ export function githubRoutes(app: Express) {
     }
   });
 
-  app.get("/api/github/repos/:id/files", async (req, res) => {
+  app.get("/api/github/repos/:repo_id/files", async (req, res) => {
     try {
-      const { id, branch } = getParams(req, res);
+      const { repo_id, branch } = getParams(req, res, ["repo_id", "branch"]);
       const orgSlug = req.headers["org-slug"] as string;
       if (!orgSlug) {
         res.status(401).json({ error: "Organization not provided" });
@@ -225,7 +253,7 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const repo = await storage.getRepo(id);
+      const repo = await storage.getRepo(repo_id);
 
       if (!repo) {
         res.status(404).json({ error: "Repository not found" });
@@ -248,9 +276,9 @@ export function githubRoutes(app: Express) {
     }
   });
 
-  app.get("/api/github/repos/:id/branches", async (req, res) => {
+  app.get("/api/github/repos/:repo_id/branches", async (req, res) => {
     try {
-      const { id } = getParams(req, res);
+      const { repo_id } = getParams(req, res, ["repo_id"]);
       const orgSlug = req.headers["org-slug"] as string;
       if (!orgSlug) {
         res.status(401).json({ error: "Organization not provided" });
@@ -262,7 +290,7 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const repo = await storage.getRepo(id);
+      const repo = await storage.getRepo(repo_id);
 
       if (!repo) {
         res.status(404).json({ error: "Repository not found" });
