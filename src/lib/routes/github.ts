@@ -144,7 +144,10 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      if (!organization.accessToken && !organization.installationId) {
+      if (
+        (organization.isPersonal && !organization.accessToken) ||
+        !organization.installationId
+      ) {
         res.status(401).json({ error: "Organization not authenticated" });
         return;
       }
