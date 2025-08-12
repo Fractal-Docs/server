@@ -144,17 +144,16 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      if (
-        (organization.isPersonal && !organization.accessToken) ||
-        !organization.installationId
-      ) {
+      if (!organization.accessToken && !organization.installationId) {
         res.status(401).json({ error: "Organization not authenticated" });
         return;
       }
 
-      const availableRepos = organization.isPersonal
+      const availableRepos = organization.accessToken
         ? await listUserRepos(organization.accessToken)
-        : await listOrganizationRepos(organization.installationId);
+        : organization.installationId
+          ? await listOrganizationRepos(organization.installationId)
+          : [];
 
       // Filter out already imported repos
       const existingRepos = await storage.getRepos(organization.id);

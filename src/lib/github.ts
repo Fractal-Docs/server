@@ -8,7 +8,7 @@ interface FileSystemItem {
 }
 
 const appId = process.env.GITHUB_APP_ID;
-const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
+const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
 async function getGithubAppInstallation(installationId: number) {
   if (!appId || !privateKey) {
