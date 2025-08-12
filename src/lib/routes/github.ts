@@ -184,7 +184,7 @@ export function githubRoutes(app: Express) {
         res.status(404).json({ error: "Organization not found" });
         return;
       }
-      res.json(!!organization.accessToken || null);
+      res.json(!!organization.accessToken || !!organization.installationId);
     } catch (error: unknown) {
       const message =
         error instanceof Error
