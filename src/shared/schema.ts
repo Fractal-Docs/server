@@ -40,7 +40,7 @@ export const organizations = pgTable("organizations", {
   isPersonal: boolean("is_personal").notNull().default(true),
   slug: text("slug").notNull().unique(),
   profileImageUrl: text("profile_image_url"),
-  installationId: integer("installation_id").notNull(),
+  installationId: integer("installation_id"),
   accessToken: text("access_token").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
