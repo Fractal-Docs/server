@@ -49,7 +49,6 @@ export function codeRoutes(app: Express) {
 
   app.get("/api/organization/:org_id/repos/:repo_id", async (req, res) => {
     try {
-      console.log("Fetching repo details...");
       const { org_id, repo_id, branch } = getParams(req, res, [
         "org_id",
         "repo_id",
