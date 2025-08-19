@@ -49,6 +49,7 @@ export function codeRoutes(app: Express) {
 
   app.get("/api/organization/:org_id/repos/:repo_id", async (req, res) => {
     try {
+      console.log("Fetching repo details...");
       const { org_id, repo_id, branch } = getParams(req, res, [
         "org_id",
         "repo_id",
@@ -68,18 +69,15 @@ export function codeRoutes(app: Express) {
         return;
       }
 
-      const ghRepo = await getGithubRepo(
-        organization.accessToken,
-        `https://github.com/${repo.fullName}`
-      );
+      const ghRepo = await getGithubRepo(organization, repo);
       const latestCommitDate = await getLatestCommit(
-        organization.accessToken,
-        `https://github.com/${repo.fullName}`,
+        organization,
+        repo,
         branch
       );
       res.json({
         ...repo,
-        defaultBranch: ghRepo.default_branch,
+        defaultBranch: ghRepo?.default_branch || "",
         latestCommitDate,
       });
     } catch (error: unknown) {
@@ -209,8 +207,8 @@ export function codeRoutes(app: Express) {
         }
 
         const repoContent = await getRepoContent(
-          organization.accessToken,
-          `https://github.com/${repo.fullName}`,
+          organization,
+          repo,
           repo.fileFilterRegex || ".*",
           branch || "main"
         );
@@ -672,8 +670,8 @@ export function codeRoutes(app: Express) {
         const repoDoc = await storage.getRepoDoc(repo_id, branch, "change");
 
         const response = await compareBranchToDefaultBranch(
-          organization.accessToken,
-          `https://github.com/${repo.fullName}`,
+          organization,
+          repo,
           branch
         );
 
