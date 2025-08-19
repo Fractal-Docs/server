@@ -260,11 +260,7 @@ export function githubRoutes(app: Express) {
       }
 
       // Utilize the listRepoFileSystem function from /github
-      const fileSystem = await listRepoFileSystem(
-        organization.accessToken,
-        `https://github.com/${repo.fullName}`,
-        branch
-      );
+      const fileSystem = await listRepoFileSystem(organization, repo, branch);
       res.status(200).json(fileSystem);
     } catch (error: unknown) {
       const message =
@@ -296,10 +292,7 @@ export function githubRoutes(app: Express) {
         return;
       }
 
-      const branches = await getRepoBranches(
-        organization.accessToken,
-        `https://github.com/${repo.fullName}`
-      );
+      const branches = await getRepoBranches(organization, repo);
       res.json(branches);
     } catch (error: unknown) {
       const message =

@@ -1,5 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { App } from "@octokit/app";
+import { GithubRepo, Organization } from "src/shared/schema";
 
 interface FileSystemItem {
   path: string;
@@ -20,19 +21,13 @@ async function getGithubAppInstallation(installationId: number) {
 }
 
 export async function getRepoContent(
-  accessToken: string,
-  repoUrl: string,
+  organization: Organization,
+  repository: GithubRepo,
   fileRegexString: string,
   branch: string = "main"
 ): Promise<{ path: string; content: string }[]> {
-  const octokit = new Octokit({ auth: accessToken });
   const fileRegex = new RegExp(fileRegexString);
-
-  // Parse repo URL to get owner and repo name
-  const [owner, repo] = repoUrl
-    .replace("https://github.com/", "")
-    .replace(".git", "")
-    .split("/");
+  const [owner, repo] = repository.fullName.split("/");
 
   // Helper function to check if file path matches regex
   const isMatchingFile = (path: string): boolean => {
@@ -43,16 +38,23 @@ export async function getRepoContent(
     );
   };
 
+  const octokit = organization.isPersonal
+    ? new Octokit({ auth: organization.accessToken })
+    : organization.installationId
+      ? await getGithubAppInstallation(organization.installationId)
+      : null;
   // Recursive function to get content
   async function getContentRecursive(
     path: string = ""
   ): Promise<{ path: string; content: string }[]> {
     try {
-      const response = await octokit.repos.getContent({
-        owner,
-        repo,
-        path,
-        ref: branch,
+      if (!octokit) {
+        throw new Error("No Github access found");
+      }
+
+      const response = await octokit.request({
+        method: "GET",
+        url: `/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
       });
 
       if (!Array.isArray(response.data)) {
@@ -74,11 +76,9 @@ export async function getRepoContent(
           return getContentRecursive(item.path);
         } else if (item.type === "file" && isMatchingFile(item.path)) {
           // Fetch file content if it matches the regex
-          const fileResponse = await octokit.repos.getContent({
-            owner,
-            repo,
-            path: item.path,
-            ref: branch,
+          const fileResponse = await octokit.request({
+            method: "GET",
+            url: `/repos/${owner}/${repo}/contents/${item.path}?ref=${branch}`,
           });
 
           if (
@@ -125,19 +125,24 @@ export async function getRepoContent(
 }
 
 export async function getRepoBranches(
-  accessToken: string,
-  repoUrl: string
+  organization: Organization,
+  repository: GithubRepo
 ): Promise<string[]> {
-  const octokit = new Octokit({ auth: accessToken });
+  const octokit = organization.isPersonal
+    ? new Octokit({ auth: organization.accessToken })
+    : organization.installationId
+      ? await getGithubAppInstallation(organization.installationId)
+      : null;
   // Parse repo URL to get owner and repo name
-  const [owner, repo] = repoUrl
-    .replace("https://github.com/", "")
-    .replace(".git", "")
-    .split("/");
+  const [owner, repo] = repository.fullName.split("/");
   try {
-    const { data: branches } = await octokit.repos.listBranches({
-      owner,
-      repo,
+    if (!octokit) {
+      throw new Error("No Github access found");
+    }
+
+    const { data: branches } = await octokit.request({
+      method: "GET",
+      url: `/repos/${owner}/${repo}/branches`,
     });
 
     return branches.map((branch) => branch.name);
@@ -174,9 +179,10 @@ export async function listUserRepos(accessToken: string) {
 
 export async function listOrganizationRepos(installationId: number) {
   const installationOctokit = await getGithubAppInstallation(installationId);
-  const { data } = await installationOctokit.request(
-    "GET /installation/repositories"
-  );
+  const { data } = await installationOctokit.request({
+    method: "GET",
+    url: `/installation/repositories`,
+  });
 
   return data.repositories.map((repo) => ({
     name: repo.name,
@@ -187,24 +193,26 @@ export async function listOrganizationRepos(installationId: number) {
 }
 
 export async function listRepoFileSystem(
-  accessToken: string,
-  repoUrl: string,
+  organization: Organization,
+  repository: GithubRepo,
   branch: string
 ): Promise<FileSystemItem[]> {
-  const octokit = new Octokit({ auth: accessToken });
+  const octokit = organization.isPersonal
+    ? new Octokit({ auth: organization.accessToken })
+    : organization.installationId
+      ? await getGithubAppInstallation(organization.installationId)
+      : null;
 
-  const [owner, repo] = repoUrl
-    .replace("https://github.com/", "")
-    .replace(".git", "")
-    .split("/");
+  const [owner, repo] = repository.fullName.split("/");
 
   async function fetchFileSystem(path: string = ""): Promise<FileSystemItem[]> {
     try {
-      const response = await octokit.repos.getContent({
-        owner,
-        repo,
-        path,
-        ref: branch,
+      if (!octokit) {
+        throw new Error("No Github access found");
+      }
+      const response = await octokit.request({
+        method: "GET",
+        url: `/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
       });
 
       if (Array.isArray(response.data)) {
@@ -261,72 +269,85 @@ export async function listRepoFileSystem(
   return await fetchFileSystem();
 }
 
-export async function getGithubRepo(accessToken: string, repoUrl: string) {
-  const [owner, repo] = repoUrl
-    .replace("https://github.com/", "")
-    .replace(".git", "")
-    .split("/");
-  const octokit = new Octokit({ auth: accessToken });
-  const response = await octokit.repos.get({
-    owner,
-    repo,
+export async function getGithubRepo(
+  organization: Organization,
+  repository: GithubRepo
+) {
+  const [owner, repo] = repository.fullName.split("/");
+  const octokit = organization.isPersonal
+    ? new Octokit({ auth: organization.accessToken })
+    : organization.installationId
+      ? await getGithubAppInstallation(organization.installationId)
+      : null;
+  if (!octokit) {
+    throw new Error("No Github access found");
+  }
+  const { data } = await octokit.request({
+    method: "GET",
+    url: `/repos/${owner}/${repo}`,
   });
-  return response.data;
+
+  return data;
 }
 
 export async function getLatestCommit(
-  accessToken: string,
-  repoUrl: string,
+  organization: Organization,
+  repository: GithubRepo,
   branch: string
 ) {
-  const [owner, repo] = repoUrl
-    .replace("https://github.com/", "")
-    .replace(".git", "")
-    .split("/");
-  const octokit = new Octokit({ auth: accessToken });
-  const response = await octokit.repos.getCommit({
-    owner,
-    repo,
-    ref: branch,
+  const [owner, repo] = repository.fullName.split("/");
+  const octokit = organization.isPersonal
+    ? new Octokit({ auth: organization.accessToken })
+    : organization.installationId
+      ? await getGithubAppInstallation(organization.installationId)
+      : null;
+  if (!octokit) {
+    throw new Error("No Github access found");
+  }
+
+  const { data } = await octokit.request({
+    method: "GET",
+    url: `/repos/${owner}/${repo}/commits/${branch}`,
   });
-  return response.data.commit.author?.date;
+  return data.commit.author?.date;
 }
 
 export async function compareBranches(
-  accessToken: string,
-  owner: string,
-  repo: string,
+  organization: Organization,
+  repository: GithubRepo,
   base: string,
   head: string
 ) {
-  const octokit = new Octokit({ auth: accessToken });
+  const [owner, repo] = repository.fullName.split("/");
+  const octokit = organization.isPersonal
+    ? new Octokit({ auth: organization.accessToken })
+    : organization.installationId
+      ? await getGithubAppInstallation(organization.installationId)
+      : null;
+  if (!octokit) {
+    throw new Error("No Github access found");
+  }
+
   const basehead = `${base}...${head}`;
 
-  const response = await octokit.repos.compareCommitsWithBasehead({
-    owner,
-    repo,
-    basehead,
+  const response = await octokit.request({
+    method: "GET",
+    url: `/repos/${owner}/${repo}/compare/${basehead}`,
   });
 
   return response;
 }
 
 export async function compareBranchToDefaultBranch(
-  accessToken: string,
-  repoUrl: string,
+  organization: Organization,
+  repository: GithubRepo,
   branch: string
 ) {
-  // Parse repo URL to get owner and repo name
-  const [owner, repo] = repoUrl
-    .replace("https://github.com/", "")
-    .replace(".git", "")
-    .split("/");
-  const ghRepo = await getGithubRepo(accessToken, repoUrl);
+  const ghRepo = await getGithubRepo(organization, repository);
   return await compareBranches(
-    accessToken,
-    owner,
-    repo,
-    ghRepo.default_branch,
+    organization,
+    repository,
+    ghRepo?.default_branch ?? "",
     branch
   );
 }
