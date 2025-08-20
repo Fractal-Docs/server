@@ -82,6 +82,8 @@ export interface IStorage {
   deleteRepoDoc(id: number): Promise<void>;
 
   // Release operations
+  getOrganizationReleases(orgId: number): Promise<Release[]>;
+  getReleases(repoId: string): Promise<Release[]>;
   getRelease(releaseId: string): Promise<Release | undefined>;
   createRelease(release: InsertRelease): Promise<Release>;
   updateRelease(
@@ -456,6 +458,21 @@ export class DatabaseStorage implements IStorage {
         .returning();
       if (!doc) throw new Error("Repository documentation not found");
     });
+  }
+
+  async getOrganizationReleases(orgId: number): Promise<Release[]> {
+    // need to get the repos associated with the organization and then use those repos to get the docs
+    const repos = await this.getRepos(orgId);
+    const docs = await Promise.all(
+      repos.map((repo) => this.getReleases(repo.repoId))
+    );
+    return docs.flat();
+  }
+
+  async getReleases(repoId: string): Promise<Release[]> {
+    return this.handleDatabaseOperation(() =>
+      db.select().from(releases).where(eq(releases.repoId, repoId))
+    );
   }
 
   async createRelease(insertRelease: InsertRelease): Promise<Release> {
