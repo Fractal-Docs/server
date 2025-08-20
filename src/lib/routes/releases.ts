@@ -10,10 +10,19 @@ import {
   generateRoleDocument,
   generateRoleDocumentWithContext,
 } from "../releases";
+import { getParams } from "../helpers";
 
 export function releaseRoutes(app: Express) {
-  app.post("/api/releases", async (req, res) => {
+  app.post("/api/organization/:org_id/releases", async (req, res) => {
     try {
+      const { org_id } = getParams(req, res, ["org_id"]);
+      const organization = await storage.getOrganization(org_id);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+
+      // TODO: fix all of this
       const { title, prd, repoId, branch, model = "gpt-4o" } = req.body;
       const diffAnalysis = await analyzeDiff(repoId, branch);
 
@@ -61,6 +70,33 @@ export function releaseRoutes(app: Express) {
         error:
           error instanceof Error ? error.message : "Failed to create release",
       });
+    }
+  });
+
+  app.get("/api/organization/:org_id/recent-releases", async (req, res) => {
+    try {
+      const { org_id } = getParams(req, res, ["org_id"]);
+      const organization = await storage.getOrganization(org_id);
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+      const docs = await storage.getOrganizationReleases(org_id);
+
+      const recentDocs = docs
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+        .slice(0, 10);
+
+      res.json(recentDocs.filter(Boolean));
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch recent documents";
+      res.status(500).json({ error: message });
     }
   });
 

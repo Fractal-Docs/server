@@ -69,7 +69,9 @@ export interface IStorage {
   deleteRepoFile(id: number): Promise<void>;
 
   // Repository documentation operations
-  getRepoDocs(repoId: string, branchName: string): Promise<RepoDoc[]>;
+  getOrganizationDocs(orgId: number): Promise<RepoDoc[]>;
+  getRepoDocs(repoId: string): Promise<RepoDoc[]>;
+  getRepoDocsByBranch(repoId: string, branchName: string): Promise<RepoDoc[]>;
   createRepoDoc(doc: InsertRepoDoc): Promise<RepoDoc>;
   getRepoDoc(
     repoId: string,
@@ -80,6 +82,8 @@ export interface IStorage {
   deleteRepoDoc(id: number): Promise<void>;
 
   // Release operations
+  getOrganizationReleases(orgId: number): Promise<Release[]>;
+  getReleases(repoId: string): Promise<Release[]>;
   getRelease(releaseId: string): Promise<Release | undefined>;
   createRelease(release: InsertRelease): Promise<Release>;
   updateRelease(
@@ -376,7 +380,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository documentation operations
-  async getRepoDocs(repoId: string, branch: string): Promise<RepoDoc[]> {
+  async getOrganizationDocs(orgId: number): Promise<RepoDoc[]> {
+    const repos = await this.getRepos(orgId);
+    const docs = await Promise.all(
+      repos.map((repo) => this.getRepoDocs(repo.repoId))
+    );
+    return docs.flat();
+  }
+
+  async getRepoDocs(repoId: string): Promise<RepoDoc[]> {
+    return this.handleDatabaseOperation(() =>
+      db.select().from(repoDocs).where(eq(repoDocs.repoId, repoId))
+    );
+  }
+
+  async getRepoDocsByBranch(
+    repoId: string,
+    branch: string
+  ): Promise<RepoDoc[]> {
     return this.handleDatabaseOperation(() =>
       db
         .select()
@@ -436,6 +457,20 @@ export class DatabaseStorage implements IStorage {
         .returning();
       if (!doc) throw new Error("Repository documentation not found");
     });
+  }
+
+  async getOrganizationReleases(orgId: number): Promise<Release[]> {
+    const repos = await this.getRepos(orgId);
+    const docs = await Promise.all(
+      repos.map((repo) => this.getReleases(repo.repoId))
+    );
+    return docs.flat();
+  }
+
+  async getReleases(repoId: string): Promise<Release[]> {
+    return this.handleDatabaseOperation(() =>
+      db.select().from(releases).where(eq(releases.repoId, repoId))
+    );
   }
 
   async createRelease(insertRelease: InsertRelease): Promise<Release> {
