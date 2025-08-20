@@ -381,7 +381,6 @@ export class DatabaseStorage implements IStorage {
 
   // Repository documentation operations
   async getOrganizationDocs(orgId: number): Promise<RepoDoc[]> {
-    // need to get the repos associated with the organization and then use those repos to get the docs
     const repos = await this.getRepos(orgId);
     const docs = await Promise.all(
       repos.map((repo) => this.getRepoDocs(repo.repoId))
@@ -461,7 +460,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrganizationReleases(orgId: number): Promise<Release[]> {
-    // need to get the repos associated with the organization and then use those repos to get the docs
     const repos = await this.getRepos(orgId);
     const docs = await Promise.all(
       repos.map((repo) => this.getReleases(repo.repoId))

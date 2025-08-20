@@ -217,17 +217,14 @@ export function documentsRoutes(app: Express) {
         res.status(404).json({ error: "Organization not found" });
         return;
       }
-      console.log("Fetching docs...");
-      const docs = await storage.getOrganizationDocs(org_id);
 
-      console.log("Filtering docs...", docs);
+      const docs = await storage.getOrganizationDocs(org_id);
       const recentDocs = docs
         .sort(
           (a, b) =>
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         )
         .slice(0, 10);
-      console.log("Filtered docs:", recentDocs);
 
       res.json(recentDocs.filter(Boolean));
     } catch (error: unknown) {
