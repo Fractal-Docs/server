@@ -69,7 +69,9 @@ export interface IStorage {
   deleteRepoFile(id: number): Promise<void>;
 
   // Repository documentation operations
-  getRepoDocs(repoId: string, branchName: string): Promise<RepoDoc[]>;
+  getOrganizationDocs(orgId: number): Promise<RepoDoc[]>;
+  getRepoDocs(repoId: string): Promise<RepoDoc[]>;
+  getRepoDocsByBranch(repoId: string, branchName: string): Promise<RepoDoc[]>;
   createRepoDoc(doc: InsertRepoDoc): Promise<RepoDoc>;
   getRepoDoc(
     repoId: string,
@@ -376,7 +378,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository documentation operations
-  async getRepoDocs(repoId: string, branch: string): Promise<RepoDoc[]> {
+  async getOrganizationDocs(orgId: number): Promise<RepoDoc[]> {
+    // need to get the repos associated with the organization and then use those repos to get the docs
+    const repos = await this.getRepos(orgId);
+    const docs = await Promise.all(
+      repos.map((repo) => this.getRepoDocs(repo.repoId))
+    );
+    return docs.flat();
+  }
+
+  async getRepoDocs(repoId: string): Promise<RepoDoc[]> {
+    return this.handleDatabaseOperation(() =>
+      db.select().from(repoDocs).where(eq(repoDocs.repoId, repoId))
+    );
+  }
+
+  async getRepoDocsByBranch(
+    repoId: string,
+    branch: string
+  ): Promise<RepoDoc[]> {
     return this.handleDatabaseOperation(() =>
       db
         .select()
