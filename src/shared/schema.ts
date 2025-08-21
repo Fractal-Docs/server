@@ -41,7 +41,7 @@ export const organizations = pgTable("organizations", {
   slug: text("slug").notNull().unique(),
   profileImageUrl: text("profile_image_url"),
   installationId: integer("installation_id"),
-  accessToken: text("access_token").notNull(),
+  accessToken: text("access_token"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
