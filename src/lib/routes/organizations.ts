@@ -56,18 +56,6 @@ export function organizationRoutes(app: Express) {
   // Create new organization
   app.post("/api/organizations", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string;
-      if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" });
-        return;
-      }
-
-      const user = await storage.getUser(userSub);
-      if (!user) {
-        res.status(404).json({ error: "User not found" });
-        return;
-      }
-
       const result = insertOrganizationSchema.safeParse(req.body);
       if (!result.success) {
         res.status(400).json({ error: fromZodError(result.error).toString() });
@@ -75,13 +63,6 @@ export function organizationRoutes(app: Express) {
       }
 
       const organization = await storage.createOrganization(result.data);
-
-      // Add user as owner
-      await storage.addUserToOrganization({
-        userId: user.id,
-        organizationId: organization.id,
-        role: "owner",
-      });
 
       res.json(organization);
     } catch (error: unknown) {
@@ -211,6 +192,30 @@ export function organizationRoutes(app: Express) {
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to update user role";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Check uniqueness of org slug
+  app.post("/api/organization/slug", async (req, res) => {
+    try {
+      const { slug } = req.body;
+
+      if (!slug || typeof slug !== "string") {
+        res.status(400).json({ error: "Slug is required" });
+        return;
+      }
+
+      const existingOrg = await storage.getOrganizationBySlug(slug);
+      if (existingOrg) {
+        res.json({ error: "Slug already exists", available: false });
+        return;
+      }
+
+      res.json({ available: true });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to check slug";
       res.status(500).json({ error: message });
     }
   });
