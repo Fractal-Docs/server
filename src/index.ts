@@ -1,16 +1,25 @@
 import express, { NextFunction, type Request, Response } from "express";
 import cors from "cors";
+import { auth } from "express-oauth2-jwt-bearer";
+import { createServer } from "http";
 import { env, isProduction, validateEnvironment } from "./config/env";
 
 // Validate environment variables
 validateEnvironment();
+
+// this needs to be imported after validateEnvironment
+import { registerProtectedRoutes } from "./routes";
 
 // Only import supabase-keep-alive in production
 if (isProduction()) {
   import("./supabase-keep-alive");
 }
 
-import { registerRoutes } from "./routes";
+const checkJwt = auth({
+  audience: process.env.AUTH0_AUDIENCE,
+  issuerBaseURL: `https://${process.env.AUTH0_DOMAIN}/`,
+  tokenSigningAlg: "RS256",
+});
 
 const app = express();
 app.use(express.json());
@@ -48,7 +57,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  app.use(checkJwt);
+  await registerProtectedRoutes(app);
+  const server = createServer(app);
 
   // _next is required here to solve res.status is not a function error
   // Express.js uses the **arity** (number of parameters) to distinguish between:
