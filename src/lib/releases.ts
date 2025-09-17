@@ -50,7 +50,7 @@ export async function analyzeDiff(
 export async function generateReleaseDocument(
   prd: string,
   diffAnalysis: string,
-  model: ModelType = "gpt-4o"
+  model: ModelType
 ): Promise<string> {
   try {
     const prompt = `
@@ -90,7 +90,7 @@ Format the response in HTML with proper headings and structure for display in a 
 export async function generateRoleDocument(
   releaseDocument: string,
   role: string,
-  model: ModelType = "gpt-4o"
+  model: ModelType
 ): Promise<string> {
   return generateRoleDocumentWithContext(releaseDocument, role, model);
 }
@@ -98,7 +98,7 @@ export async function generateRoleDocument(
 export async function generateRoleDocumentWithContext(
   releaseDocument: string,
   role: string,
-  model: ModelType = "gpt-4o"
+  model: ModelType
 ): Promise<string> {
   try {
     const roleContexts = {

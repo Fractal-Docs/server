@@ -7,7 +7,7 @@ import {
   getLatestCommit,
   getRepoContent,
 } from "../github";
-import { generateDocumentation } from "../openai";
+import { generateDocumentation } from "../documents";
 import { type ModelType } from "../ai-providers";
 import { processFileContent } from "../embeddings";
 import { vectorStorage } from "../vector-storage";
@@ -455,6 +455,7 @@ export function codeRoutes(app: Express) {
     "/api/organization/:org_id/repos/:repo_id/compare",
     async (req, res) => {
       try {
+        const docType = "delta";
         const { org_id, repo_id, branch } = getParams(req, res, [
           "org_id",
           "repo_id",
@@ -473,9 +474,8 @@ export function codeRoutes(app: Express) {
           res.status(403).json({ error: "Repo not part of organization" });
           return;
         }
-        const { docType, model = "gpt-4o" } = req.body;
 
-        const repoDoc = await storage.getRepoDoc(repo_id, branch, "change");
+        const repoDoc = await storage.getRepoDoc(repo_id, branch, docType);
 
         const response = await compareBranchToDefaultBranch(
           organization,
@@ -517,11 +517,14 @@ export function codeRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
+        // const model: ModelType = chooseModel(repo_id, branch);
+        const model: ModelType = "gpt-4.1-mini";
+
         const { content: documentation, prompts } = await generateDocumentation(
           fileContents,
           businessContext,
-          model as ModelType,
-          "change"
+          model,
+          docType
         );
 
         console.log("Documentation generated");
@@ -530,7 +533,7 @@ export function codeRoutes(app: Express) {
         const doc = repoDoc
           ? await storage.updateRepoDoc(repoDoc.id, {
               repoId: repo_id,
-              title: `${docType} Documentation`,
+              title: `Delta Documentation: ${branch}`,
               content: documentation,
               docType,
               updatedAt: new Date(),
@@ -544,9 +547,9 @@ export function codeRoutes(app: Express) {
           : await storage.createRepoDoc({
               repoId: repo_id,
               branch,
-              title: `${docType} Documentation`,
+              title: `Delta Documentation: ${branch}`,
               content: documentation,
-              docType,
+              docType: "delta",
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filename),
                 aiModel: model,

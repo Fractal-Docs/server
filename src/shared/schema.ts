@@ -193,7 +193,7 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
     updatedAt: true,
   })
   .extend({
-    docType: z.enum(["overview", "api", "setup", "architecture", "cfg"]),
+    docType: z.enum(["overview", "cfg", "delta"]),
     metadata: z.object({
       generatedFrom: z.array(z.string()), // List of files used to generate this doc
       aiModel: z.string(),

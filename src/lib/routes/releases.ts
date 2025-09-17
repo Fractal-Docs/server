@@ -23,7 +23,7 @@ export function releaseRoutes(app: Express) {
       }
 
       // TODO: fix all of this
-      const { title, prd, repoId, branch, model = "gpt-4o" } = req.body;
+      const { title, prd, repoId, branch, model } = req.body;
       const diffAnalysis = await analyzeDiff(repoId, branch);
 
       const releaseDocument = await generateReleaseDocument(
@@ -143,11 +143,14 @@ export function releaseRoutes(app: Express) {
 
       const roleDocuments: Record<string, string> = {};
 
+      // const model: ModelType = chooseModel(repo_id, branch);
+      const model: ModelType = "gpt-4.1-mini";
       for (const role of selectedRoles) {
         try {
           const document = await generateRoleDocumentWithContext(
             release.releaseDocument,
-            role
+            role,
+            model
           );
           roleDocuments[role] = document;
         } catch (error) {

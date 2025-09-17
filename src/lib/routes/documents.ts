@@ -2,10 +2,8 @@ import type { Express } from "express";
 
 import { storage } from "src/storage";
 import { type ModelType } from "../ai-providers";
-import { generateEmbedding } from "../embeddings";
 import { getParams } from "../helpers";
-import { generateDocumentation } from "../openai";
-import { vectorStorage } from "../vector-storage";
+import { generateDocumentation } from "../documents";
 
 async function getRepoById(id: string, res) {
   const data = await storage.getRepo(id);
@@ -20,7 +18,7 @@ async function getRepoById(id: string, res) {
 export function documentsRoutes(app: Express) {
   // Endpoint to generate documentation
   app.post(
-    "/api/organization/:org_id/repos/:repo_id/generate-docs",
+    "/api/organization/:org_id/repos/:repo_id/generate",
     async (req, res) => {
       try {
         const { org_id, repo_id, branch } = getParams(req, res, [
@@ -41,33 +39,9 @@ export function documentsRoutes(app: Express) {
           res.status(403).json({ error: "Repo not part of organization" });
           return;
         }
-        const { docType, query, model = "gpt-4o" } = req.body;
 
-        const repoDoc = await storage.getRepoDoc(repo_id, branch, docType);
-
-        // If a specific query is provided, use vector search to find relevant files
-        let relevantFiles;
-        if (query) {
-          const queryEmbedding = await generateEmbedding(query);
-          const similarResults = await vectorStorage.searchSimilar(
-            queryEmbedding,
-            repo_id,
-            10
-          );
-          relevantFiles = await Promise.all(
-            similarResults.map(async (result) => {
-              const file = await storage.getRepoFile(
-                repo_id,
-                result.metadata.filePath,
-                branch
-              );
-              return file;
-            })
-          );
-        } else {
-          // Otherwise use all files
-          relevantFiles = await storage.getRepoFiles(repo_id, branch);
-        }
+        const repoDoc = await storage.getRepoDoc(repo_id, branch, "overview");
+        const relevantFiles = await storage.getRepoFiles(repo_id, branch);
 
         if (!relevantFiles.length) {
           res.status(404).json({ error: "No analyzed files found" });
@@ -114,10 +88,13 @@ export function documentsRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
+        // const model: ModelType = chooseModel(repo_id, branch);
+        const model: ModelType = "gpt-4.1-mini";
+
         const { content: documentation, prompts } = await generateDocumentation(
           codeWithCfg,
           businessContext,
-          model as ModelType
+          model
         );
 
         console.log("Documentation generated");
@@ -126,9 +103,9 @@ export function documentsRoutes(app: Express) {
         const doc = repoDoc
           ? await storage.updateRepoDoc(repoDoc.id, {
               repoId: repo_id,
-              title: `${docType} Documentation`,
+              title: `Repo Documentation`,
               content: documentation,
-              docType,
+              docType: "overview",
               updatedAt: new Date(),
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filePath),
@@ -140,9 +117,9 @@ export function documentsRoutes(app: Express) {
           : await storage.createRepoDoc({
               repoId: repo_id,
               branch,
-              title: `${docType} Documentation`,
+              title: `Repo Documentation`,
               content: documentation,
-              docType,
+              docType: "overview",
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filePath),
                 aiModel: model,

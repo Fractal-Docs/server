@@ -2,20 +2,11 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 
 export type ModelType =
-  | "gpt-4o"
   | "gpt-4.1"
-  | "o4-mini"
   | "o3"
-  | "gpt-4o-mini"
   | "gpt-4.1-mini"
-  | "gpt-4.1-nano"
-  | "o1"
-  | "gpt-3.5-turbo"
-  | "o1-2024-12-17"
-  | "o1-mini"
-  | "claude-3-5-sonnet-20241022"
-  | "claude-3-haiku-20240307"
-  | "claude-3-opus-20240229";
+  | "claude-sonnet-4-20250514"
+  | "claude-opus-4-20250514";
 
 export interface AIProvider {
   generateCompletion(
@@ -71,17 +62,31 @@ class AnthropicProvider implements AIProvider {
     userPrompt: string,
     model: string
   ): Promise<string> {
-    const response = await this.client.messages.create({
-      model,
-      max_tokens: 4000,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-    });
+    const response =
+      model === "claude-sonnet-4-20250514"
+        ? await this.client.beta.messages.create({
+            model,
+            max_tokens: 4000,
+            system: systemPrompt,
+            betas: ["context-1m-2025-08-07"],
+            messages: [
+              {
+                role: "user",
+                content: userPrompt,
+              },
+            ],
+          })
+        : await this.client.messages.create({
+            model,
+            max_tokens: 4000,
+            system: systemPrompt,
+            messages: [
+              {
+                role: "user",
+                content: userPrompt,
+              },
+            ],
+          });
 
     const content = response.content[0];
     if (content.type !== "text") {
@@ -96,7 +101,7 @@ function isAnthropicModel(model: string): boolean {
 }
 
 function isOpenAIModel(model: string): boolean {
-  return model.startsWith("gpt-") || model.startsWith("o1-");
+  return model.startsWith("gpt-") || model.startsWith("o3");
 }
 
 export function getAIProvider(model: ModelType): AIProvider {
