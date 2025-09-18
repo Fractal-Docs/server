@@ -35,19 +35,6 @@ export default [
           argsIgnorePattern: "^_",
         },
       ],
-      "react/jsx-tag-spacing": [
-        "error",
-        {
-          closingSlash: "never",
-          beforeSelfClosing: "always",
-          afterOpening: "never",
-          beforeClosing: "never",
-        },
-      ],
-      "react/jsx-indent": ["error", 2],
-      "react/jsx-indent-props": ["error", 2],
-      "react/jsx-curly-spacing": ["error", { when: "never", children: true }],
-      "react/jsx-equals-spacing": ["error", "never"],
     },
     languageOptions: {
       ecmaVersion: "latest",
