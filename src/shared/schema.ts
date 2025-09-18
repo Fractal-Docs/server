@@ -12,6 +12,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 const DOC_TYPES = ["overview", "cfg", "delta"] as const;
+type DocType = (typeof DOC_TYPES)[number];
 
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
@@ -96,7 +97,7 @@ export const repoDocs = pgTable(
     repoId: text("repo_id").notNull(),
     title: text("title").notNull(),
     content: text("content").notNull(),
-    docType: text("doc_type").notNull(),
+    docType: text("doc_type").$type<DocType>().notNull(),
     branch: text("branch").notNull(),
     metadata: jsonb("metadata").notNull(), // Additional documentation metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
