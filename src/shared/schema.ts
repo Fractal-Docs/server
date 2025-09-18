@@ -11,6 +11,8 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+const DOC_TYPES = ["overview", "cfg", "delta"] as const;
+
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -94,7 +96,7 @@ export const repoDocs = pgTable(
     repoId: text("repo_id").notNull(),
     title: text("title").notNull(),
     content: text("content").notNull(),
-    docType: text("doc_type").notNull(), // e.g., 'overview', 'api', 'setup', 'cfg'
+    docType: text("doc_type").notNull(),
     branch: text("branch").notNull(),
     metadata: jsonb("metadata").notNull(), // Additional documentation metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -193,7 +195,7 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
     updatedAt: true,
   })
   .extend({
-    docType: z.enum(["overview", "cfg", "delta"]),
+    docType: z.enum(DOC_TYPES),
     metadata: z.object({
       generatedFrom: z.array(z.string()), // List of files used to generate this doc
       aiModel: z.string(),

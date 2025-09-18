@@ -4,6 +4,7 @@ import { storage } from "src/storage";
 import { type ModelType } from "../ai-providers";
 import { getParams } from "../helpers";
 import { generateDocumentation } from "../documents";
+import { compareBranchToDefaultBranch } from "../github";
 
 async function getRepoById(id: string, res) {
   const data = await storage.getRepo(id);
@@ -136,6 +137,131 @@ export function documentsRoutes(app: Express) {
           error instanceof Error
             ? error.message
             : "Failed to generate documentation";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
+
+  // Endpoint to generate change documentation
+  app.post(
+    "/api/organization/:org_id/repos/:repo_id/compare",
+    async (req, res) => {
+      try {
+        const docType = "delta";
+        const { org_id, repo_id, branch } = getParams(req, res, [
+          "org_id",
+          "repo_id",
+          "branch",
+        ]);
+        const organization = await storage.getOrganization(org_id);
+        if (!organization) {
+          res.status(404).json({ error: "Organization not found" });
+          return;
+        }
+        const repo = await getRepoById(repo_id, res);
+        if (!repo) {
+          res.status(404).json({ error: "Repo not found" });
+          return;
+        } else if (repo.organizationId !== organization.id) {
+          res.status(403).json({ error: "Repo not part of organization" });
+          return;
+        }
+
+        const repoDoc = await storage.getRepoDoc(repo_id, branch, docType);
+
+        const response = await compareBranchToDefaultBranch(
+          organization,
+          repo,
+          branch
+        );
+
+        const relevantFiles =
+          response.data?.files?.map(
+            ({ filename, status, additions, deletions, changes, patch }) => ({
+              filename,
+              status,
+              additions,
+              deletions,
+              changes,
+              patch,
+            })
+          ) || [];
+
+        const fileContents = relevantFiles
+          .filter((file) => file !== undefined)
+          .map(
+            (file) =>
+              `File: ${file!.filename}\n\n${JSON.stringify(
+                {
+                  status: file!.status,
+                  additions: file!.additions,
+                  deletions: file!.deletions,
+                  changes: file!.changes,
+                },
+                null,
+                2
+              )}\n\nPatch:\n${file!.patch || "No content available"}`
+          )
+          .join("\n\n");
+
+        const prd = await storage.getPrdForBranch(repo_id, branch);
+        const businessContext = prd
+          ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
+          : "";
+
+        // const model: ModelType = chooseModel(repo_id, branch);
+        const model: ModelType = "gpt-4.1-mini";
+
+        const { content: documentation, prompts } = await generateDocumentation(
+          fileContents,
+          businessContext,
+          model,
+          docType
+        );
+
+        console.log("Documentation generated");
+
+        // Store the generated documentation with actual prompts in metadata
+        const doc = repoDoc
+          ? await storage.updateRepoDoc(repoDoc.id, {
+              repoId: repo_id,
+              title: `Delta Documentation: ${branch}`,
+              content: documentation,
+              docType,
+              updatedAt: new Date(),
+              metadata: {
+                generatedFrom: relevantFiles.map((f) => f!.filename),
+                aiModel: model,
+                timestamp: new Date().toISOString(),
+                prompts,
+              },
+            })
+          : await storage.createRepoDoc({
+              repoId: repo_id,
+              branch,
+              title: `Delta Documentation: ${branch}`,
+              content: documentation,
+              docType: "delta",
+              metadata: {
+                generatedFrom: relevantFiles.map((f) => f!.filename),
+                aiModel: model,
+                timestamp: new Date().toISOString(),
+                prompts,
+              },
+            });
+
+        console.log("Documentation stored");
+
+        res.json({
+          success: true,
+          message: "Change documentation generated successfully",
+          doc,
+        });
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to list repository files";
         res.status(500).json({ error: message });
       }
     }
