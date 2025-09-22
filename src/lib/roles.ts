@@ -1,7 +1,6 @@
 export type Role =
   | "sales"
   | "marketing"
-  | "customer-success"
   | "csm"
   | "revops"
   | "ps"
@@ -30,14 +29,6 @@ export const AVAILABLE_ROLES: RoleDetails[] = [
     description: "Campaign ideas, messaging frameworks, and promotional angles",
     icon: "Users",
     color: "purple",
-  },
-  {
-    id: "customer-success",
-    name: "Customer Success",
-    description:
-      "Onboarding considerations, training needs, and customer communication",
-    icon: "Heart",
-    color: "green",
   },
   {
     id: "csm",
@@ -85,17 +76,6 @@ Create a document specifically for the sales team with talking points, customer 
 - Brand differentiation opportunities
 
 Create a document specifically for the marketing team with campaign ideas, messaging frameworks, and promotional angles.`,
-
-  "customer-success": `You are analyzing a software release from a Customer Success perspective. Focus on:
-- Features that improve customer onboarding
-- User experience enhancements that reduce friction
-- Support and self-service improvements
-- Customer retention and engagement features
-- Training and education implications
-- Potential customer confusion or support burden
-
-Create a document specifically for the customer success team with onboarding considerations, training needs, and customer communication templates.`,
-
   csm: `You are analyzing a software release from a Customer Success Manager perspective. Focus on:
 - Knowledge base articles and in-app tooltips needed
 - Release-day communication with current customers

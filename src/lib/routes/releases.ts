@@ -34,10 +34,7 @@ export function releaseRoutes(app: Express) {
         releaseDocument,
         "marketing"
       );
-      const customerSuccessDocument = await generateRoleDocument(
-        releaseDocument,
-        "customer-success"
-      );
+      const csmDocument = await generateRoleDocument(releaseDocument, "csm");
 
       const releaseId = nanoid();
 
@@ -51,7 +48,7 @@ export function releaseRoutes(app: Express) {
         releaseDocument,
         salesDocument,
         marketingDocument,
-        customerSuccessDocument,
+        csmDocument,
       });
 
       res.json(newRelease);
