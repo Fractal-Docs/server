@@ -33,6 +33,7 @@
     "express": "^5.1.0",
     "express-oauth2-jwt-bearer": "^1.7.1",
     "express-session": "^1.18.2",
+    "js-tiktoken": "^1.0.21",
     "memorystore": "^1.6.7",
     "nanoid": "^5.1.5",
     "node-cron": "^4.2.1",

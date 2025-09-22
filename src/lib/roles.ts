@@ -1,4 +1,21 @@
-export const AVAILABLE_ROLES = [
+export type Role =
+  | "sales"
+  | "marketing"
+  | "customer-success"
+  | "csm"
+  | "revops"
+  | "ps"
+  | "executive"; // this role is specifically for high quality prose document
+
+interface RoleDetails {
+  id: Role;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+}
+
+export const AVAILABLE_ROLES: RoleDetails[] = [
   {
     id: "sales",
     name: "Sales",
@@ -48,7 +65,7 @@ export const AVAILABLE_ROLES = [
   },
 ];
 
-export const DEFAULT_ROLE_CONTEXTS = {
+export const DEFAULT_ROLE_CONTEXTS: Record<Role, string> = {
   sales: `You are analyzing a software release from a Sales perspective. Focus on:
 - New features that can be sold to prospects
 - Improvements that solve customer pain points
@@ -108,4 +125,14 @@ Create a document specifically for RevOps with pricing updates, revenue forecast
 - Lessons-learned log for feedback to Product and Engineering
 
 Create a document specifically for Professional Services with implementation guides, risk assessments, and validation procedures.`,
+
+  executive: `You are analyzing a software release from an Executive perspective. Focus on:
+- Financial impact analysis
+- Market positioning and competitive landscape
+- Strategic alignment with business goals
+- Long-term vision and roadmap planning
+- Stakeholder engagement and communication
+- Key performance indicators and metrics
+
+Create a document specifically for Executives with financial analysis, market positioning, and strategic planning.`,
 };

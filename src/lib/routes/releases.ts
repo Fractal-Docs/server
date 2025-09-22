@@ -3,7 +3,6 @@ import { db } from "src/db";
 import { releases } from "src/shared/schema";
 import { nanoid } from "nanoid";
 import { storage } from "src/storage";
-import { type ModelType } from "../ai-providers";
 import {
   analyzeDiff,
   generateReleaseDocument,
@@ -22,30 +21,22 @@ export function releaseRoutes(app: Express) {
         return;
       }
 
-      // TODO: fix all of this
-      const { title, prd, repoId, branch, model } = req.body;
+      const { title, prd, repoId, branch } = req.body;
       const diffAnalysis = await analyzeDiff(repoId, branch);
 
-      const releaseDocument = await generateReleaseDocument(
-        prd,
-        diffAnalysis,
-        model as ModelType
-      );
+      const releaseDocument = await generateReleaseDocument(prd, diffAnalysis);
 
       const salesDocument = await generateRoleDocument(
         releaseDocument,
-        "sales",
-        model as ModelType
+        "sales"
       );
       const marketingDocument = await generateRoleDocument(
         releaseDocument,
-        "marketing",
-        model as ModelType
+        "marketing"
       );
       const customerSuccessDocument = await generateRoleDocument(
         releaseDocument,
-        "customer-success",
-        model as ModelType
+        "customer-success"
       );
 
       const releaseId = nanoid();
@@ -143,14 +134,11 @@ export function releaseRoutes(app: Express) {
 
       const roleDocuments: Record<string, string> = {};
 
-      // const model: ModelType = chooseModel(repo_id, branch);
-      const model: ModelType = "gpt-4.1-mini";
       for (const role of selectedRoles) {
         try {
           const document = await generateRoleDocumentWithContext(
             release.releaseDocument,
-            role,
-            model
+            role
           );
           roleDocuments[role] = document;
         } catch (error) {

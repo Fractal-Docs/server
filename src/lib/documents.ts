@@ -1,12 +1,15 @@
 import { InsertRepoDoc } from "src/shared/schema";
-import { getAIProvider, type ModelType } from "./ai-providers";
+import { chooseModel, getAIProvider, ModelType } from "./ai-providers";
 
 export async function generateDocumentation(
   code: string,
   businessContext: string,
-  model: ModelType,
   docType: InsertRepoDoc["docType"] = "overview"
-): Promise<{ content: string; prompts: { developer: string; user: string } }> {
+): Promise<{
+  content: string;
+  prompts: { developer: string; user: string };
+  model: ModelType;
+}> {
   try {
     const developerPrompt =
       docType === "overview"
@@ -22,6 +25,14 @@ export async function generateDocumentation(
           ? `${businessContext}\n\nChanges:\n${code}\n\nGenerate documentation for the changes provided. The output must be formatted clearly in Markdown and should explain both the business purpose and the technical implementation clearly.`
           : "";
 
+    const { model, reason, estimatedTokens } = chooseModel(
+      docType,
+      developerPrompt,
+      userPrompt,
+      0
+    );
+    console.log(reason);
+    console.log("Estimated Tokens:", estimatedTokens);
     const provider = getAIProvider(model);
     const content = await provider.generateCompletion(
       developerPrompt,
@@ -30,6 +41,7 @@ export async function generateDocumentation(
     );
 
     return {
+      model,
       content,
       prompts: {
         developer: developerPrompt,

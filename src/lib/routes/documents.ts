@@ -1,7 +1,6 @@
 import type { Express } from "express";
 
 import { storage } from "src/storage";
-import { type ModelType } from "../ai-providers";
 import { getParams } from "../helpers";
 import { generateDocumentation } from "../documents";
 import { compareBranchToDefaultBranch } from "../github";
@@ -89,14 +88,11 @@ export function documentsRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
-        // const model: ModelType = chooseModel(repo_id, branch);
-        const model: ModelType = "gpt-4.1-mini";
-
-        const { content: documentation, prompts } = await generateDocumentation(
-          codeWithCfg,
-          businessContext,
-          model
-        );
+        const {
+          content: documentation,
+          prompts,
+          model,
+        } = await generateDocumentation(codeWithCfg, businessContext);
 
         console.log("Documentation generated");
 
@@ -209,15 +205,11 @@ export function documentsRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
-        // const model: ModelType = chooseModel(repo_id, branch);
-        const model: ModelType = "gpt-4.1-mini";
-
-        const { content: documentation, prompts } = await generateDocumentation(
-          fileContents,
-          businessContext,
+        const {
+          content: documentation,
+          prompts,
           model,
-          docType
-        );
+        } = await generateDocumentation(fileContents, businessContext, docType);
 
         console.log("Documentation generated");
 
