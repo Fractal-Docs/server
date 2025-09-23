@@ -315,6 +315,7 @@ export function documentsRoutes(app: Express) {
 
       const docs = await storage.getOrganizationDocs(org_id);
       const recentDocs = docs
+        .filter((doc) => doc.docType !== "cfg")
         .sort(
           (a, b) =>
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
