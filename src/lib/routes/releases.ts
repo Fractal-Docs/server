@@ -3,7 +3,6 @@ import { db } from "src/db";
 import { releases } from "src/shared/schema";
 import { nanoid } from "nanoid";
 import { storage } from "src/storage";
-import { type ModelType } from "../ai-providers";
 import {
   analyzeDiff,
   generateReleaseDocument,
@@ -22,31 +21,20 @@ export function releaseRoutes(app: Express) {
         return;
       }
 
-      // TODO: fix all of this
-      const { title, prd, repoId, branch, model = "gpt-4o" } = req.body;
+      const { title, prd, repoId, branch } = req.body;
       const diffAnalysis = await analyzeDiff(repoId, branch);
 
-      const releaseDocument = await generateReleaseDocument(
-        prd,
-        diffAnalysis,
-        model as ModelType
-      );
+      const releaseDocument = await generateReleaseDocument(prd, diffAnalysis);
 
       const salesDocument = await generateRoleDocument(
         releaseDocument,
-        "sales",
-        model as ModelType
+        "sales"
       );
       const marketingDocument = await generateRoleDocument(
         releaseDocument,
-        "marketing",
-        model as ModelType
+        "marketing"
       );
-      const customerSuccessDocument = await generateRoleDocument(
-        releaseDocument,
-        "customer-success",
-        model as ModelType
-      );
+      const csmDocument = await generateRoleDocument(releaseDocument, "csm");
 
       const releaseId = nanoid();
 
@@ -60,7 +48,7 @@ export function releaseRoutes(app: Express) {
         releaseDocument,
         salesDocument,
         marketingDocument,
-        customerSuccessDocument,
+        csmDocument,
       });
 
       res.json(newRelease);

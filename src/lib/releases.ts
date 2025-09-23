@@ -1,4 +1,5 @@
-import { getAIProvider, ModelType } from "./ai-providers";
+import { chooseModel, getAIProvider } from "./ai-providers";
+import { DEFAULT_ROLE_CONTEXTS, Role } from "./roles";
 
 export async function analyzeDiff(
   repoId: string,
@@ -49,8 +50,7 @@ export async function analyzeDiff(
 
 export async function generateReleaseDocument(
   prd: string,
-  diffAnalysis: string,
-  model: ModelType = "gpt-4o"
+  diffAnalysis: string
 ): Promise<string> {
   try {
     const prompt = `
@@ -73,9 +73,21 @@ ${diffAnalysis}
 Format the response in HTML with proper headings and structure for display in a web interface.
 `;
 
+    const systemPrompt = `
+You are a technical product manager creating release documentation. Always respond in well-formatted HTML.
+`;
+    const { model, reason, estimatedTokens } = chooseModel(
+      "release",
+      systemPrompt,
+      prompt,
+      0
+    );
+    console.log(reason);
+    console.log("Estimated Tokens:", estimatedTokens);
+
     const provider = getAIProvider(model);
     const content = await provider.generateCompletion(
-      "You are a technical product manager creating release documentation. Always respond in well-formatted HTML.",
+      systemPrompt,
       prompt,
       model
     );
@@ -89,89 +101,17 @@ Format the response in HTML with proper headings and structure for display in a 
 
 export async function generateRoleDocument(
   releaseDocument: string,
-  role: string,
-  model: ModelType = "gpt-4o"
+  role: Role
 ): Promise<string> {
-  return generateRoleDocumentWithContext(releaseDocument, role, model);
+  return generateRoleDocumentWithContext(releaseDocument, role);
 }
 
 export async function generateRoleDocumentWithContext(
   releaseDocument: string,
-  role: string,
-  model: ModelType = "gpt-4o"
+  role: Role
 ): Promise<string> {
   try {
-    const roleContexts = {
-      sales: `
-You are analyzing a software release from a Sales perspective. Focus on:
-- New features that can be sold to prospects
-- Improvements that solve customer pain points
-- Competitive advantages and differentiators
-- ROI and business value propositions
-- Customer-facing benefits and outcomes
-- Demo-worthy features and capabilities
-
-Create a document specifically for the sales team with talking points, customer benefits, and selling opportunities.
-`,
-      marketing: `
-You are analyzing a software release from a Marketing perspective. Focus on:
-- Features that can drive marketing campaigns
-- User experience improvements worth promoting
-- Market positioning and messaging opportunities
-- Content marketing angles and stories
-- Social media and PR-worthy announcements
-- Brand differentiation opportunities
-
-Create a document specifically for the marketing team with campaign ideas, messaging frameworks, and promotional angles.
-`,
-      "customer-success": `
-You are analyzing a software release from a Customer Success perspective. Focus on:
-- Features that improve customer onboarding
-- User experience enhancements that reduce friction
-- Support and self-service improvements
-- Customer retention and engagement features
-- Training and education implications
-- Potential customer confusion or support burden
-
-Create a document specifically for the customer success team with onboarding considerations, training needs, and customer communication templates.
-`,
-      csm: `
-You are analyzing a software release from a Customer Success Manager perspective. Focus on:
-- Knowledge base articles and in-app tooltips needed
-- Release-day communication with current customers
-- Success plan templates for new features
-- Webinar and workshop deck content
-- Customer feedback loops and early adoption tracking
-- Risk register and rollback plan considerations
-
-Create a document specifically for CSMs with customer communication templates, training materials, and success metrics.
-`,
-      revops: `
-You are analyzing a software release from a Revenue Operations perspective. Focus on:
-- Updated price books and SKU listings in CRM
-- Forecast model adjustments with new capabilities
-- Board-level revenue impact briefings
-- Order-form templates and discount guardrails
-- ARR pipeline updates from Sales team
-- Contract and billing system constraints
-
-Create a document specifically for RevOps with pricing updates, revenue forecasts, and operational considerations.
-`,
-      ps: `
-You are analyzing a software release from a Professional Services perspective. Focus on:
-- Updated implementation runbooks and templates
-- Migration scripts and configuration templates
-- Internal playbook for partners and contractors
-- Risk register and rollback plan
-- Post-go-live validation checklist
-- Lessons-learned log for feedback to Product and Engineering
-
-Create a document specifically for Professional Services with implementation guides, risk assessments, and validation procedures.
-`,
-    };
-
-    const roleContext =
-      roleContexts[role as keyof typeof roleContexts] || roleContexts.sales;
+    const roleContext = DEFAULT_ROLE_CONTEXTS[role];
 
     const prompt = `
 ${roleContext}
@@ -182,9 +122,22 @@ ${releaseDocument}
 **Task:** Create a role-specific document that extracts and highlights the information most relevant to this role. Format the response in HTML with proper headings and structure.
 `;
 
+    const systemPrompt = `
+You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.
+`;
+    const { model, reason, estimatedTokens } = chooseModel(
+      "role",
+      systemPrompt,
+      prompt,
+      0,
+      role
+    );
+    console.log(reason);
+    console.log("Estimated Tokens:", estimatedTokens);
+
     const provider = getAIProvider(model);
     const content = await provider.generateCompletion(
-      `You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.`,
+      systemPrompt,
       prompt,
       model
     );

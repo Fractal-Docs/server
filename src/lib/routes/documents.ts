@@ -1,11 +1,9 @@
 import type { Express } from "express";
 
 import { storage } from "src/storage";
-import { type ModelType } from "../ai-providers";
-import { generateEmbedding } from "../embeddings";
 import { getParams } from "../helpers";
-import { generateDocumentation } from "../openai";
-import { vectorStorage } from "../vector-storage";
+import { generateDocumentation } from "../documents";
+import { compareBranchToDefaultBranch } from "../github";
 
 async function getRepoById(id: string, res) {
   const data = await storage.getRepo(id);
@@ -20,7 +18,7 @@ async function getRepoById(id: string, res) {
 export function documentsRoutes(app: Express) {
   // Endpoint to generate documentation
   app.post(
-    "/api/organization/:org_id/repos/:repo_id/generate-docs",
+    "/api/organization/:org_id/repos/:repo_id/generate",
     async (req, res) => {
       try {
         const { org_id, repo_id, branch } = getParams(req, res, [
@@ -41,33 +39,9 @@ export function documentsRoutes(app: Express) {
           res.status(403).json({ error: "Repo not part of organization" });
           return;
         }
-        const { docType, query, model = "gpt-4o" } = req.body;
 
-        const repoDoc = await storage.getRepoDoc(repo_id, branch, docType);
-
-        // If a specific query is provided, use vector search to find relevant files
-        let relevantFiles;
-        if (query) {
-          const queryEmbedding = await generateEmbedding(query);
-          const similarResults = await vectorStorage.searchSimilar(
-            queryEmbedding,
-            repo_id,
-            10
-          );
-          relevantFiles = await Promise.all(
-            similarResults.map(async (result) => {
-              const file = await storage.getRepoFile(
-                repo_id,
-                result.metadata.filePath,
-                branch
-              );
-              return file;
-            })
-          );
-        } else {
-          // Otherwise use all files
-          relevantFiles = await storage.getRepoFiles(repo_id, branch);
-        }
+        const repoDoc = await storage.getRepoDoc(repo_id, branch, "overview");
+        const relevantFiles = await storage.getRepoFiles(repo_id, branch);
 
         if (!relevantFiles.length) {
           res.status(404).json({ error: "No analyzed files found" });
@@ -114,11 +88,11 @@ export function documentsRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
-        const { content: documentation, prompts } = await generateDocumentation(
-          codeWithCfg,
-          businessContext,
-          model as ModelType
-        );
+        const {
+          content: documentation,
+          prompts,
+          model,
+        } = await generateDocumentation(codeWithCfg, businessContext);
 
         console.log("Documentation generated");
 
@@ -126,9 +100,9 @@ export function documentsRoutes(app: Express) {
         const doc = repoDoc
           ? await storage.updateRepoDoc(repoDoc.id, {
               repoId: repo_id,
-              title: `${docType} Documentation`,
+              title: `Repo Documentation`,
               content: documentation,
-              docType,
+              docType: "overview",
               updatedAt: new Date(),
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filePath),
@@ -140,9 +114,9 @@ export function documentsRoutes(app: Express) {
           : await storage.createRepoDoc({
               repoId: repo_id,
               branch,
-              title: `${docType} Documentation`,
+              title: `Repo Documentation`,
               content: documentation,
-              docType,
+              docType: "overview",
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filePath),
                 aiModel: model,
@@ -159,6 +133,127 @@ export function documentsRoutes(app: Express) {
           error instanceof Error
             ? error.message
             : "Failed to generate documentation";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
+
+  // Endpoint to generate change documentation
+  app.post(
+    "/api/organization/:org_id/repos/:repo_id/compare",
+    async (req, res) => {
+      try {
+        const docType = "delta";
+        const { org_id, repo_id, branch } = getParams(req, res, [
+          "org_id",
+          "repo_id",
+          "branch",
+        ]);
+        const organization = await storage.getOrganization(org_id);
+        if (!organization) {
+          res.status(404).json({ error: "Organization not found" });
+          return;
+        }
+        const repo = await getRepoById(repo_id, res);
+        if (!repo) {
+          res.status(404).json({ error: "Repo not found" });
+          return;
+        } else if (repo.organizationId !== organization.id) {
+          res.status(403).json({ error: "Repo not part of organization" });
+          return;
+        }
+
+        const repoDoc = await storage.getRepoDoc(repo_id, branch, docType);
+
+        const response = await compareBranchToDefaultBranch(
+          organization,
+          repo,
+          branch
+        );
+
+        const relevantFiles =
+          response.data?.files?.map(
+            ({ filename, status, additions, deletions, changes, patch }) => ({
+              filename,
+              status,
+              additions,
+              deletions,
+              changes,
+              patch,
+            })
+          ) || [];
+
+        const fileContents = relevantFiles
+          .filter((file) => file !== undefined)
+          .map(
+            (file) =>
+              `File: ${file!.filename}\n\n${JSON.stringify(
+                {
+                  status: file!.status,
+                  additions: file!.additions,
+                  deletions: file!.deletions,
+                  changes: file!.changes,
+                },
+                null,
+                2
+              )}\n\nPatch:\n${file!.patch || "No content available"}`
+          )
+          .join("\n\n");
+
+        const prd = await storage.getPrdForBranch(repo_id, branch);
+        const businessContext = prd
+          ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
+          : "";
+
+        const {
+          content: documentation,
+          prompts,
+          model,
+        } = await generateDocumentation(fileContents, businessContext, docType);
+
+        console.log("Documentation generated");
+
+        // Store the generated documentation with actual prompts in metadata
+        const doc = repoDoc
+          ? await storage.updateRepoDoc(repoDoc.id, {
+              repoId: repo_id,
+              title: `Delta Documentation: ${branch}`,
+              content: documentation,
+              docType,
+              updatedAt: new Date(),
+              metadata: {
+                generatedFrom: relevantFiles.map((f) => f!.filename),
+                aiModel: model,
+                timestamp: new Date().toISOString(),
+                prompts,
+              },
+            })
+          : await storage.createRepoDoc({
+              repoId: repo_id,
+              branch,
+              title: `Delta Documentation: ${branch}`,
+              content: documentation,
+              docType: "delta",
+              metadata: {
+                generatedFrom: relevantFiles.map((f) => f!.filename),
+                aiModel: model,
+                timestamp: new Date().toISOString(),
+                prompts,
+              },
+            });
+
+        console.log("Documentation stored");
+
+        res.json({
+          success: true,
+          message: "Change documentation generated successfully",
+          doc,
+        });
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to list repository files";
         res.status(500).json({ error: message });
       }
     }
@@ -220,6 +315,7 @@ export function documentsRoutes(app: Express) {
 
       const docs = await storage.getOrganizationDocs(org_id);
       const recentDocs = docs
+        .filter((doc) => doc.docType !== "cfg")
         .sort(
           (a, b) =>
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()

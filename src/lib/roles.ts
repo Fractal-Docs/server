@@ -1,4 +1,20 @@
-export const AVAILABLE_ROLES = [
+export type Role =
+  | "sales"
+  | "marketing"
+  | "csm"
+  | "revops"
+  | "ps"
+  | "executive"; // this role is specifically for high quality prose document
+
+interface RoleDetails {
+  id: Role;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+}
+
+export const AVAILABLE_ROLES: RoleDetails[] = [
   {
     id: "sales",
     name: "Sales",
@@ -13,14 +29,6 @@ export const AVAILABLE_ROLES = [
     description: "Campaign ideas, messaging frameworks, and promotional angles",
     icon: "Users",
     color: "purple",
-  },
-  {
-    id: "customer-success",
-    name: "Customer Success",
-    description:
-      "Onboarding considerations, training needs, and customer communication",
-    icon: "Heart",
-    color: "green",
   },
   {
     id: "csm",
@@ -48,7 +56,7 @@ export const AVAILABLE_ROLES = [
   },
 ];
 
-export const DEFAULT_ROLE_CONTEXTS = {
+export const DEFAULT_ROLE_CONTEXTS: Record<Role, string> = {
   sales: `You are analyzing a software release from a Sales perspective. Focus on:
 - New features that can be sold to prospects
 - Improvements that solve customer pain points
@@ -68,17 +76,6 @@ Create a document specifically for the sales team with talking points, customer 
 - Brand differentiation opportunities
 
 Create a document specifically for the marketing team with campaign ideas, messaging frameworks, and promotional angles.`,
-
-  "customer-success": `You are analyzing a software release from a Customer Success perspective. Focus on:
-- Features that improve customer onboarding
-- User experience enhancements that reduce friction
-- Support and self-service improvements
-- Customer retention and engagement features
-- Training and education implications
-- Potential customer confusion or support burden
-
-Create a document specifically for the customer success team with onboarding considerations, training needs, and customer communication templates.`,
-
   csm: `You are analyzing a software release from a Customer Success Manager perspective. Focus on:
 - Knowledge base articles and in-app tooltips needed
 - Release-day communication with current customers
@@ -108,4 +105,14 @@ Create a document specifically for RevOps with pricing updates, revenue forecast
 - Lessons-learned log for feedback to Product and Engineering
 
 Create a document specifically for Professional Services with implementation guides, risk assessments, and validation procedures.`,
+
+  executive: `You are analyzing a software release from an Executive perspective. Focus on:
+- Financial impact analysis
+- Market positioning and competitive landscape
+- Strategic alignment with business goals
+- Long-term vision and roadmap planning
+- Stakeholder engagement and communication
+- Key performance indicators and metrics
+
+Create a document specifically for Executives with financial analysis, market positioning, and strategic planning.`,
 };

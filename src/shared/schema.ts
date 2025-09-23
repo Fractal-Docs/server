@@ -11,6 +11,9 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+const DOC_TYPES = ["overview", "cfg", "delta"] as const;
+type DocType = (typeof DOC_TYPES)[number];
+
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -94,7 +97,7 @@ export const repoDocs = pgTable(
     repoId: text("repo_id").notNull(),
     title: text("title").notNull(),
     content: text("content").notNull(),
-    docType: text("doc_type").notNull(), // e.g., 'overview', 'api', 'setup', 'cfg'
+    docType: text("doc_type").$type<DocType>().notNull(),
     branch: text("branch").notNull(),
     metadata: jsonb("metadata").notNull(), // Additional documentation metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -193,7 +196,7 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
     updatedAt: true,
   })
   .extend({
-    docType: z.enum(["overview", "api", "setup", "architecture", "cfg"]),
+    docType: z.enum(DOC_TYPES),
     metadata: z.object({
       generatedFrom: z.array(z.string()), // List of files used to generate this doc
       aiModel: z.string(),
@@ -213,7 +216,6 @@ export const releases = pgTable("releases", {
   releaseDocument: text("release_document").notNull(),
   salesDocument: text("sales_document"),
   marketingDocument: text("marketing_document"),
-  customerSuccessDocument: text("customer_success_document"),
   csmDocument: text("csm_document"),
   revopsDocument: text("revops_document"),
   psDocument: text("ps_document"),
@@ -232,7 +234,6 @@ export const insertReleaseSchema = createInsertSchema(releases)
     releaseDocument: true,
     salesDocument: true,
     marketingDocument: true,
-    customerSuccessDocument: true,
     csmDocument: true,
     revopsDocument: true,
     psDocument: true,
