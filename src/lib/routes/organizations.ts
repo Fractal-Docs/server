@@ -104,6 +104,7 @@ export function organizationRoutes(app: Express) {
     try {
       const orgId = parseInt(req.params.id);
       await storage.deleteOrganization(orgId);
+      await storage.removeAllUsersFromOrganization(orgId);
       res.json({ success: true });
     } catch (error: unknown) {
       const message =
