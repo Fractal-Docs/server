@@ -6,7 +6,7 @@ const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET;
  * Function to get Auth0 Management API token
  * @returns {Promise<string>} - Returns a JWT token if authentication is successful
  */
-export async function getAccessToken(): Promise<string> {
+export async function getAuth0AccessToken(): Promise<string> {
   try {
     const response = await fetch(`https://${AUTH0_DOMAIN}/oauth/token`, {
       method: "POST",

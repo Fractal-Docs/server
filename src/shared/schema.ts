@@ -29,7 +29,7 @@ export const githubRepos = pgTable("github_repos", {
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
   repoId: text("repo_id").notNull(),
-  organizationId: serial("organization_id")
+  organizationId: integer("organization_id")
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
   fileFilterRegex: text("file_filter_regex"),
@@ -52,10 +52,10 @@ export const organizations = pgTable("organizations", {
 export const userOrganizations = pgTable(
   "user_organizations",
   {
-    userId: serial("user_id")
+    userId: integer("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    organizationId: serial("organization_id")
+    organizationId: integer("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("member"), // owner, admin, member
@@ -107,6 +107,24 @@ export const repoDocs = pgTable(
     primaryKey({ columns: [table.repoId, table.docType, table.branch] }),
   ]
 );
+
+export const releases = pgTable("releases", {
+  id: serial("id").notNull(),
+  releaseId: text("release_id").primaryKey(),
+  title: text("title").notNull(),
+  prd: text("prd").notNull(),
+  repoId: text("repo_id").notNull(),
+  branch: text("branch").notNull(),
+  diffAnalysis: text("diff_analysis").notNull(),
+  releaseDocument: text("release_document").notNull(),
+  salesDocument: text("sales_document"),
+  marketingDocument: text("marketing_document"),
+  csmDocument: text("csm_document"),
+  revopsDocument: text("revops_document"),
+  psDocument: text("ps_document"),
+  roleDocuments: jsonb("role_documents"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 // Existing schemas
 export const insertPrdSchema = createInsertSchema(prds)
@@ -205,24 +223,6 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
     }),
   });
 
-export const releases = pgTable("releases", {
-  id: serial("id").notNull(),
-  releaseId: text("release_id").primaryKey(),
-  title: text("title").notNull(),
-  prd: text("prd").notNull(),
-  repoId: text("repo_id").notNull(),
-  branch: text("branch").notNull(),
-  diffAnalysis: text("diff_analysis").notNull(),
-  releaseDocument: text("release_document").notNull(),
-  salesDocument: text("sales_document"),
-  marketingDocument: text("marketing_document"),
-  csmDocument: text("csm_document"),
-  revopsDocument: text("revops_document"),
-  psDocument: text("ps_document"),
-  roleDocuments: jsonb("role_documents"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 export const insertReleaseSchema = createInsertSchema(releases)
   .pick({
     releaseId: true,
@@ -252,21 +252,21 @@ export type Organization = typeof organizations.$inferSelect;
 export type InsertUserOrganization = z.infer<
   typeof insertUserOrganizationSchema
 >;
-export type UserOrganization = typeof userOrganizations.$inferSelect;
 
-// Existing types
-export type InsertPrd = z.infer<typeof insertPrdSchema>;
-export type Prd = typeof prds.$inferSelect;
-export type InsertGithubRepo = z.infer<typeof insertGithubRepoSchema>;
-export type GithubRepo = typeof githubRepos.$inferSelect;
+export type UserOrganization = typeof userOrganizations.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type ThemePreferences = z.infer<typeof themePreferencesSchema>;
 
-// New types for repository analysis
+export type InsertPrd = z.infer<typeof insertPrdSchema>;
+export type Prd = typeof prds.$inferSelect;
+
+export type InsertGithubRepo = z.infer<typeof insertGithubRepoSchema>;
+export type GithubRepo = typeof githubRepos.$inferSelect;
+
 export type InsertRepoFile = z.infer<typeof insertRepoFileSchema>;
 export type RepoFile = typeof repoFiles.$inferSelect;
 export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
 export type RepoDoc = typeof repoDocs.$inferSelect;
 export type InsertRelease = z.infer<typeof insertReleaseSchema>;
 export type Release = typeof releases.$inferSelect;
-export type ThemePreferences = z.infer<typeof themePreferencesSchema>;
