@@ -103,6 +103,7 @@ export function organizationRoutes(app: Express) {
   app.delete("/api/organization/:id", async (req, res) => {
     try {
       const orgId = parseInt(req.params.id);
+      await storage.removeAllUsersFromOrganization(orgId);
       await storage.deleteOrganization(orgId);
       res.json({ success: true });
     } catch (error: unknown) {

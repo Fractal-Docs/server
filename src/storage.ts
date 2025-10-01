@@ -631,6 +631,14 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  async removeAllUsersFromOrganization(organizationId: number): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      await db
+        .delete(userOrganizations)
+        .where(eq(userOrganizations.organizationId, organizationId));
+    });
+  }
+
   async removeUserFromOrganization(
     userId: number,
     organizationId: number
