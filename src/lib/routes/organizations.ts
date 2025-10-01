@@ -238,7 +238,7 @@ export function organizationRoutes(app: Express) {
 
       await storage.createInvitation(orgId, userId);
 
-      res.json(userId);
+      res.json(true);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to invite user";

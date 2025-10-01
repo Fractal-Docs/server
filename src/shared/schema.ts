@@ -7,6 +7,7 @@ import {
   primaryKey,
   boolean,
   integer,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -126,17 +127,13 @@ export const releases = pgTable("releases", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const invitations = pgTable(
-  "invitations",
-  {
-    id: serial("id").primaryKey(),
-    userId: text("user_id").notNull(),
-    organizationId: serial("organization_id").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.userId, table.organizationId] })]
-);
+export const invitations = pgTable("invitations", {
+  userId: text("user_id").notNull(),
+  organizationId: serial("organization_id").notNull(),
+  token: uuid("token").primaryKey().defaultRandom(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 // Existing schemas
 export const insertPrdSchema = createInsertSchema(prds)
@@ -261,6 +258,7 @@ export const insertReleaseSchema = createInsertSchema(releases)
 export const insertInvitationSchema = createInsertSchema(invitations).pick({
   userId: true,
   organizationId: true,
+  token: true,
 });
 
 // Organization types
