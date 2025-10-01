@@ -72,3 +72,42 @@ export async function getUserRoles(
     );
   }
 }
+
+/**
+ * Function to create a user in Auth0
+ * @param {string} email - The user's email address
+ * @returns {Promise<string>} - Returns the user's Auth0 sub identifier
+ */
+export async function inviteUser(
+  accessToken: string,
+  email: string
+): Promise<string> {
+  try {
+    const response = await fetch(`https://${AUTH0_DOMAIN}/api/v2/users`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        email_verified: false,
+        connection: "Username-Password-Authentication",
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        `Failed to create user: ${errorData.error_description || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    return data.user_id;
+  } catch (error: any) {
+    throw new Error(
+      `Failed to create user: ${error.response?.data?.error_description || error.message}`
+    );
+  }
+}

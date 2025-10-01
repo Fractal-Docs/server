@@ -23,6 +23,8 @@ import {
   type InsertOrganization,
   type UserOrganization,
   type InsertUserOrganization,
+  Invitation,
+  invitations,
 } from "./shared/schema";
 import { db } from "./db";
 import { eq, like, inArray, and } from "drizzle-orm";
@@ -675,6 +677,23 @@ export class DatabaseStorage implements IStorage {
         .returning();
       if (!userOrg) throw new Error("User organization relationship not found");
       return userOrg;
+    });
+  }
+
+  async createInvitation(
+    organizationId: number,
+    userId: string
+  ): Promise<Invitation> {
+    return this.handleDatabaseOperation(async () => {
+      const [invitation] = await db
+        .insert(invitations)
+        .values({
+          organizationId,
+          userId,
+        })
+        .returning();
+      if (!invitation) throw new Error("Failed to create invitation");
+      return invitation;
     });
   }
 }

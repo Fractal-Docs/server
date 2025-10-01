@@ -6,6 +6,7 @@ import {
 } from "../../shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { getParams } from "../helpers";
+import { getAuth0AccessToken, inviteUser } from "../auth0";
 
 export function organizationRoutes(app: Express) {
   // Get user's organizations
@@ -217,6 +218,30 @@ export function organizationRoutes(app: Express) {
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to check slug";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Invite user to organization
+  app.post("/api/organization/:id/invite", async (req, res) => {
+    try {
+      const orgId = parseInt(req.params.id);
+      const { email } = req.body;
+
+      if (!email || typeof email !== "string") {
+        res.status(400).json({ error: "Email is required" });
+        return;
+      }
+
+      const accessToken = await getAuth0AccessToken();
+      const userId = await inviteUser(accessToken, email);
+
+      await storage.createInvitation(orgId, userId);
+
+      res.json(userId);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to invite user";
       res.status(500).json({ error: message });
     }
   });
