@@ -1,6 +1,12 @@
+import crypto from "crypto";
+
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
 const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID;
 const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET;
+
+function generateRandomPassword(length = 32) {
+  return `!${crypto.randomBytes(length).toString("hex")}!`;
+}
 
 /**
  * Function to get Auth0 Management API token
@@ -93,21 +99,49 @@ export async function inviteUser(
         email,
         email_verified: false,
         connection: "Username-Password-Authentication",
+        password: generateRandomPassword(),
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(
-        `Failed to create user: ${errorData.error_description || response.statusText}`
-      );
+      console.log("error", errorData);
+      throw new Error(errorData.error_description || response.statusText);
     }
 
     const data = await response.json();
     return data.user_id;
   } catch (error: any) {
-    throw new Error(
-      `Failed to create user: ${error.response?.data?.error_description || error.message}`
+    throw new Error(error.response?.data?.error_description || error.message);
+  }
+}
+
+export async function getUserByEmail(
+  accessToken: string,
+  email: string
+): Promise<string | undefined> {
+  try {
+    const response = await fetch(
+      `https://${AUTH0_DOMAIN}/api/v2/users-by-email?email=${encodeURIComponent(email)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
     );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error_description || response.statusText);
+    }
+
+    const data = await response.json();
+    const user = data.find((user: { email: string }) => user.email === email);
+    if (!user) return undefined;
+    return user.user_id;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error_description || error.message);
   }
 }

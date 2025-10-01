@@ -6,7 +6,8 @@ import {
 } from "../../shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { getParams } from "../helpers";
-import { getAuth0AccessToken, inviteUser } from "../auth0";
+import { getAuth0AccessToken, getUserByEmail, inviteUser } from "../auth0";
+import { sendInviteEmail } from "../email";
 
 export function organizationRoutes(app: Express) {
   // Get user's organizations
@@ -234,9 +235,17 @@ export function organizationRoutes(app: Express) {
       }
 
       const accessToken = await getAuth0AccessToken();
-      const userId = await inviteUser(accessToken, email);
 
-      await storage.createInvitation(orgId, userId);
+      // either we find the user, or we invite them
+      const userId =
+        (await getUserByEmail(accessToken, email)) ||
+        (await inviteUser(accessToken, email));
+
+      const invitation = await storage.createInvitation(orgId, userId);
+
+      const inviteLink = `${process.env.APP_BASE_URL}/accept?token=${invitation.token}`;
+
+      await sendInviteEmail(email, inviteLink);
 
       res.json(true);
     } catch (error: unknown) {

@@ -41,6 +41,7 @@
     "openai": "^5.20.3",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
+    "postmark": "^4.0.5",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "ws": "^8.18.3",
