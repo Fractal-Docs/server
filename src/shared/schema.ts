@@ -30,7 +30,7 @@ export const githubRepos = pgTable("github_repos", {
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
   repoId: text("repo_id").notNull(),
-  organizationId: serial("organization_id")
+  organizationId: integer("organization_id")
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
   fileFilterRegex: text("file_filter_regex"),
@@ -53,10 +53,10 @@ export const organizations = pgTable("organizations", {
 export const userOrganizations = pgTable(
   "user_organizations",
   {
-    userId: serial("user_id")
+    userId: integer("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    organizationId: serial("organization_id")
+    organizationId: integer("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("member"), // owner, admin, member
