@@ -1,6 +1,6 @@
 import type { Express } from "express";
 
-import { getAccessToken, getUserRoles } from "../auth0";
+import { getAuth0AccessToken, getUserRoles } from "../auth0";
 import { storage } from "src/storage";
 
 export function authRoutes(app: Express) {
@@ -58,7 +58,7 @@ export function authRoutes(app: Express) {
 
   app.get("/api/auth/roles", async (req, res) => {
     try {
-      const accessToken = await getAccessToken();
+      const accessToken = await getAuth0AccessToken();
       const userSub = req.headers["user-sub"] as string;
       if (!userSub) {
         res.status(401).json({ error: "User sub not provided" });
