@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { AVAILABLE_ROLES, DEFAULT_ROLE_CONTEXTS } from "src/lib/roles";
 
 export function roleRoutes(app: Express) {
-  app.get("/api/organization/:orgId/roles", async (req, res) => {
+  app.get("/api/organization/:org_id/roles", async (req, res) => {
     try {
       res.json(AVAILABLE_ROLES);
     } catch (error) {
@@ -12,7 +12,7 @@ export function roleRoutes(app: Express) {
   });
 
   app.get(
-    "/api/organization/:orgId/roles/:roleId",
+    "/api/organization/:org_id/roles/:roleId",
     async (req: any, res: any) => {
       try {
         const { roleId } = req.params;
@@ -38,7 +38,7 @@ export function roleRoutes(app: Express) {
   );
 
   app.post(
-    "/api/organization/:orgId/roles/:roleId/revert",
+    "/api/organization/:org_id/roles/:roleId/revert",
     async (req: any, res: any) => {
       try {
         const { roleId } = req.params;
