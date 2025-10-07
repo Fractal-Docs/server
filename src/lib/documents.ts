@@ -1,13 +1,40 @@
 import { InsertRepoDoc } from "src/shared/schema";
 import { chooseModel, getAIProvider, ModelType } from "./ai-providers";
+import { registerWorker } from "./task-manager";
 
-export async function generateDocumentation(
+registerWorker(
+  "generateDocumentation",
+  async (data: {
+    userPrompt: string;
+    developerPrompt: string;
+    model: ModelType;
+    callback: (data: Record<string, any>) => void;
+  }): Promise<string> => {
+    const { userPrompt, developerPrompt, model, callback } = data;
+    const provider = getAIProvider(model);
+    const content = await provider.generateCompletion(
+      developerPrompt,
+      userPrompt,
+      model
+    );
+
+    const prompts = {
+      developer: developerPrompt,
+      user: userPrompt,
+    };
+    callback({ content, prompts });
+
+    return content;
+  }
+);
+
+export async function prepareDocumentation(
   code: string,
   businessContext: string,
   docType: InsertRepoDoc["docType"] = "overview"
 ): Promise<{
-  content: string;
-  prompts: { developer: string; user: string };
+  developerPrompt;
+  userPrompt;
   model: ModelType;
 }> {
   try {
@@ -33,20 +60,11 @@ export async function generateDocumentation(
     );
     console.log(reason);
     console.log("Estimated Tokens:", estimatedTokens);
-    const provider = getAIProvider(model);
-    const content = await provider.generateCompletion(
-      developerPrompt,
-      userPrompt,
-      model
-    );
 
     return {
+      developerPrompt,
+      userPrompt,
       model,
-      content,
-      prompts: {
-        developer: developerPrompt,
-        user: userPrompt,
-      },
     };
   } catch (error: unknown) {
     const errorMessage =

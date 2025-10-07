@@ -2,8 +2,9 @@ import type { Express } from "express";
 
 import { storage } from "src/storage";
 import { getParams } from "../helpers";
-import { generateDocumentation } from "../documents";
+import { prepareDocumentation } from "../documents";
 import { compareBranchToDefaultBranch } from "../github";
+import { enqueueTask, getTaskStatus } from "../task-manager";
 
 async function getRepoById(id: string, res) {
   const data = await storage.getRepo(id);
@@ -88,34 +89,36 @@ export function documentsRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
-        const {
-          content: documentation,
-          prompts,
+        const { developerPrompt, userPrompt, model } =
+          await prepareDocumentation(codeWithCfg, businessContext);
+
+        const jobId = await enqueueTask("generateDocumentation", {
+          developerPrompt,
+          userPrompt,
           model,
-        } = await generateDocumentation(codeWithCfg, businessContext);
-
-        console.log("Documentation generated");
-
-        // Store the generated documentation with actual prompts in metadata
-        const doc = repoDoc
-          ? await storage.updateRepoDoc(repoDoc.id, {
-              repoId: repo_id,
-              title: `Repo Documentation`,
-              content: documentation,
-              docType: "overview",
-              updatedAt: new Date(),
-              metadata: {
-                generatedFrom: relevantFiles.map((f) => f!.filePath),
-                aiModel: model,
-                timestamp: new Date().toISOString(),
-                prompts,
-              },
-            })
-          : await storage.createRepoDoc({
+          callback: async ({ content, prompts }) => {
+            // Store the generated documentation with actual prompts in metadata
+            if (repoDoc) {
+              await storage.updateRepoDoc(repoDoc.id, {
+                repoId: repo_id,
+                title: `Repo Documentation`,
+                content,
+                docType: "overview",
+                updatedAt: new Date(),
+                metadata: {
+                  generatedFrom: relevantFiles.map((f) => f!.filePath),
+                  aiModel: model,
+                  timestamp: new Date().toISOString(),
+                  prompts,
+                },
+              });
+              return;
+            }
+            await storage.createRepoDoc({
               repoId: repo_id,
               branch,
               title: `Repo Documentation`,
-              content: documentation,
+              content,
               docType: "overview",
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filePath),
@@ -124,10 +127,12 @@ export function documentsRoutes(app: Express) {
                 prompts,
               },
             });
+          },
+        });
 
-        console.log("Repo doc created");
+        console.log(`Job ID: ${jobId}`);
 
-        res.json(doc);
+        res.json({ jobId });
       } catch (error: unknown) {
         const message =
           error instanceof Error
@@ -205,34 +210,36 @@ export function documentsRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
-        const {
-          content: documentation,
-          prompts,
+        const { developerPrompt, userPrompt, model } =
+          await prepareDocumentation(fileContents, businessContext);
+
+        const jobId = await enqueueTask("generateDocumentation", {
+          developerPrompt,
+          userPrompt,
           model,
-        } = await generateDocumentation(fileContents, businessContext, docType);
-
-        console.log("Documentation generated");
-
-        // Store the generated documentation with actual prompts in metadata
-        const doc = repoDoc
-          ? await storage.updateRepoDoc(repoDoc.id, {
-              repoId: repo_id,
-              title: `Delta Documentation: ${branch}`,
-              content: documentation,
-              docType,
-              updatedAt: new Date(),
-              metadata: {
-                generatedFrom: relevantFiles.map((f) => f!.filename),
-                aiModel: model,
-                timestamp: new Date().toISOString(),
-                prompts,
-              },
-            })
-          : await storage.createRepoDoc({
+          callback: async ({ content, prompts }) => {
+            // Store the generated documentation with actual prompts in metadata
+            if (repoDoc) {
+              await storage.updateRepoDoc(repoDoc.id, {
+                repoId: repo_id,
+                title: `Delta Documentation: ${branch}`,
+                content,
+                docType,
+                updatedAt: new Date(),
+                metadata: {
+                  generatedFrom: relevantFiles.map((f) => f!.filename),
+                  aiModel: model,
+                  timestamp: new Date().toISOString(),
+                  prompts,
+                },
+              });
+              return;
+            }
+            await storage.createRepoDoc({
               repoId: repo_id,
               branch,
               title: `Delta Documentation: ${branch}`,
-              content: documentation,
+              content,
               docType: "delta",
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filename),
@@ -241,19 +248,81 @@ export function documentsRoutes(app: Express) {
                 prompts,
               },
             });
-
-        console.log("Documentation stored");
-
-        res.json({
-          success: true,
-          message: "Change documentation generated successfully",
-          doc,
+          },
         });
+
+        console.log(`Job ID: ${jobId}`);
+
+        res.json({ jobId });
       } catch (error: unknown) {
         const message =
           error instanceof Error
             ? error.message
             : "Failed to list repository files";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
+
+  app.get(
+    "/api/organization/:org_id/repos/:repo_id/docs_status/:job_id",
+    async (req, res) => {
+      try {
+        const status = await getTaskStatus(req.params.job_id);
+        if (!status) {
+          res.status(404).json({ error: "Not found" });
+          return;
+        }
+        res.json(status);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "Failed to get task status";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
+
+  app.get(
+    "/api/organization/:org_id/repos/:repo_id/docs_status/:job_id",
+    async (req, res) => {
+      try {
+        const { org_id, repo_id, branch } = getParams(req, res, [
+          "org_id",
+          "repo_id",
+          "branch",
+        ]);
+        const organization = await storage.getOrganization(org_id);
+        if (!organization) {
+          res.status(404).json({ error: "Organization not found" });
+          return;
+        }
+        const repo = await getRepoById(repo_id, res);
+        if (!repo) {
+          res.status(404).json({ error: "Repo not found" });
+          return;
+        } else if (repo.organizationId !== organization.id) {
+          res.status(403).json({ error: "Repo not part of organization" });
+          return;
+        }
+        const docs = await storage.getRepoDocsByBranch(repo_id, branch);
+
+        // Sort by updatedAt to get the most recent doc
+        const sortedDocs = docs.sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+
+        if (!sortedDocs.length) {
+          res.status(404).json({
+            error: "No documentation found for this repository",
+          });
+          return;
+        }
+
+        res.json(sortedDocs);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "Failed to get task status";
         res.status(500).json({ error: message });
       }
     }
