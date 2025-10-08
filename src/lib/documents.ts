@@ -4,12 +4,15 @@ import { registerWorker } from "./task-manager";
 
 registerWorker(
   "generateDocumentation",
-  async (data: {
-    userPrompt: string;
-    developerPrompt: string;
-    model: ModelType;
-    callback: (data: Record<string, any>) => void;
-  }): Promise<string> => {
+  async (
+    data: {
+      userPrompt: string;
+      developerPrompt: string;
+      model: ModelType;
+      callback: (data: Record<string, any>) => void;
+    },
+    job
+  ): Promise<string> => {
     const { userPrompt, developerPrompt, model, callback } = data;
     const provider = getAIProvider(model);
     const content = await provider.generateCompletion(
@@ -22,7 +25,7 @@ registerWorker(
       developer: developerPrompt,
       user: userPrompt,
     };
-    callback({ content, prompts });
+    callback({ content, prompts, jobId: job.id });
 
     return content;
   }

@@ -2,7 +2,13 @@ import { Queue, Worker, QueueEvents } from "bullmq";
 import IORedis from "ioredis";
 import { v4 as uuid } from "uuid";
 
-const connection = new IORedis();
+const connection = new IORedis({
+  host: process.env.UPSTASH_REDIS_HOST,
+  port: Number(process.env.UPSTASH_REDIS_PORT),
+  password: process.env.UPSTASH_REDIS_PASSWORD,
+  tls: {},
+  maxRetriesPerRequest: null,
+});
 const queue = new Queue("tasks", { connection });
 const events = new QueueEvents("tasks", { connection });
 
