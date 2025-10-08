@@ -23,6 +23,9 @@ import {
   type InsertOrganization,
   type UserOrganization,
   type InsertUserOrganization,
+  EnqueuedTask,
+  InsertEnqueuedTask,
+  enqueuedTasks,
 } from "./shared/schema";
 import { db } from "./db";
 import { eq, like, inArray, and } from "drizzle-orm";
@@ -114,6 +117,9 @@ export interface IStorage {
     organizationId: number,
     role: string
   ): Promise<UserOrganization>;
+  getJob(jobId: string): Promise<EnqueuedTask | null>;
+  addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask>;
+  removeJob(jobId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -675,6 +681,32 @@ export class DatabaseStorage implements IStorage {
         .returning();
       if (!userOrg) throw new Error("User organization relationship not found");
       return userOrg;
+    });
+  }
+
+  async getJob(jobId: string): Promise<EnqueuedTask | null> {
+    return this.handleDatabaseOperation(async () => {
+      const [job] = await db
+        .select()
+        .from(enqueuedTasks)
+        .where(eq(enqueuedTasks.jobId, jobId));
+      return job || null;
+    });
+  }
+
+  async addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask> {
+    return this.handleDatabaseOperation(async () => {
+      const [enqueuedTask] = await db
+        .insert(enqueuedTasks)
+        .values(job)
+        .returning();
+      return enqueuedTask;
+    });
+  }
+
+  async removeJob(jobId: string): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      await db.delete(enqueuedTasks).where(eq(enqueuedTasks.jobId, jobId));
     });
   }
 }

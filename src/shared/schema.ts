@@ -126,7 +126,15 @@ export const releases = pgTable("releases", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Existing schemas
+// New table for tracking enqueued tasks
+export const enqueuedTasks = pgTable("enqueued_tasks", {
+  jobId: text("job_id").notNull().primaryKey(),
+  branch: text("branch").notNull(),
+  repoId: text("repo_id").notNull(),
+  status: text("status").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertPrdSchema = createInsertSchema(prds)
   .pick({
     title: true,
@@ -246,6 +254,19 @@ export const insertReleaseSchema = createInsertSchema(releases)
     branch: z.string().min(1, "Branch is required"),
   });
 
+export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
+  .pick({
+    jobId: true,
+    branch: true,
+    repoId: true,
+    status: true,
+  })
+  .extend({
+    jobId: z.string().min(1, "Job ID is required"),
+    branch: z.string().min(1, "Branch is required"),
+    repoId: z.string().min(1, "Repository is required"),
+  });
+
 // Organization types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
@@ -270,3 +291,6 @@ export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
 export type RepoDoc = typeof repoDocs.$inferSelect;
 export type InsertRelease = z.infer<typeof insertReleaseSchema>;
 export type Release = typeof releases.$inferSelect;
+
+export type InsertEnqueuedTask = z.infer<typeof insertEnqueuedTaskSchema>;
+export type EnqueuedTask = typeof enqueuedTasks.$inferSelect;
