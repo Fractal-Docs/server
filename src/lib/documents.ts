@@ -2,34 +2,39 @@ import { InsertRepoDoc } from "src/shared/schema";
 import { chooseModel, getAIProvider, ModelType } from "./ai-providers";
 import { registerWorker } from "./task-manager";
 
-registerWorker(
-  "generateDocumentation",
-  async (
-    data: {
-      userPrompt: string;
-      developerPrompt: string;
-      model: ModelType;
-      callback: (data: Record<string, any>) => void;
+export const registerGenerateWorker = (
+  callback: (data: Record<string, any>) => Promise<void>
+) =>
+  registerWorker(
+    "generateDocumentation",
+    async (
+      data: {
+        userPrompt: string;
+        developerPrompt: string;
+        model: ModelType;
+      },
+      job
+    ): Promise<{
+      content: string;
+      prompts: Record<string, string>;
+      jobId: string;
+    }> => {
+      const { userPrompt, developerPrompt, model } = data;
+      const provider = getAIProvider(model);
+      const content = await provider.generateCompletion(
+        developerPrompt,
+        userPrompt,
+        model
+      );
+
+      const prompts = {
+        developer: developerPrompt,
+        user: userPrompt,
+      };
+      return { content, prompts, jobId: job.id };
     },
-    job
-  ): Promise<string> => {
-    const { userPrompt, developerPrompt, model, callback } = data;
-    const provider = getAIProvider(model);
-    const content = await provider.generateCompletion(
-      developerPrompt,
-      userPrompt,
-      model
-    );
-
-    const prompts = {
-      developer: developerPrompt,
-      user: userPrompt,
-    };
-    callback({ content, prompts, jobId: job.id });
-
-    return content;
-  }
-);
+    callback
+  );
 
 export async function prepareDocumentation(
   code: string,

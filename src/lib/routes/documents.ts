@@ -2,7 +2,7 @@ import type { Express } from "express";
 
 import { storage } from "src/storage";
 import { getParams } from "../helpers";
-import { prepareDocumentation } from "../documents";
+import { prepareDocumentation, registerGenerateWorker } from "../documents";
 import { compareBranchToDefaultBranch } from "../github";
 import { enqueueTask, getTaskStatus } from "../task-manager";
 
@@ -92,35 +92,16 @@ export function documentsRoutes(app: Express) {
         const { developerPrompt, userPrompt, model } =
           await prepareDocumentation(codeWithCfg, businessContext);
 
-        const jobId = await enqueueTask("generateDocumentation", {
-          developerPrompt,
-          userPrompt,
-          model,
-          callback: async ({ content, prompts, jobId }) => {
-            await storage.removeJob(jobId);
-            // Store the generated documentation with actual prompts in metadata
-            if (repoDoc) {
-              await storage.updateRepoDoc(repoDoc.id, {
-                repoId: repo_id,
-                title: `Repo Documentation`,
-                content,
-                docType: "overview",
-                updatedAt: new Date(),
-                metadata: {
-                  generatedFrom: relevantFiles.map((f) => f!.filePath),
-                  aiModel: model,
-                  timestamp: new Date().toISOString(),
-                  prompts,
-                },
-              });
-              return;
-            }
-            await storage.createRepoDoc({
+        registerGenerateWorker(async ({ content, prompts, jobId: id }) => {
+          await storage.removeJob(id);
+          // Store the generated documentation with actual prompts in metadata
+          if (repoDoc) {
+            await storage.updateRepoDoc(repoDoc.id, {
               repoId: repo_id,
-              branch,
               title: `Repo Documentation`,
               content,
               docType: "overview",
+              updatedAt: new Date(),
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filePath),
                 aiModel: model,
@@ -128,7 +109,27 @@ export function documentsRoutes(app: Express) {
                 prompts,
               },
             });
-          },
+            return;
+          }
+          await storage.createRepoDoc({
+            repoId: repo_id,
+            branch,
+            title: `Repo Documentation`,
+            content,
+            docType: "overview",
+            metadata: {
+              generatedFrom: relevantFiles.map((f) => f!.filePath),
+              aiModel: model,
+              timestamp: new Date().toISOString(),
+              prompts,
+            },
+          });
+        });
+
+        const jobId = await enqueueTask("generateDocumentation", {
+          developerPrompt,
+          userPrompt,
+          model,
         });
 
         if (jobId) {
@@ -223,34 +224,16 @@ export function documentsRoutes(app: Express) {
         const { developerPrompt, userPrompt, model } =
           await prepareDocumentation(fileContents, businessContext);
 
-        const jobId = await enqueueTask("generateDocumentation", {
-          developerPrompt,
-          userPrompt,
-          model,
-          callback: async ({ content, prompts }) => {
-            // Store the generated documentation with actual prompts in metadata
-            if (repoDoc) {
-              await storage.updateRepoDoc(repoDoc.id, {
-                repoId: repo_id,
-                title: `Delta Documentation: ${branch}`,
-                content,
-                docType,
-                updatedAt: new Date(),
-                metadata: {
-                  generatedFrom: relevantFiles.map((f) => f!.filename),
-                  aiModel: model,
-                  timestamp: new Date().toISOString(),
-                  prompts,
-                },
-              });
-              return;
-            }
-            await storage.createRepoDoc({
+        registerGenerateWorker(async ({ content, prompts, jobId: id }) => {
+          await storage.removeJob(id);
+          // Store the generated documentation with actual prompts in metadata
+          if (repoDoc) {
+            await storage.updateRepoDoc(repoDoc.id, {
               repoId: repo_id,
-              branch,
               title: `Delta Documentation: ${branch}`,
               content,
-              docType: "delta",
+              docType,
+              updatedAt: new Date(),
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filename),
                 aiModel: model,
@@ -258,10 +241,28 @@ export function documentsRoutes(app: Express) {
                 prompts,
               },
             });
-          },
+            return;
+          }
+          await storage.createRepoDoc({
+            repoId: repo_id,
+            branch,
+            title: `Delta Documentation: ${branch}`,
+            content,
+            docType: "delta",
+            metadata: {
+              generatedFrom: relevantFiles.map((f) => f!.filename),
+              aiModel: model,
+              timestamp: new Date().toISOString(),
+              prompts,
+            },
+          });
         });
 
-        console.log(`Job ID: ${jobId}`);
+        const jobId = await enqueueTask("generateDocumentation", {
+          developerPrompt,
+          userPrompt,
+          model,
+        });
 
         res.json({ jobId });
       } catch (error: unknown) {

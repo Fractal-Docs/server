@@ -41,16 +41,26 @@ export async function getTaskStatus(id) {
 }
 
 // Worker registration
-export function registerWorker(type, handler) {
-  return new Worker(
+export function registerWorker(
+  type: string,
+  handler: (data: any, job: any) => Promise<any>,
+  onComplete?: (job: any) => Promise<void>
+) {
+  const worker = new Worker(
     "tasks",
     async (job) => {
       if (job.name === type) {
-        return handler(job.data, job);
+        const output = await handler(job.data, job);
+        if (onComplete) {
+          await onComplete(output);
+        }
+        return output;
       }
     },
     { connection }
   );
+
+  return worker;
 }
 
 export { events };
