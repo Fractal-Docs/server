@@ -42,7 +42,6 @@ export function getOrigin(req, res) {
   const origin = req.get("origin") || req.headers.host || "";
   let normalizedOrigin;
   try {
-    console.log("Origin:", origin);
     const url = new URL(
       origin.startsWith("http") ? origin : `https://${origin}`
     );

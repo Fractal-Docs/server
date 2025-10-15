@@ -76,14 +76,7 @@ Format the response in HTML with proper headings and structure for display in a 
     const systemPrompt = `
 You are a technical product manager creating release documentation. Always respond in well-formatted HTML.
 `;
-    const { model, reason, estimatedTokens } = chooseModel(
-      "release",
-      systemPrompt,
-      prompt,
-      0
-    );
-    console.log(reason);
-    console.log("Estimated Tokens:", estimatedTokens);
+    const { model } = chooseModel("release", systemPrompt, prompt, 0);
 
     const provider = getAIProvider(model);
     const content = await provider.generateCompletion(
@@ -125,15 +118,7 @@ ${releaseDocument}
     const systemPrompt = `
 You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.
 `;
-    const { model, reason, estimatedTokens } = chooseModel(
-      "role",
-      systemPrompt,
-      prompt,
-      0,
-      role
-    );
-    console.log(reason);
-    console.log("Estimated Tokens:", estimatedTokens);
+    const { model } = chooseModel("role", systemPrompt, prompt, 0, role);
 
     const provider = getAIProvider(model);
     const content = await provider.generateCompletion(

@@ -60,14 +60,7 @@ export async function prepareDocumentation(
           ? `${businessContext}\n\nChanges:\n${code}\n\nGenerate documentation for the changes provided. The output must be formatted clearly in Markdown and should explain both the business purpose and the technical implementation clearly.`
           : "";
 
-    const { model, reason, estimatedTokens } = chooseModel(
-      docType,
-      developerPrompt,
-      userPrompt,
-      0
-    );
-    console.log(reason);
-    console.log("Estimated Tokens:", estimatedTokens);
+    const { model } = chooseModel(docType, developerPrompt, userPrompt, 0);
 
     return {
       developerPrompt,
