@@ -14,6 +14,9 @@ import { z } from "zod";
 const DOC_TYPES = ["overview", "cfg", "delta"] as const;
 type DocType = (typeof DOC_TYPES)[number];
 
+const JOB_TYPES = ["generate", "analyze"] as const;
+type JobType = (typeof JOB_TYPES)[number];
+
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -131,6 +134,7 @@ export const enqueuedTasks = pgTable("enqueued_tasks", {
   jobId: text("job_id").notNull().primaryKey(),
   branch: text("branch").notNull(),
   repoId: text("repo_id").notNull(),
+  type: text("type").$type<JobType>().notNull(),
   status: text("status").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -259,10 +263,12 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
     jobId: true,
     branch: true,
     repoId: true,
+    type: true,
     status: true,
   })
   .extend({
     jobId: z.string().min(1, "Job ID is required"),
+    type: z.enum(JOB_TYPES),
     branch: z.string().min(1, "Branch is required"),
     repoId: z.string().min(1, "Repository is required"),
   });

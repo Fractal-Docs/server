@@ -20,7 +20,7 @@ const queue = new Queue("tasks", { connection });
 const events = new QueueEvents("tasks", { connection });
 
 // Add a job
-export async function enqueueTask(type, data) {
+export async function enqueueTask(type, data?: Record<string, any>) {
   const job = await queue.add(type, data, { jobId: uuid() });
   return job.id;
 }

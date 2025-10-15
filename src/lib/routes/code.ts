@@ -11,6 +11,7 @@ import {
   visualizeControlFlowGraphs,
 } from "../cfg-analyzer";
 import { getParams } from "../helpers";
+import { enqueueTask, registerWorker } from "../task-manager";
 
 async function getRepoById(id: string, res) {
   const data = await storage.getRepo(id);
@@ -215,71 +216,100 @@ export function codeRoutes(app: Express) {
         }
 
         // Process each file
-        for (const file of repoContent) {
-          try {
-            const extension = extname(file.path).toLowerCase();
+        registerWorker(
+          "analyzeRepo",
+          async (_, job) => {
+            for (const file of repoContent) {
+              try {
+                const extension = extname(file.path).toLowerCase();
 
-            // Process the file content and generate embeddings
-            const { chunks, embeddings } = await processFileContent(
-              file.content
-            );
+                // Process the file content and generate embeddings
+                const { chunks, embeddings } = await processFileContent(
+                  file.content
+                );
 
-            // Store each chunk with its embedding in vector storage
-            for (let i = 0; i < chunks.length; i++) {
-              const vectorId = `${repo_id}-${branch}-${file.path}-${i}`;
-              await vectorStorage.storeEmbedding(vectorId, embeddings[i], {
-                repoId: repo_id,
-                filePath: file.path,
-                branch,
-                fileId: i,
-                language: extension.slice(1) || "text",
-                lastModified: new Date().toISOString(),
-              });
+                // Store each chunk with its embedding in vector storage
+                for (let i = 0; i < chunks.length; i++) {
+                  const vectorId = `${repo_id}-${branch}-${file.path}-${i}`;
+                  await vectorStorage.storeEmbedding(vectorId, embeddings[i], {
+                    repoId: repo_id,
+                    filePath: file.path,
+                    branch,
+                    fileId: i,
+                    language: extension.slice(1) || "text",
+                    lastModified: new Date().toISOString(),
+                  });
+                }
+
+                // Attempt to get existing file, handle if it doesn't exist
+                let repoFile;
+                try {
+                  repoFile = await storage.getRepoFile(
+                    repo_id,
+                    file.path,
+                    branch
+                  );
+                } catch (error: any) {
+                  console.log(
+                    `File ${file.path} not found in the database, will create it. Error: ${error.message}`
+                  );
+                }
+
+                if (repoFile) {
+                  // Update the file in database
+                  await storage.updateRepoFile(repoFile.id, branch, {
+                    content: file.content,
+                    updatedAt: new Date(),
+                    metadata: {
+                      size: file.content.length,
+                      language: extension.slice(1) || "text",
+                    },
+                  });
+                } else {
+                  await storage.createRepoFile({
+                    repoId: repo_id,
+                    filePath: file.path,
+                    content: file.content,
+                    branch,
+                    metadata: {
+                      size: file.content.length,
+                      language: extension.slice(1) || "text",
+                    },
+                  });
+                }
+
+                const index = repoContent.findIndex(
+                  (f) => f.path === file.path
+                );
+                console.log(
+                  "File analyzed:",
+                  file.path,
+                  `${index + 1}/${repoContent.length}`
+                );
+              } catch (fileError) {
+                console.error(`Error processing file ${file.path}:`, fileError);
+              }
             }
-
-            // Attempt to get existing file, handle if it doesn't exist
-            let repoFile;
-            try {
-              repoFile = await storage.getRepoFile(repo_id, file.path, branch);
-            } catch (error: any) {
-              console.log(
-                `File ${file.path} not found in the database, will create it. Error: ${error.message}`
-              );
-            }
-
-            if (repoFile) {
-              // Update the file in database
-              await storage.updateRepoFile(repoFile.id, branch, {
-                content: file.content,
-                updatedAt: new Date(),
-                metadata: {
-                  size: file.content.length,
-                  language: extension.slice(1) || "text",
-                },
-              });
-            } else {
-              await storage.createRepoFile({
-                repoId: repo_id,
-                filePath: file.path,
-                content: file.content,
-                branch,
-                metadata: {
-                  size: file.content.length,
-                  language: extension.slice(1) || "text",
-                },
-              });
-            }
-
-            const index = repoContent.findIndex((f) => f.path === file.path);
-            console.log(
-              "File analyzed:",
-              file.path,
-              `${index + 1}/${repoContent.length}`
-            );
-          } catch (fileError) {
-            console.error(`Error processing file ${file.path}:`, fileError);
+            return { id: job.id };
+          },
+          async ({ id }) => {
+            await storage.removeJob(id);
           }
+        );
+
+        const jobId = await enqueueTask("analyzeRepo");
+
+        if (jobId) {
+          await storage.addJob({
+            jobId,
+            repoId: repo_id,
+            type: "analyze",
+            branch,
+            status: "pending",
+          });
         }
+
+        res.json({ jobId });
 
         res.json({ success: true, message: "Repository analysis completed" });
       } catch (error: unknown) {
@@ -333,8 +363,6 @@ export function codeRoutes(app: Express) {
           content: file.content || "",
         }));
 
-        console.log("Generating CFG for", fileContents.length, "files");
-
         // Generate Call Graph and Control Flow Graph
         const cfgResult = await generateCFG(fileContents);
 
@@ -378,8 +406,6 @@ export function codeRoutes(app: Express) {
                 prompts: {},
               },
             });
-
-        console.log("CFG generated and stored");
 
         res.json({
           success: true,

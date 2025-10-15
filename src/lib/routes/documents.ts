@@ -49,17 +49,12 @@ export function documentsRoutes(app: Express) {
           return;
         }
 
-        console.log("Relevant files found:", relevantFiles.length);
-
         // Try to get CFG data if it exists
         let cfgContent = "";
         try {
           const cfgDocs = await storage.getRepoDocsByBranch(repo_id, branch);
           const cfgDoc = cfgDocs.find((doc) => doc.docType === "cfg");
           if (cfgDoc) {
-            console.log(
-              "CFG data found, including in documentation generation"
-            );
             cfgContent = cfgDoc.content;
           }
         } catch (error: any) {
@@ -76,8 +71,6 @@ export function documentsRoutes(app: Express) {
               `File: ${file!.filePath}\n\n${JSON.stringify(file!.metadata, null, 2)}\n\nContent:\n${file!.content || "No content available"}`
           )
           .join("\n\n");
-
-        console.log("File contents extracted");
 
         // If we have CFG data, include it with file contents
         const codeWithCfg = cfgContent
@@ -136,12 +129,11 @@ export function documentsRoutes(app: Express) {
           await storage.addJob({
             jobId,
             repoId: repo_id,
+            type: "generate",
             branch,
             status: "pending",
           });
         }
-
-        console.log(`Job ID: ${jobId}`);
 
         res.json({ jobId });
       } catch (error: unknown) {
@@ -263,6 +255,16 @@ export function documentsRoutes(app: Express) {
           userPrompt,
           model,
         });
+
+        if (jobId) {
+          await storage.addJob({
+            jobId,
+            repoId: repo_id,
+            type: "generate",
+            branch,
+            status: "pending",
+          });
+        }
 
         res.json({ jobId });
       } catch (error: unknown) {
