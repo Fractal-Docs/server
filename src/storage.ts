@@ -120,6 +120,7 @@ export interface IStorage {
   getJob(jobId: string): Promise<EnqueuedTask | null>;
   addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask>;
   removeJob(jobId: string): Promise<void>;
+  getJobsByBranch(repoId: string, branch: string): Promise<EnqueuedTask[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -707,6 +708,24 @@ export class DatabaseStorage implements IStorage {
   async removeJob(jobId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       await db.delete(enqueuedTasks).where(eq(enqueuedTasks.jobId, jobId));
+    });
+  }
+
+  async getJobsByBranch(
+    repoId: string,
+    branch: string
+  ): Promise<EnqueuedTask[]> {
+    return this.handleDatabaseOperation(async () => {
+      const jobs = await db
+        .select()
+        .from(enqueuedTasks)
+        .where(
+          and(
+            eq(enqueuedTasks.repoId, repoId),
+            eq(enqueuedTasks.branch, branch)
+          )
+        );
+      return jobs;
     });
   }
 }

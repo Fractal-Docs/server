@@ -274,24 +274,6 @@ export function documentsRoutes(app: Express) {
     }
   );
 
-  app.get(
-    "/api/organization/:org_id/repos/:repo_id/docs_status/:job_id",
-    async (req, res) => {
-      try {
-        const status = await getTaskStatus(req.params.job_id);
-        if (!status) {
-          res.status(404).json({ error: "Not found" });
-          return;
-        }
-        res.json(status);
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : "Failed to get task status";
-        res.status(500).json({ error: message });
-      }
-    }
-  );
-
   app.get("/api/organization/:org_id/repos/:repo_id/docs", async (req, res) => {
     try {
       const { org_id, repo_id, branch } = getParams(req, res, [
@@ -336,6 +318,61 @@ export function documentsRoutes(app: Express) {
       res.status(500).json({ error: message });
     }
   });
+
+  // Check for any job
+  app.get(
+    "/api/organization/:org_id/repos/:repo_id/docs_status",
+    async (req, res) => {
+      try {
+        const { org_id, repo_id, branch } = getParams(req, res, [
+          "org_id",
+          "repo_id",
+          "branch",
+        ]);
+        const organization = await storage.getOrganization(org_id);
+        if (!organization) {
+          res.status(404).json({ error: "Organization not found" });
+          return;
+        }
+        const repo = await getRepoById(repo_id, res);
+        if (!repo) {
+          res.status(404).json({ error: "Repo not found" });
+          return;
+        } else if (repo.organizationId !== organization.id) {
+          res.status(403).json({ error: "Repo not part of organization" });
+          return;
+        }
+        const jobs = await storage.getJobsByBranch(repo_id, branch);
+
+        res.json(jobs);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch repository documentation";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
+
+  // Check for specific job
+  app.get(
+    "/api/organization/:org_id/repos/:repo_id/docs_status/:job_id",
+    async (req, res) => {
+      try {
+        const status = await getTaskStatus(req.params.job_id);
+        if (!status) {
+          res.status(404).json({ error: "Not found" });
+          return;
+        }
+        res.json(status);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "Failed to get task status";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
 
   app.get("/api/organization/:org_id/recent-documents", async (req, res) => {
     try {
