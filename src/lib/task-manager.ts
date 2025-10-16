@@ -44,17 +44,26 @@ export async function getTaskStatus(id) {
 export function registerWorker(
   type: string,
   handler: (data: any, job: any) => Promise<any>,
-  onComplete?: (job: any) => Promise<void>
+  onComplete?: (job: any) => Promise<void>,
+  onError?: (error: unknown, job: any) => Promise<void>
 ) {
   const worker = new Worker(
     "tasks",
     async (job) => {
       if (job.name === type) {
-        const output = await handler(job.data, job);
-        if (onComplete) {
-          await onComplete(output);
+        try {
+          const output = await handler(job.data, job);
+          if (onComplete) {
+            await onComplete(output);
+          }
+          return output;
+        } catch (error) {
+          if (onError) {
+            await onError(error, job);
+          }
+          console.error(`Error processing job ${job.id}:`, error);
+          throw error;
         }
-        return output;
       }
     },
     { connection }

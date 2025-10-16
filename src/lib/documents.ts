@@ -3,7 +3,8 @@ import { chooseModel, getAIProvider, ModelType } from "./ai-providers";
 import { registerWorker } from "./task-manager";
 
 export const registerGenerateWorker = (
-  callback: (data: Record<string, any>) => Promise<void>
+  onSuccess: (data: Record<string, any>) => Promise<void>,
+  onError?: (error: unknown, job: any) => Promise<void>
 ) =>
   registerWorker(
     "generateDocumentation",
@@ -33,7 +34,8 @@ export const registerGenerateWorker = (
       };
       return { content, prompts, jobId: job.id };
     },
-    callback
+    onSuccess,
+    onError
   );
 
 export async function prepareDocumentation(
