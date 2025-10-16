@@ -294,6 +294,12 @@ export function codeRoutes(app: Express) {
           },
           async ({ id }) => {
             await storage.removeJob(id);
+          },
+          async (error, { id }) => {
+            await storage.updateJob(id, {
+              status: "error",
+              message: error as string,
+            });
           }
         );
 
@@ -306,6 +312,7 @@ export function codeRoutes(app: Express) {
             type: "analyze",
             branch,
             status: "pending",
+            message: "Job started",
           });
         }
 

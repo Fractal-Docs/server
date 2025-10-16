@@ -44,7 +44,7 @@ export async function getTaskStatus(id) {
 export function registerWorker(
   type: string,
   handler: (data: any, job: any) => Promise<any>,
-  onComplete?: (job: any) => Promise<void>,
+  onComplete?: (output: Record<string, any> & { id: string }) => Promise<void>,
   onError?: (error: unknown, job: any) => Promise<void>
 ) {
   const worker = new Worker(

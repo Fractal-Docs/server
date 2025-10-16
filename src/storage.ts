@@ -119,6 +119,10 @@ export interface IStorage {
   ): Promise<UserOrganization>;
   getJob(jobId: string): Promise<EnqueuedTask | null>;
   addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask>;
+  updateJob(
+    jobId: string,
+    job: Partial<InsertEnqueuedTask>
+  ): Promise<EnqueuedTask>;
   removeJob(jobId: string): Promise<void>;
   getJobsByBranch(repoId: string, branch: string): Promise<EnqueuedTask[]>;
 }
@@ -700,6 +704,20 @@ export class DatabaseStorage implements IStorage {
       const [enqueuedTask] = await db
         .insert(enqueuedTasks)
         .values(job)
+        .returning();
+      return enqueuedTask;
+    });
+  }
+
+  async updateJob(
+    jobId: string,
+    job: Partial<InsertEnqueuedTask>
+  ): Promise<EnqueuedTask> {
+    return this.handleDatabaseOperation(async () => {
+      const [enqueuedTask] = await db
+        .update(enqueuedTasks)
+        .set(job)
+        .where(eq(enqueuedTasks.jobId, jobId))
         .returning();
       return enqueuedTask;
     });

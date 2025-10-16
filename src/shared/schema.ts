@@ -136,6 +136,7 @@ export const enqueuedTasks = pgTable("enqueued_tasks", {
   repoId: text("repo_id").notNull(),
   type: text("type").$type<JobType>().notNull(),
   status: text("status").notNull(),
+  message: text("message").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -265,6 +266,7 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
     repoId: true,
     type: true,
     status: true,
+    message: true,
   })
   .extend({
     jobId: z.string().min(1, "Job ID is required"),
