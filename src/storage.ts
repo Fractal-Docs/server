@@ -26,6 +26,7 @@ import {
   EnqueuedTask,
   InsertEnqueuedTask,
   enqueuedTasks,
+  JobType,
 } from "./shared/schema";
 import { db } from "./db";
 import { eq, like, inArray, and } from "drizzle-orm";
@@ -125,6 +126,11 @@ export interface IStorage {
   ): Promise<EnqueuedTask>;
   removeJob(jobId: string): Promise<void>;
   getJobsByBranch(repoId: string, branch: string): Promise<EnqueuedTask[]>;
+  removeErrorJobsByBranchAndType(
+    repoId: string,
+    branch: string,
+    type: JobType
+  ): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -716,7 +722,7 @@ export class DatabaseStorage implements IStorage {
     return this.handleDatabaseOperation(async () => {
       const [enqueuedTask] = await db
         .update(enqueuedTasks)
-        .set(job)
+        .set({ ...job, updatedAt: new Date() })
         .where(eq(enqueuedTasks.jobId, jobId))
         .returning();
       return enqueuedTask;
@@ -744,6 +750,25 @@ export class DatabaseStorage implements IStorage {
           )
         );
       return jobs;
+    });
+  }
+
+  async removeErrorJobsByBranchAndType(
+    repoId: string,
+    branch: string,
+    type: JobType
+  ): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      await db
+        .delete(enqueuedTasks)
+        .where(
+          and(
+            eq(enqueuedTasks.repoId, repoId),
+            eq(enqueuedTasks.branch, branch),
+            eq(enqueuedTasks.type, type),
+            eq(enqueuedTasks.status, "error")
+          )
+        );
     });
   }
 }

@@ -15,7 +15,7 @@ const DOC_TYPES = ["overview", "cfg", "delta"] as const;
 type DocType = (typeof DOC_TYPES)[number];
 
 const JOB_TYPES = ["generate", "analyze"] as const;
-type JobType = (typeof JOB_TYPES)[number];
+export type JobType = (typeof JOB_TYPES)[number];
 
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
@@ -137,6 +137,7 @@ export const enqueuedTasks = pgTable("enqueued_tasks", {
   type: text("type").$type<JobType>().notNull(),
   status: text("status").notNull(),
   message: text("message").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -267,6 +268,7 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
     type: true,
     status: true,
     message: true,
+    updatedAt: true,
   })
   .extend({
     jobId: z.string().min(1, "Job ID is required"),

@@ -293,7 +293,12 @@ export function codeRoutes(app: Express) {
             return { id: job.id };
           },
           async ({ id }) => {
-            await storage.removeJob(id);
+            await storage.updateJob(id, { status: "completed" });
+            await storage.removeErrorJobsByBranchAndType(
+              repo_id,
+              branch,
+              "analyze"
+            );
           },
           async (error, { id }) => {
             await storage.updateJob(id, {

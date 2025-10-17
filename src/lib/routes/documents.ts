@@ -87,7 +87,14 @@ export function documentsRoutes(app: Express) {
 
         registerGenerateWorker(
           async ({ content, prompts, jobId: id }) => {
-            await storage.removeJob(id);
+            await storage.updateJob(id, {
+              status: "completed",
+            });
+            await storage.removeErrorJobsByBranchAndType(
+              repo_id,
+              branch,
+              "generate"
+            );
             // Store the generated documentation with actual prompts in metadata
             if (repoDoc) {
               await storage.updateRepoDoc(repoDoc.id, {
@@ -227,7 +234,13 @@ export function documentsRoutes(app: Express) {
 
         registerGenerateWorker(
           async ({ content, prompts, jobId: id }) => {
-            await storage.removeJob(id);
+            // update the job to completed and clean up the old error jobs
+            await storage.updateJob(id, { status: "completed" });
+            await storage.removeErrorJobsByBranchAndType(
+              repo_id,
+              branch,
+              "generate"
+            );
             // Store the generated documentation with actual prompts in metadata
             if (repoDoc) {
               await storage.updateRepoDoc(repoDoc.id, {
