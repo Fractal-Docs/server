@@ -27,6 +27,9 @@ import {
   InsertEnqueuedTask,
   enqueuedTasks,
   JobType,
+  InsertRoleDocument,
+  roleDocs,
+  RoleDocument,
 } from "./shared/schema";
 import { db } from "./db";
 import { eq, like, inArray, and } from "drizzle-orm";
@@ -95,6 +98,10 @@ export interface IStorage {
     release: Partial<InsertRelease>
   ): Promise<Release>;
   deleteRelease(releaseId: string): Promise<void>;
+
+  // Role operations
+  createRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>;
+  upsertRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>;
 
   getOrganization(id: number): Promise<Organization | undefined>;
   getOrganizationsByUserId(userId: number): Promise<Organization[]>;
@@ -531,6 +538,31 @@ export class DatabaseStorage implements IStorage {
 
         .returning();
       if (!doc) throw new Error("Repository documentation not found");
+    });
+  }
+
+  async createRoleDoc(role: InsertRoleDocument): Promise<RoleDocument> {
+    return this.handleDatabaseOperation(async () => {
+      const [doc] = await db.insert(roleDocs).values(role).returning();
+      if (!doc) throw new Error("Role documentation not found");
+      return doc;
+    });
+  }
+
+  async upsertRoleDoc(role: InsertRoleDocument): Promise<RoleDocument> {
+    return this.handleDatabaseOperation(async () => {
+      const [doc] = await db
+        .update(roleDocs)
+        .set(role)
+        .where(
+          and(
+            eq(roleDocs.releaseId, role.releaseId),
+            eq(roleDocs.repoId, role.repoId)
+          )
+        )
+        .returning();
+      if (!doc) throw new Error("Role documentation not found");
+      return doc;
     });
   }
 

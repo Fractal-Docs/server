@@ -17,6 +17,16 @@ type DocType = (typeof DOC_TYPES)[number];
 const JOB_TYPES = ["generate", "analyze"] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 
+export const ROLES = [
+  "sales",
+  "marketing",
+  "csm",
+  "revops",
+  "ps",
+  "executive",
+] as const;
+type Role = (typeof ROLES)[number];
+
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -120,14 +130,26 @@ export const releases = pgTable("releases", {
   branch: text("branch").notNull(),
   diffAnalysis: text("diff_analysis").notNull(),
   releaseDocument: text("release_document").notNull(),
-  salesDocument: text("sales_document"),
-  marketingDocument: text("marketing_document"),
-  csmDocument: text("csm_document"),
-  revopsDocument: text("revops_document"),
-  psDocument: text("ps_document"),
-  roleDocuments: jsonb("role_documents"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const roleDocs = pgTable(
+  "role_docs",
+  {
+    releaseId: text("release_id").notNull(),
+    repoId: text("repo_id").notNull(),
+    role: text("role").$type<Role>().notNull(),
+    document: text("doc").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    primaryKey: primaryKey(table.releaseId, table.repoId, table.role),
+    foreignKeys: [
+      { from: table.releaseId, to: releases.releaseId },
+      { from: table.repoId, to: releases.repoId },
+    ],
+  })
+);
 
 // New table for tracking enqueued tasks
 export const enqueuedTasks = pgTable("enqueued_tasks", {
@@ -246,18 +268,26 @@ export const insertReleaseSchema = createInsertSchema(releases)
     branch: true,
     diffAnalysis: true,
     releaseDocument: true,
-    salesDocument: true,
-    marketingDocument: true,
-    csmDocument: true,
-    revopsDocument: true,
-    psDocument: true,
-    roleDocuments: true,
   })
   .extend({
     title: z.string().min(1, "Title is required"),
     prd: z.string().min(1, "PRD content is required"),
     repoId: z.string().min(1, "Repository is required"),
     branch: z.string().min(1, "Branch is required"),
+  });
+
+export const insertRoleDocSchema = createInsertSchema(roleDocs)
+  .pick({
+    repoId: true,
+    releaseId: true,
+    role: true,
+    document: true,
+  })
+  .extend({
+    repoId: z.string().min(1, "Repository is required"),
+    releaseId: z.string().min(1, "Release is required"),
+    role: z.enum(ROLES),
+    document: z.string().min(1, "Document content is required"),
   });
 
 export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
@@ -301,6 +331,8 @@ export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
 export type RepoDoc = typeof repoDocs.$inferSelect;
 export type InsertRelease = z.infer<typeof insertReleaseSchema>;
 export type Release = typeof releases.$inferSelect;
+export type InsertRoleDocument = z.infer<typeof insertRoleDocSchema>;
+export type RoleDocument = typeof roleDocs.$inferSelect;
 
 export type InsertEnqueuedTask = z.infer<typeof insertEnqueuedTaskSchema>;
 export type EnqueuedTask = typeof enqueuedTasks.$inferSelect;

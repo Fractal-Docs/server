@@ -8,6 +8,7 @@ import {
   generateRoleDocumentWithContext,
 } from "../releases";
 import { getParams } from "../helpers";
+import { ROLES } from "src/shared/schema";
 
 export function releaseRoutes(app: Express) {
   app.post("/api/organization/:org_id/releases", async (req, res) => {
@@ -24,16 +25,6 @@ export function releaseRoutes(app: Express) {
 
       const releaseDocument = await generateReleaseDocument(prd, diffAnalysis);
 
-      const salesDocument = await generateRoleDocument(
-        releaseDocument,
-        "sales"
-      );
-      const marketingDocument = await generateRoleDocument(
-        releaseDocument,
-        "marketing"
-      );
-      const csmDocument = await generateRoleDocument(releaseDocument, "csm");
-
       const releaseId = nanoid();
 
       const newRelease = await storage.createRelease({
@@ -44,10 +35,22 @@ export function releaseRoutes(app: Express) {
         branch,
         diffAnalysis,
         releaseDocument,
-        salesDocument,
-        marketingDocument,
-        csmDocument,
       });
+
+      // Save role documents separately to role_docs table
+      for (const role of ROLES) {
+        try {
+          const document = await generateRoleDocument(releaseDocument, role);
+          await storage.createRoleDoc({
+            releaseId,
+            repoId,
+            role,
+            document,
+          });
+        } catch (error) {
+          console.error(`Error generating role document for ${role}`, error);
+        }
+      }
 
       res.json(newRelease);
     } catch (error) {
@@ -127,39 +130,24 @@ export function releaseRoutes(app: Express) {
           return res.status(404).json({ error: "Release not found" });
         }
 
-        const roleDocuments: Record<string, string> = {};
-
         for (const role of selectedRoles) {
           try {
             const document = await generateRoleDocumentWithContext(
               release.releaseDocument,
               role
             );
-            roleDocuments[role] = document;
+            await storage.upsertRoleDoc({
+              releaseId: id,
+              repoId: release.repoId,
+              role,
+              document,
+            });
           } catch (error) {
             console.error(`Error generating document for role ${role}:`, error);
-            roleDocuments[role] =
-              `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
           }
         }
 
-        const updateData: any = {
-          roleDocuments: { ...(release.roleDocuments || {}), ...roleDocuments },
-        };
-
-        if (selectedRoles.includes("csm")) {
-          updateData.csmDocument = roleDocuments.csm;
-        }
-        if (selectedRoles.includes("revops")) {
-          updateData.revopsDocument = roleDocuments.revops;
-        }
-        if (selectedRoles.includes("ps")) {
-          updateData.psDocument = roleDocuments.ps;
-        }
-
-        const updatedRelease = await storage.updateRelease(id, updateData);
-
-        res.json(updatedRelease);
+        res.json({ success: true });
       } catch (error) {
         console.error("Error generating role documents:", error);
         res.status(500).json({
