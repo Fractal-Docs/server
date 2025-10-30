@@ -23,6 +23,10 @@ import {
   type InsertOrganization,
   type UserOrganization,
   type InsertUserOrganization,
+  EnqueuedTask,
+  InsertEnqueuedTask,
+  enqueuedTasks,
+  JobType,
 } from "./shared/schema";
 import { db } from "./db";
 import { eq, like, inArray, and } from "drizzle-orm";
@@ -114,6 +118,19 @@ export interface IStorage {
     organizationId: number,
     role: string
   ): Promise<UserOrganization>;
+  getJob(jobId: string): Promise<EnqueuedTask | null>;
+  addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask>;
+  updateJob(
+    jobId: string,
+    job: Partial<InsertEnqueuedTask>
+  ): Promise<EnqueuedTask>;
+  removeJob(jobId: string): Promise<void>;
+  getJobsByBranch(repoId: string, branch: string): Promise<EnqueuedTask[]>;
+  removeErrorJobsByBranchAndType(
+    repoId: string,
+    branch: string,
+    type: JobType
+  ): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -675,6 +692,83 @@ export class DatabaseStorage implements IStorage {
         .returning();
       if (!userOrg) throw new Error("User organization relationship not found");
       return userOrg;
+    });
+  }
+
+  async getJob(jobId: string): Promise<EnqueuedTask | null> {
+    return this.handleDatabaseOperation(async () => {
+      const [job] = await db
+        .select()
+        .from(enqueuedTasks)
+        .where(eq(enqueuedTasks.jobId, jobId));
+      return job || null;
+    });
+  }
+
+  async addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask> {
+    return this.handleDatabaseOperation(async () => {
+      const [enqueuedTask] = await db
+        .insert(enqueuedTasks)
+        .values(job)
+        .returning();
+      return enqueuedTask;
+    });
+  }
+
+  async updateJob(
+    jobId: string,
+    job: Partial<InsertEnqueuedTask>
+  ): Promise<EnqueuedTask> {
+    return this.handleDatabaseOperation(async () => {
+      const [enqueuedTask] = await db
+        .update(enqueuedTasks)
+        .set({ ...job, updatedAt: new Date() })
+        .where(eq(enqueuedTasks.jobId, jobId))
+        .returning();
+      return enqueuedTask;
+    });
+  }
+
+  async removeJob(jobId: string): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      await db.delete(enqueuedTasks).where(eq(enqueuedTasks.jobId, jobId));
+    });
+  }
+
+  async getJobsByBranch(
+    repoId: string,
+    branch: string
+  ): Promise<EnqueuedTask[]> {
+    return this.handleDatabaseOperation(async () => {
+      const jobs = await db
+        .select()
+        .from(enqueuedTasks)
+        .where(
+          and(
+            eq(enqueuedTasks.repoId, repoId),
+            eq(enqueuedTasks.branch, branch)
+          )
+        );
+      return jobs;
+    });
+  }
+
+  async removeErrorJobsByBranchAndType(
+    repoId: string,
+    branch: string,
+    type: JobType
+  ): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      await db
+        .delete(enqueuedTasks)
+        .where(
+          and(
+            eq(enqueuedTasks.repoId, repoId),
+            eq(enqueuedTasks.branch, branch),
+            eq(enqueuedTasks.type, type),
+            eq(enqueuedTasks.status, "error")
+          )
+        );
     });
   }
 }

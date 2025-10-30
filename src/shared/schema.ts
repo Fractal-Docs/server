@@ -14,6 +14,9 @@ import { z } from "zod";
 const DOC_TYPES = ["overview", "cfg", "delta"] as const;
 type DocType = (typeof DOC_TYPES)[number];
 
+const JOB_TYPES = ["generate", "analyze"] as const;
+export type JobType = (typeof JOB_TYPES)[number];
+
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -126,7 +129,18 @@ export const releases = pgTable("releases", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Existing schemas
+// New table for tracking enqueued tasks
+export const enqueuedTasks = pgTable("enqueued_tasks", {
+  jobId: text("job_id").notNull().primaryKey(),
+  branch: text("branch").notNull(),
+  repoId: text("repo_id").notNull(),
+  type: text("type").$type<JobType>().notNull(),
+  status: text("status").notNull(),
+  message: text("message").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertPrdSchema = createInsertSchema(prds)
   .pick({
     title: true,
@@ -246,6 +260,23 @@ export const insertReleaseSchema = createInsertSchema(releases)
     branch: z.string().min(1, "Branch is required"),
   });
 
+export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
+  .pick({
+    jobId: true,
+    branch: true,
+    repoId: true,
+    type: true,
+    status: true,
+    message: true,
+    updatedAt: true,
+  })
+  .extend({
+    jobId: z.string().min(1, "Job ID is required"),
+    type: z.enum(JOB_TYPES),
+    branch: z.string().min(1, "Branch is required"),
+    repoId: z.string().min(1, "Repository is required"),
+  });
+
 // Organization types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
@@ -270,3 +301,6 @@ export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
 export type RepoDoc = typeof repoDocs.$inferSelect;
 export type InsertRelease = z.infer<typeof insertReleaseSchema>;
 export type Release = typeof releases.$inferSelect;
+
+export type InsertEnqueuedTask = z.infer<typeof insertEnqueuedTaskSchema>;
+export type EnqueuedTask = typeof enqueuedTasks.$inferSelect;

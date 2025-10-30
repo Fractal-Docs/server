@@ -67,8 +67,6 @@ export function githubRoutes(app: Express) {
         }
       );
 
-      console.log("GitHub token response status:", tokenRes.status);
-
       if (!tokenRes.ok) {
         throw new Error(`GitHub token exchange failed: ${tokenRes.statusText}`);
       }
@@ -91,7 +89,6 @@ export function githubRoutes(app: Express) {
       } else {
         throw new Error("User not found");
       }
-      console.log("GitHub organization saved successfully");
 
       res.json({ success: true });
     } catch (error: unknown) {
@@ -120,8 +117,6 @@ export function githubRoutes(app: Express) {
       res.status(404).json({ error: "Organization not found" });
       return;
     }
-
-    console.log("Installation ID:", installation_id);
 
     await storage.updateOrganization(orgSlug, {
       installationId: parseInt(installation_id as string),

@@ -1,13 +1,50 @@
 import { InsertRepoDoc } from "src/shared/schema";
 import { chooseModel, getAIProvider, ModelType } from "./ai-providers";
+import { registerWorker } from "./task-manager";
 
-export async function generateDocumentation(
+export const registerGenerateWorker = (
+  onSuccess: (data: Record<string, any>) => Promise<void>,
+  onError?: (error: unknown, job: any) => Promise<void>
+) =>
+  registerWorker(
+    "generateDocumentation",
+    async (
+      data: {
+        userPrompt: string;
+        developerPrompt: string;
+        model: ModelType;
+      },
+      job
+    ): Promise<{
+      content: string;
+      prompts: Record<string, string>;
+      jobId: string;
+    }> => {
+      const { userPrompt, developerPrompt, model } = data;
+      const provider = getAIProvider(model);
+      const content = await provider.generateCompletion(
+        developerPrompt,
+        userPrompt,
+        model
+      );
+
+      const prompts = {
+        developer: developerPrompt,
+        user: userPrompt,
+      };
+      return { content, prompts, jobId: job.id };
+    },
+    onSuccess,
+    onError
+  );
+
+export async function prepareDocumentation(
   code: string,
   businessContext: string,
   docType: InsertRepoDoc["docType"] = "overview"
 ): Promise<{
-  content: string;
-  prompts: { developer: string; user: string };
+  developerPrompt: string;
+  userPrompt: string;
   model: ModelType;
 }> {
   try {
@@ -25,28 +62,12 @@ export async function generateDocumentation(
           ? `${businessContext}\n\nChanges:\n${code}\n\nGenerate documentation for the changes provided. The output must be formatted clearly in Markdown and should explain both the business purpose and the technical implementation clearly.`
           : "";
 
-    const { model, reason, estimatedTokens } = chooseModel(
-      docType,
-      developerPrompt,
-      userPrompt,
-      0
-    );
-    console.log(reason);
-    console.log("Estimated Tokens:", estimatedTokens);
-    const provider = getAIProvider(model);
-    const content = await provider.generateCompletion(
-      developerPrompt,
-      userPrompt,
-      model
-    );
+    const { model } = chooseModel(docType, developerPrompt, userPrompt, 0);
 
     return {
+      developerPrompt,
+      userPrompt,
       model,
-      content,
-      prompts: {
-        developer: developerPrompt,
-        user: userPrompt,
-      },
     };
   } catch (error: unknown) {
     const errorMessage =

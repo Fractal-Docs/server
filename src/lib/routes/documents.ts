@@ -2,8 +2,9 @@ import type { Express } from "express";
 
 import { storage } from "src/storage";
 import { getParams } from "../helpers";
-import { generateDocumentation } from "../documents";
+import { prepareDocumentation, registerGenerateWorker } from "../documents";
 import { compareBranchToDefaultBranch } from "../github";
+import { enqueueTask, getTaskStatus } from "../task-manager";
 
 async function getRepoById(id: string, res) {
   const data = await storage.getRepo(id);
@@ -48,17 +49,12 @@ export function documentsRoutes(app: Express) {
           return;
         }
 
-        console.log("Relevant files found:", relevantFiles.length);
-
         // Try to get CFG data if it exists
         let cfgContent = "";
         try {
           const cfgDocs = await storage.getRepoDocsByBranch(repo_id, branch);
           const cfgDoc = cfgDocs.find((doc) => doc.docType === "cfg");
           if (cfgDoc) {
-            console.log(
-              "CFG data found, including in documentation generation"
-            );
             cfgContent = cfgDoc.content;
           }
         } catch (error: any) {
@@ -76,8 +72,6 @@ export function documentsRoutes(app: Express) {
           )
           .join("\n\n");
 
-        console.log("File contents extracted");
-
         // If we have CFG data, include it with file contents
         const codeWithCfg = cfgContent
           ? `${fileContents}\n\n${cfgContent}`
@@ -88,34 +82,41 @@ export function documentsRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
-        const {
-          content: documentation,
-          prompts,
-          model,
-        } = await generateDocumentation(codeWithCfg, businessContext);
+        const { developerPrompt, userPrompt, model } =
+          await prepareDocumentation(codeWithCfg, businessContext);
 
-        console.log("Documentation generated");
-
-        // Store the generated documentation with actual prompts in metadata
-        const doc = repoDoc
-          ? await storage.updateRepoDoc(repoDoc.id, {
-              repoId: repo_id,
-              title: `Repo Documentation`,
-              content: documentation,
-              docType: "overview",
-              updatedAt: new Date(),
-              metadata: {
-                generatedFrom: relevantFiles.map((f) => f!.filePath),
-                aiModel: model,
-                timestamp: new Date().toISOString(),
-                prompts,
-              },
-            })
-          : await storage.createRepoDoc({
+        registerGenerateWorker(
+          async ({ content, prompts, jobId: id }) => {
+            await storage.updateJob(id, {
+              status: "completed",
+            });
+            await storage.removeErrorJobsByBranchAndType(
+              repo_id,
+              branch,
+              "generate"
+            );
+            // Store the generated documentation with actual prompts in metadata
+            if (repoDoc) {
+              await storage.updateRepoDoc(repoDoc.id, {
+                repoId: repo_id,
+                title: `Repo Documentation`,
+                content,
+                docType: "overview",
+                updatedAt: new Date(),
+                metadata: {
+                  generatedFrom: relevantFiles.map((f) => f!.filePath),
+                  aiModel: model,
+                  timestamp: new Date().toISOString(),
+                  prompts,
+                },
+              });
+              return;
+            }
+            await storage.createRepoDoc({
               repoId: repo_id,
               branch,
               title: `Repo Documentation`,
-              content: documentation,
+              content,
               docType: "overview",
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filePath),
@@ -124,10 +125,33 @@ export function documentsRoutes(app: Express) {
                 prompts,
               },
             });
+          },
+          async (error, { id }) => {
+            await storage.updateJob(id, {
+              status: "error",
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        );
 
-        console.log("Repo doc created");
+        const jobId = await enqueueTask("generateDocumentation", {
+          developerPrompt,
+          userPrompt,
+          model,
+        });
 
-        res.json(doc);
+        if (jobId) {
+          await storage.addJob({
+            jobId,
+            repoId: repo_id,
+            type: "generate",
+            branch,
+            status: "pending",
+            message: "Job started",
+          });
+        }
+
+        res.json({ jobId });
       } catch (error: unknown) {
         const message =
           error instanceof Error
@@ -205,34 +229,40 @@ export function documentsRoutes(app: Express) {
           ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
           : "";
 
-        const {
-          content: documentation,
-          prompts,
-          model,
-        } = await generateDocumentation(fileContents, businessContext, docType);
+        const { developerPrompt, userPrompt, model } =
+          await prepareDocumentation(fileContents, businessContext);
 
-        console.log("Documentation generated");
-
-        // Store the generated documentation with actual prompts in metadata
-        const doc = repoDoc
-          ? await storage.updateRepoDoc(repoDoc.id, {
-              repoId: repo_id,
-              title: `Delta Documentation: ${branch}`,
-              content: documentation,
-              docType,
-              updatedAt: new Date(),
-              metadata: {
-                generatedFrom: relevantFiles.map((f) => f!.filename),
-                aiModel: model,
-                timestamp: new Date().toISOString(),
-                prompts,
-              },
-            })
-          : await storage.createRepoDoc({
+        registerGenerateWorker(
+          async ({ content, prompts, jobId: id }) => {
+            // update the job to completed and clean up the old error jobs
+            await storage.updateJob(id, { status: "completed" });
+            await storage.removeErrorJobsByBranchAndType(
+              repo_id,
+              branch,
+              "generate"
+            );
+            // Store the generated documentation with actual prompts in metadata
+            if (repoDoc) {
+              await storage.updateRepoDoc(repoDoc.id, {
+                repoId: repo_id,
+                title: `Delta Documentation: ${branch}`,
+                content,
+                docType,
+                updatedAt: new Date(),
+                metadata: {
+                  generatedFrom: relevantFiles.map((f) => f!.filename),
+                  aiModel: model,
+                  timestamp: new Date().toISOString(),
+                  prompts,
+                },
+              });
+              return;
+            }
+            await storage.createRepoDoc({
               repoId: repo_id,
               branch,
               title: `Delta Documentation: ${branch}`,
-              content: documentation,
+              content,
               docType: "delta",
               metadata: {
                 generatedFrom: relevantFiles.map((f) => f!.filename),
@@ -241,14 +271,33 @@ export function documentsRoutes(app: Express) {
                 prompts,
               },
             });
+          },
+          async (error, { id }) => {
+            await storage.updateJob(id, {
+              status: "error",
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        );
 
-        console.log("Documentation stored");
-
-        res.json({
-          success: true,
-          message: "Change documentation generated successfully",
-          doc,
+        const jobId = await enqueueTask("generateDocumentation", {
+          developerPrompt,
+          userPrompt,
+          model,
         });
+
+        if (jobId) {
+          await storage.addJob({
+            jobId,
+            repoId: repo_id,
+            type: "generate",
+            branch,
+            status: "pending",
+            message: "Job started",
+          });
+        }
+
+        res.json({ jobId });
       } catch (error: unknown) {
         const message =
           error instanceof Error
@@ -303,6 +352,61 @@ export function documentsRoutes(app: Express) {
       res.status(500).json({ error: message });
     }
   });
+
+  // Check for any job
+  app.get(
+    "/api/organization/:org_id/repos/:repo_id/docs_status",
+    async (req, res) => {
+      try {
+        const { org_id, repo_id, branch } = getParams(req, res, [
+          "org_id",
+          "repo_id",
+          "branch",
+        ]);
+        const organization = await storage.getOrganization(org_id);
+        if (!organization) {
+          res.status(404).json({ error: "Organization not found" });
+          return;
+        }
+        const repo = await getRepoById(repo_id, res);
+        if (!repo) {
+          res.status(404).json({ error: "Repo not found" });
+          return;
+        } else if (repo.organizationId !== organization.id) {
+          res.status(403).json({ error: "Repo not part of organization" });
+          return;
+        }
+        const jobs = await storage.getJobsByBranch(repo_id, branch);
+
+        res.json(jobs);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch repository documentation";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
+
+  // Check for specific job
+  app.get(
+    "/api/organization/:org_id/repos/:repo_id/docs_status/:job_id",
+    async (req, res) => {
+      try {
+        const status = await getTaskStatus(req.params.job_id);
+        if (!status) {
+          res.status(404).json({ error: "Not found" });
+          return;
+        }
+        res.json(status);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "Failed to get task status";
+        res.status(500).json({ error: message });
+      }
+    }
+  );
 
   app.get("/api/organization/:org_id/recent-documents", async (req, res) => {
     try {

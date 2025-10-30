@@ -24,6 +24,7 @@
     "@octokit/app": "^16.1.0",
     "@octokit/rest": "^22.0.0",
     "@pinecone-database/pinecone": "^6.1.2",
+    "bullmq": "^5.61.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "drizzle-kit": "^0.31.4",
@@ -33,6 +34,7 @@
     "express": "^5.1.0",
     "express-oauth2-jwt-bearer": "^1.7.1",
     "express-session": "^1.18.2",
+    "ioredis": "^5.8.1",
     "js-tiktoken": "^1.0.21",
     "memorystore": "^1.6.7",
     "nanoid": "^5.1.5",
@@ -43,6 +45,7 @@
     "passport-local": "^1.0.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
+    "uuid": "^13.0.0",
     "ws": "^8.18.3",
     "zod": "^4.1.9",
     "zod-validation-error": "^4.0.1"
