@@ -27,6 +27,14 @@ export const ROLES = [
 ] as const
 type Role = (typeof ROLES)[number]
 
+// Define the type for metadata
+export type RepoDocMetadata = {
+  generatedFrom: string[]
+  aiModel: string
+  timestamp: string
+  prompts?: Record<string, string>
+}
+
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -112,7 +120,7 @@ export const repoDocs = pgTable(
     content: text("content").notNull(),
     docType: text("doc_type").$type<DocType>().notNull(),
     branch: text("branch").notNull(),
-    metadata: jsonb("metadata").notNull(), // Additional documentation metadata
+    metadata: jsonb("metadata").$type<RepoDocMetadata>().notNull(), // Typed metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
