@@ -129,7 +129,7 @@ export function documentsRoutes(app: Express) {
           async (error, { id }) => {
             await storage.updateJob(id, {
               status: "error",
-              message: error as string,
+              message: error instanceof Error ? error.message : String(error),
             });
           }
         );
@@ -275,7 +275,7 @@ export function documentsRoutes(app: Express) {
           async (error, { id }) => {
             await storage.updateJob(id, {
               status: "error",
-              message: error as string,
+              message: error instanceof Error ? error.message : String(error),
             });
           }
         );

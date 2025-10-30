@@ -303,7 +303,7 @@ export function codeRoutes(app: Express) {
           async (error, { id }) => {
             await storage.updateJob(id, {
               status: "error",
-              message: error as string,
+              message: error instanceof Error ? error.message : String(error),
             });
           }
         );
@@ -323,7 +323,6 @@ export function codeRoutes(app: Express) {
 
         res.json({ jobId });
 
-        res.json({ success: true, message: "Repository analysis completed" });
       } catch (error: unknown) {
         const message =
           error instanceof Error

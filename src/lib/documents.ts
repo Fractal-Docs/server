@@ -43,8 +43,8 @@ export async function prepareDocumentation(
   businessContext: string,
   docType: InsertRepoDoc["docType"] = "overview"
 ): Promise<{
-  developerPrompt;
-  userPrompt;
+  developerPrompt: string;
+  userPrompt: string;
   model: ModelType;
 }> {
   try {
