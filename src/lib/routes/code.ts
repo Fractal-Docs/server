@@ -322,7 +322,6 @@ export function codeRoutes(app: Express) {
         }
 
         res.json({ jobId });
-
       } catch (error: unknown) {
         const message =
           error instanceof Error
