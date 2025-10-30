@@ -1,29 +1,29 @@
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import { encodingForModel } from "js-tiktoken";
-import { InsertRepoDoc } from "src/shared/schema";
-import { Role } from "./roles";
+import OpenAI from "openai"
+import Anthropic from "@anthropic-ai/sdk"
+import { encodingForModel } from "js-tiktoken"
+import { InsertRepoDoc } from "src/shared/schema"
+import { Role } from "./roles"
 
 export type ModelType =
   | "gpt-4.1"
   | "o3"
   | "gpt-4.1-mini"
   | "claude-sonnet-4-20250514"
-  | "claude-opus-4-20250514";
+  | "claude-opus-4-20250514"
 
 export interface AIProvider {
   generateCompletion(
     systemPrompt: string,
     userPrompt: string,
     model: string
-  ): Promise<string>;
+  ): Promise<string>
 }
 
 class OpenAIProvider implements AIProvider {
-  private client: OpenAI;
+  private client: OpenAI
 
   constructor() {
-    this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   }
 
   async generateCompletion(
@@ -43,21 +43,21 @@ class OpenAIProvider implements AIProvider {
           content: userPrompt,
         },
       ],
-    });
+    })
 
-    const content = response.choices[0].message.content;
+    const content = response.choices[0].message.content
     if (!content) {
-      throw new Error("No content in OpenAI response");
+      throw new Error("No content in OpenAI response")
     }
-    return content;
+    return content
   }
 }
 
 class AnthropicProvider implements AIProvider {
-  private client: Anthropic;
+  private client: Anthropic
 
   constructor() {
-    this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   }
 
   async generateCompletion(
@@ -89,22 +89,22 @@ class AnthropicProvider implements AIProvider {
                 content: userPrompt,
               },
             ],
-          });
+          })
 
-    const content = response.content[0];
+    const content = response.content[0]
     if (content.type !== "text") {
-      throw new Error("Unexpected response type from Anthropic");
+      throw new Error("Unexpected response type from Anthropic")
     }
-    return content.text;
+    return content.text
   }
 }
 
 function isAnthropicModel(model: string): boolean {
-  return model.startsWith("claude-");
+  return model.startsWith("claude-")
 }
 
 function isOpenAIModel(model: string): boolean {
-  return model.startsWith("gpt-") || model.startsWith("o3");
+  return model.startsWith("gpt-") || model.startsWith("o3")
 }
 
 export function getAIProvider(model: ModelType): AIProvider {
@@ -112,25 +112,25 @@ export function getAIProvider(model: ModelType): AIProvider {
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error(
         "ANTHROPIC_API_KEY environment variable is required for Anthropic models"
-      );
+      )
     }
-    return new AnthropicProvider();
+    return new AnthropicProvider()
   } else if (isOpenAIModel(model)) {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error(
         "OPENAI_API_KEY environment variable is required for OpenAI models"
-      );
+      )
     }
-    return new OpenAIProvider();
+    return new OpenAIProvider()
   } else {
-    throw new Error(`Unsupported model: ${model}`);
+    throw new Error(`Unsupported model: ${model}`)
   }
 }
 
 interface ModelChoice {
-  model: ModelType;
-  estimatedTokens: number;
-  reason: string;
+  model: ModelType
+  estimatedTokens: number
+  reason: string
 }
 
 function estimateTokens(
@@ -140,13 +140,13 @@ function estimateTokens(
   maxTokens: number
 ): number {
   try {
-    const enc = encodingForModel("gpt-4.1");
-    const systemTokens = enc.encode(systemPrompt).length;
-    const userTokens = enc.encode(userPrompt).length;
-    return systemTokens + userTokens + maxTokens;
+    const enc = encodingForModel("gpt-4.1")
+    const systemTokens = enc.encode(systemPrompt).length
+    const userTokens = enc.encode(userPrompt).length
+    return systemTokens + userTokens + maxTokens
   } catch {
     // fallback: 1 token ~ 4 chars
-    return Math.ceil((systemPrompt.length + userPrompt.length) / 4) + maxTokens;
+    return Math.ceil((systemPrompt.length + userPrompt.length) / 4) + maxTokens
   }
 }
 
@@ -158,50 +158,50 @@ export function chooseModel(
   role?: Role
 ): ModelChoice {
   // Rough context size = prompt tokens
-  const contextSize = estimateTokens("gpt-4.1", systemPrompt, userPrompt, 0);
+  const contextSize = estimateTokens("gpt-4.1", systemPrompt, userPrompt, 0)
 
-  let model: ModelType = "gpt-4.1-mini";
-  let reason = "Defaulting to gpt-4.1-mini as balanced option.";
+  let model: ModelType = "gpt-4.1-mini"
+  let reason = "Defaulting to gpt-4.1-mini as balanced option."
 
   if (docType === "overview") {
     if (contextSize > 500_000) {
-      model = "gpt-4.1";
+      model = "gpt-4.1"
       reason =
-        "Cold start with very large context (>500k), using GPT-4.1 for 1M token window.";
+        "Cold start with very large context (>500k), using GPT-4.1 for 1M token window."
     } else {
-      model = "gpt-4.1-mini";
+      model = "gpt-4.1-mini"
       reason =
-        "Cold start with mid-size context, using GPT-4.1-mini for cost/performance.";
+        "Cold start with mid-size context, using GPT-4.1-mini for cost/performance."
     }
   }
 
   if (docType === "delta") {
     if (contextSize <= 100_000) {
-      model = "o3";
+      model = "o3"
       reason =
-        "Change doc with ≤100k tokens, using o3 for deep reasoning on diffs.";
+        "Change doc with ≤100k tokens, using o3 for deep reasoning on diffs."
     } else {
-      model = "gpt-4.1";
+      model = "gpt-4.1"
       reason =
-        "Change doc with >100k tokens, using GPT-4.1 to handle larger diffs.";
+        "Change doc with >100k tokens, using GPT-4.1 to handle larger diffs."
     }
   }
 
   if (docType === "release") {
-    model = "gpt-4.1-mini";
+    model = "gpt-4.1-mini"
     reason =
-      "Release doc focuses on product/business logic, GPT-4.1-mini balances detail with efficiency.";
+      "Release doc focuses on product/business logic, GPT-4.1-mini balances detail with efficiency."
   }
 
   if (docType === "role") {
     if (role === "executive") {
-      model = "claude-opus-4-20250514";
+      model = "claude-opus-4-20250514"
       reason =
-        "Executive-facing deliverable, using Claude Opus for highest-quality prose.";
+        "Executive-facing deliverable, using Claude Opus for highest-quality prose."
     } else {
-      model = "claude-sonnet-4-20250514";
+      model = "claude-sonnet-4-20250514"
       reason =
-        "Role-based doc (sales/marketing/etc.), using Claude Sonnet 3.5 for polished language.";
+        "Role-based doc (sales/marketing/etc.), using Claude Sonnet 3.5 for polished language."
     }
   }
 
@@ -210,7 +210,7 @@ export function chooseModel(
     systemPrompt,
     userPrompt,
     maxTokens
-  );
+  )
 
-  return { model, estimatedTokens, reason };
+  return { model, estimatedTokens, reason }
 }

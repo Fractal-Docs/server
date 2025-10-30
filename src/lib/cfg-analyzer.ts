@@ -6,25 +6,25 @@
  * 2. Control Flow Graph - showing the execution flow within functions
  */
 
-import * as ts from "typescript";
+import * as ts from "typescript"
 
 interface CallGraphNode {
-  functionName: string;
-  filePath: string;
-  called: { functionName: string; filePath: string }[];
+  functionName: string
+  filePath: string
+  called: { functionName: string; filePath: string }[]
 }
 
 interface ControlFlowNode {
-  nodeType: string;
-  content: string;
-  children: ControlFlowNode[];
+  nodeType: string
+  content: string
+  children: ControlFlowNode[]
 }
 
 interface CFGResult {
-  callGraph: CallGraphNode[];
+  callGraph: CallGraphNode[]
   controlFlowGraphs: {
-    [key: string]: ControlFlowNode[];
-  };
+    [key: string]: ControlFlowNode[]
+  }
 }
 
 /**
@@ -33,11 +33,11 @@ interface CFGResult {
 export async function generateCFG(
   fileContents: { path: string; content: string }[]
 ): Promise<CFGResult> {
-  const callGraph: CallGraphNode[] = [];
-  const controlFlowGraphs: { [key: string]: ControlFlowNode[] } = {};
+  const callGraph: CallGraphNode[] = []
+  const controlFlowGraphs: { [key: string]: ControlFlowNode[] } = {}
 
   for (const file of fileContents) {
-    const fileExtension = file.path.split(".").pop()?.toLowerCase();
+    const fileExtension = file.path.split(".").pop()?.toLowerCase()
 
     // Only process JavaScript and TypeScript files
     if (fileExtension && ["js", "jsx", "ts", "tsx"].includes(fileExtension)) {
@@ -48,17 +48,17 @@ export async function generateCFG(
           file.content,
           ts.ScriptTarget.Latest,
           true
-        );
+        )
 
         // Analyze the source file and add to results
-        analyzeSourceFile(sourceFile, file.path, callGraph, controlFlowGraphs);
+        analyzeSourceFile(sourceFile, file.path, callGraph, controlFlowGraphs)
       } catch (error) {
-        console.error(`Error processing file ${file.path}:`, error);
+        console.error(`Error processing file ${file.path}:`, error)
       }
     }
   }
 
-  return { callGraph, controlFlowGraphs };
+  return { callGraph, controlFlowGraphs }
 }
 
 function analyzeSourceFile(
@@ -68,7 +68,7 @@ function analyzeSourceFile(
   controlFlowGraphs: { [key: string]: ControlFlowNode[] }
 ) {
   // Visit all nodes in the source file
-  visitNode(sourceFile, sourceFile, filePath, callGraph, controlFlowGraphs);
+  visitNode(sourceFile, sourceFile, filePath, callGraph, controlFlowGraphs)
 }
 
 function visitNode(
@@ -86,7 +86,7 @@ function visitNode(
     ts.isMethodDeclaration(node)
   ) {
     // Get the function name
-    const functionName = getFunctionName(node, sourceFile);
+    const functionName = getFunctionName(node, sourceFile)
 
     if (functionName) {
       // Create a call graph node for this function
@@ -94,27 +94,27 @@ function visitNode(
         functionName,
         filePath,
         called: [],
-      };
+      }
 
       // Find all function calls within this function
-      findFunctionCalls(node, sourceFile, filePath, callGraphNode);
+      findFunctionCalls(node, sourceFile, filePath, callGraphNode)
 
       // Add to the call graph
-      callGraph.push(callGraphNode);
+      callGraph.push(callGraphNode)
 
       // Create a control flow graph for this function
-      const cfgNodes = createControlFlowGraph(node, sourceFile);
+      const cfgNodes = createControlFlowGraph(node, sourceFile)
 
       // Use a unique key for each function
-      const cfgKey = `${filePath}:${functionName}`;
-      controlFlowGraphs[cfgKey] = cfgNodes;
+      const cfgKey = `${filePath}:${functionName}`
+      controlFlowGraphs[cfgKey] = cfgNodes
     }
   }
 
   // Recursively visit all child nodes
   ts.forEachChild(node, (child) =>
     visitNode(child, sourceFile, filePath, callGraph, controlFlowGraphs)
-  );
+  )
 }
 
 function getFunctionName(
@@ -123,26 +123,26 @@ function getFunctionName(
 ): string | undefined {
   // For function declarations, get the name directly
   if (ts.isFunctionDeclaration(node) && node.name) {
-    return node.name.getText(sourceFile);
+    return node.name.getText(sourceFile)
   }
 
   // For method declarations, get the name
   if (ts.isMethodDeclaration(node) && node.name) {
-    return node.name.getText(sourceFile);
+    return node.name.getText(sourceFile)
   }
 
   // For function expressions assigned to variables
   if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
-    const parent = node.parent;
+    const parent = node.parent
 
     // Variable declaration: const foo = function() {}
     if (ts.isVariableDeclaration(parent) && parent.name) {
-      return parent.name.getText(sourceFile);
+      return parent.name.getText(sourceFile)
     }
 
     // Property assignment: obj.foo = function() {}
     if (ts.isPropertyAssignment(parent) && parent.name) {
-      return parent.name.getText(sourceFile);
+      return parent.name.getText(sourceFile)
     }
 
     // Binary expression: obj.foo = function() {}
@@ -151,12 +151,12 @@ function getFunctionName(
       parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
       parent.left
     ) {
-      return parent.left.getText(sourceFile);
+      return parent.left.getText(sourceFile)
     }
   }
 
   // If no name could be determined, use an anonymous identifier
-  return "anonymous_" + node.pos;
+  return "anonymous_" + node.pos
 }
 
 function findFunctionCalls(
@@ -168,26 +168,26 @@ function findFunctionCalls(
   // Check for call expressions (function calls)
   if (ts.isCallExpression(node)) {
     // Get the called function name
-    const calledName = node.expression.getText(sourceFile);
+    const calledName = node.expression.getText(sourceFile)
 
     // Add to the list of called functions
     callGraphNode.called.push({
       functionName: calledName,
       filePath: filePath,
-    });
+    })
   }
 
   // Recursively visit all child nodes
   ts.forEachChild(node, (child) =>
     findFunctionCalls(child, sourceFile, filePath, callGraphNode)
-  );
+  )
 }
 
 function createControlFlowGraph(
   node: ts.Node,
   sourceFile: ts.SourceFile
 ): ControlFlowNode[] {
-  const cfgNodes: ControlFlowNode[] = [];
+  const cfgNodes: ControlFlowNode[] = []
 
   // Process the function body
   if (
@@ -197,15 +197,15 @@ function createControlFlowGraph(
     ts.isMethodDeclaration(node)
   ) {
     // Get the function body
-    const body = node.body;
+    const body = node.body
 
     if (body) {
       // If it's a block, process each statement
       if (ts.isBlock(body)) {
         for (const statement of body.statements) {
-          const cfgNode = processStatement(statement, sourceFile);
+          const cfgNode = processStatement(statement, sourceFile)
           if (cfgNode) {
-            cfgNodes.push(cfgNode);
+            cfgNodes.push(cfgNode)
           }
         }
       }
@@ -215,13 +215,13 @@ function createControlFlowGraph(
           nodeType: "Expression",
           content: body.getText(sourceFile),
           children: [],
-        };
-        cfgNodes.push(cfgNode);
+        }
+        cfgNodes.push(cfgNode)
       }
     }
   }
 
-  return cfgNodes;
+  return cfgNodes
 }
 
 function processStatement(
@@ -235,21 +235,21 @@ function processStatement(
       nodeType: "IfStatement",
       content: `if (${node.expression.getText(sourceFile)})`,
       children: [],
-    };
+    }
 
     // Process the then statement
     if (node.thenStatement) {
       if (ts.isBlock(node.thenStatement)) {
         for (const statement of node.thenStatement.statements) {
-          const childNode = processStatement(statement, sourceFile);
+          const childNode = processStatement(statement, sourceFile)
           if (childNode) {
-            ifNode.children.push(childNode);
+            ifNode.children.push(childNode)
           }
         }
       } else {
-        const childNode = processStatement(node.thenStatement, sourceFile);
+        const childNode = processStatement(node.thenStatement, sourceFile)
         if (childNode) {
-          ifNode.children.push(childNode);
+          ifNode.children.push(childNode)
         }
       }
     }
@@ -260,26 +260,26 @@ function processStatement(
         nodeType: "ElseStatement",
         content: "else",
         children: [],
-      };
+      }
 
       if (ts.isBlock(node.elseStatement)) {
         for (const statement of node.elseStatement.statements) {
-          const childNode = processStatement(statement, sourceFile);
+          const childNode = processStatement(statement, sourceFile)
           if (childNode) {
-            elseNode.children.push(childNode);
+            elseNode.children.push(childNode)
           }
         }
       } else {
-        const childNode = processStatement(node.elseStatement, sourceFile);
+        const childNode = processStatement(node.elseStatement, sourceFile)
         if (childNode) {
-          elseNode.children.push(childNode);
+          elseNode.children.push(childNode)
         }
       }
 
-      ifNode.children.push(elseNode);
+      ifNode.children.push(elseNode)
     }
 
-    return ifNode;
+    return ifNode
   } else if (
     ts.isForStatement(node) ||
     ts.isForInStatement(node) ||
@@ -290,7 +290,7 @@ function processStatement(
       nodeType: "LoopStatement",
       content: node.getText(sourceFile).split("{")[0].trim(),
       children: [],
-    };
+    }
 
     // Process the loop body
     const body =
@@ -298,60 +298,60 @@ function processStatement(
       ts.isForInStatement(node) ||
       ts.isForOfStatement(node)
         ? node.statement
-        : null;
+        : null
 
     if (body) {
       if (ts.isBlock(body)) {
         for (const statement of body.statements) {
-          const childNode = processStatement(statement, sourceFile);
+          const childNode = processStatement(statement, sourceFile)
           if (childNode) {
-            loopNode.children.push(childNode);
+            loopNode.children.push(childNode)
           }
         }
       } else {
-        const childNode = processStatement(body, sourceFile);
+        const childNode = processStatement(body, sourceFile)
         if (childNode) {
-          loopNode.children.push(childNode);
+          loopNode.children.push(childNode)
         }
       }
     }
 
-    return loopNode;
+    return loopNode
   } else if (ts.isWhileStatement(node) || ts.isDoStatement(node)) {
     // Create a loop node
     const loopNode: ControlFlowNode = {
       nodeType: "LoopStatement",
       content: node.getText(sourceFile).split("{")[0].trim(),
       children: [],
-    };
+    }
 
     // Process the loop body
-    const body = node.statement;
+    const body = node.statement
 
     if (body) {
       if (ts.isBlock(body)) {
         for (const statement of body.statements) {
-          const childNode = processStatement(statement, sourceFile);
+          const childNode = processStatement(statement, sourceFile)
           if (childNode) {
-            loopNode.children.push(childNode);
+            loopNode.children.push(childNode)
           }
         }
       } else {
-        const childNode = processStatement(body, sourceFile);
+        const childNode = processStatement(body, sourceFile)
         if (childNode) {
-          loopNode.children.push(childNode);
+          loopNode.children.push(childNode)
         }
       }
     }
 
-    return loopNode;
+    return loopNode
   } else if (ts.isSwitchStatement(node)) {
     // Create a switch node
     const switchNode: ControlFlowNode = {
       nodeType: "SwitchStatement",
       content: `switch (${node.expression.getText(sourceFile)})`,
       children: [],
-    };
+    }
 
     // Process each case clause
     for (const clause of node.caseBlock.clauses) {
@@ -360,34 +360,34 @@ function processStatement(
         nodeType: ts.isCaseClause(clause) ? "CaseClause" : "DefaultClause",
         content: clause.getText(sourceFile).split("{")[0].trim(),
         children: [],
-      };
+      }
 
       // Process statements in this case
       for (const statement of clause.statements) {
-        const childNode = processStatement(statement, sourceFile);
+        const childNode = processStatement(statement, sourceFile)
         if (childNode) {
-          caseNode.children.push(childNode);
+          caseNode.children.push(childNode)
         }
       }
 
-      switchNode.children.push(caseNode);
+      switchNode.children.push(caseNode)
     }
 
-    return switchNode;
+    return switchNode
   } else if (ts.isTryStatement(node)) {
     // Create a try node
     const tryNode: ControlFlowNode = {
       nodeType: "TryStatement",
       content: "try",
       children: [],
-    };
+    }
 
     // Process the try block
     if (node.tryBlock) {
       for (const statement of node.tryBlock.statements) {
-        const childNode = processStatement(statement, sourceFile);
+        const childNode = processStatement(statement, sourceFile)
         if (childNode) {
-          tryNode.children.push(childNode);
+          tryNode.children.push(childNode)
         }
       }
     }
@@ -402,17 +402,17 @@ function processStatement(
             : ""
         }`,
         children: [],
-      };
+      }
 
       // Process statements in the catch block
       for (const statement of node.catchClause.block.statements) {
-        const childNode = processStatement(statement, sourceFile);
+        const childNode = processStatement(statement, sourceFile)
         if (childNode) {
-          catchNode.children.push(childNode);
+          catchNode.children.push(childNode)
         }
       }
 
-      tryNode.children.push(catchNode);
+      tryNode.children.push(catchNode)
     }
 
     // Process the finally block
@@ -421,20 +421,20 @@ function processStatement(
         nodeType: "FinallyClause",
         content: "finally",
         children: [],
-      };
+      }
 
       // Process statements in the finally block
       for (const statement of node.finallyBlock.statements) {
-        const childNode = processStatement(statement, sourceFile);
+        const childNode = processStatement(statement, sourceFile)
         if (childNode) {
-          finallyNode.children.push(childNode);
+          finallyNode.children.push(childNode)
         }
       }
 
-      tryNode.children.push(finallyNode);
+      tryNode.children.push(finallyNode)
     }
 
-    return tryNode;
+    return tryNode
   }
 
   // For other statement types
@@ -454,7 +454,7 @@ function processStatement(
             : "VariableStatement",
       content: node.getText(sourceFile),
       children: [],
-    };
+    }
   }
 
   // For block statements (e.g., standalone blocks with { })
@@ -463,16 +463,16 @@ function processStatement(
       nodeType: "Block",
       content: "{...}",
       children: [],
-    };
+    }
 
     for (const statement of node.statements) {
-      const childNode = processStatement(statement, sourceFile);
+      const childNode = processStatement(statement, sourceFile)
       if (childNode) {
-        blockNode.children.push(childNode);
+        blockNode.children.push(childNode)
       }
     }
 
-    return blockNode;
+    return blockNode
   }
 
   // For nodes we don't handle specifically
@@ -480,64 +480,64 @@ function processStatement(
     nodeType: "Other",
     content: node.getText(sourceFile),
     children: [],
-  };
+  }
 }
 
 /**
  * Visualizes the call graph in a simple text format
  */
 export function visualizeCallGraph(callGraph: CallGraphNode[]): string {
-  let result = "## Call Graph\n\n";
-  result += "```\n";
+  let result = "## Call Graph\n\n"
+  result += "```\n"
 
   for (const node of callGraph) {
-    result += `Function: ${node.functionName} (${node.filePath})\n`;
+    result += `Function: ${node.functionName} (${node.filePath})\n`
     if (node.called.length > 0) {
-      result += "  Calls:\n";
+      result += "  Calls:\n"
       for (const called of node.called) {
-        result += `    → ${called.functionName} (${called.filePath})\n`;
+        result += `    → ${called.functionName} (${called.filePath})\n`
       }
     } else {
-      result += "  Calls: None\n";
+      result += "  Calls: None\n"
     }
-    result += "\n";
+    result += "\n"
   }
 
-  result += "```\n";
-  return result;
+  result += "```\n"
+  return result
 }
 
 /**
  * Visualizes the control flow graph in a simple text format
  */
 export function visualizeControlFlowGraphs(controlFlowGraphs: {
-  [key: string]: ControlFlowNode[];
+  [key: string]: ControlFlowNode[]
 }): string {
-  let result = "## Control Flow Graphs\n\n";
+  let result = "## Control Flow Graphs\n\n"
 
   for (const [key, nodes] of Object.entries(controlFlowGraphs)) {
-    result += `### ${key}\n\n`;
-    result += "```\n";
+    result += `### ${key}\n\n`
+    result += "```\n"
 
     for (const node of nodes) {
-      result += visualizeControlFlowNode(node, 0);
+      result += visualizeControlFlowNode(node, 0)
     }
 
-    result += "```\n\n";
+    result += "```\n\n"
   }
 
-  return result;
+  return result
 }
 
 function visualizeControlFlowNode(
   node: ControlFlowNode,
   indent: number
 ): string {
-  let result = " ".repeat(indent) + `${node.nodeType}: ${node.content}\n`;
+  let result = " ".repeat(indent) + `${node.nodeType}: ${node.content}\n`
 
   for (const child of node.children) {
-    result += visualizeControlFlowNode(child, indent + 2);
+    result += visualizeControlFlowNode(child, indent + 2)
   }
 
-  return result;
+  return result
 }

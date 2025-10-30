@@ -1,6 +1,6 @@
-const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
-const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID;
-const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET;
+const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN
+const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID
+const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET
 
 /**
  * Function to get Auth0 Management API token
@@ -19,21 +19,21 @@ export async function getAuth0AccessToken(): Promise<string> {
         client_id: AUTH0_CLIENT_ID,
         client_secret: AUTH0_CLIENT_SECRET,
       }),
-    });
+    })
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json()
       throw new Error(
         `Authentication failed: ${errorData.error_description || response.statusText}`
-      );
+      )
     }
 
-    const data = await response.json();
-    return data.access_token;
+    const data = await response.json()
+    return data.access_token
   } catch (error: any) {
     throw new Error(
       `Authentication failed: ${error.response?.data?.error_description || error.message}`
-    );
+    )
   }
 }
 
@@ -55,20 +55,20 @@ export async function getUserRoles(
           Authorization: `Bearer ${accessToken}`,
         },
       }
-    );
+    )
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json()
       throw new Error(
         `Failed to retrieve roles: ${errorData.error_description || response.statusText}`
-      );
+      )
     }
 
-    const data = await response.json();
-    return data.map((role: { name: string }) => role.name);
+    const data = await response.json()
+    return data.map((role: { name: string }) => role.name)
   } catch (error: any) {
     throw new Error(
       `Failed to retrieve roles: ${error.response?.data?.error_description || error.message}`
-    );
+    )
   }
 }

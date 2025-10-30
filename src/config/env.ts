@@ -1,30 +1,28 @@
-import { config } from "dotenv";
-import { existsSync } from "fs";
-import { resolve } from "path";
+import { config } from "dotenv"
+import { existsSync } from "fs"
+import { resolve } from "path"
 
 // Determine the current environment
-export const NODE_ENV = process.env.NODE_ENV || "development";
+export const NODE_ENV = process.env.NODE_ENV || "development"
 
 // Load environment-specific configuration
 function loadEnvironmentConfig() {
-  const envFile = `.env.${NODE_ENV}`;
-  const envPath = resolve(process.cwd(), envFile);
+  const envFile = `.env.${NODE_ENV}`
+  const envPath = resolve(process.cwd(), envFile)
 
   // Check if environment-specific file exists
   if (existsSync(envPath)) {
-    config({ path: envPath });
-    console.log(`Loaded environment config from ${envFile}`);
+    config({ path: envPath })
+    console.log(`Loaded environment config from ${envFile}`)
   } else {
     // Fall back to default .env file
-    config();
-    console.error(
-      `Environment file ${envFile} not found, falling back to .env`
-    );
+    config()
+    console.error(`Environment file ${envFile} not found, falling back to .env`)
   }
 }
 
 // Load the configuration
-loadEnvironmentConfig();
+loadEnvironmentConfig()
 
 // Export environment configuration
 export const env = {
@@ -39,25 +37,25 @@ export const env = {
   AUTH0_DOMAIN: process.env.AUTH0_DOMAIN || "",
   AUTH0_CLIENT_ID: process.env.AUTH0_CLIENT_ID || "",
   AUTH0_CLIENT_SECRET: process.env.AUTH0_CLIENT_SECRET || "",
-} as const;
+} as const
 
 // Helper functions
-export const isDevelopment = () => NODE_ENV === "development";
-export const isProduction = () => NODE_ENV === "production";
-export const isTest = () => NODE_ENV === "test";
+export const isDevelopment = () => NODE_ENV === "development"
+export const isProduction = () => NODE_ENV === "production"
+export const isTest = () => NODE_ENV === "test"
 
 // Validate required environment variables
 export function validateEnvironment() {
   // For testing role document generation, only require essential variables
-  const requiredVars = ["DATABASE_URL", "OPENAI_API_KEY"];
+  const requiredVars = ["DATABASE_URL", "OPENAI_API_KEY"]
 
-  const missing = requiredVars.filter((varName) => !process.env[varName]);
+  const missing = requiredVars.filter((varName) => !process.env[varName])
 
   if (missing.length > 0) {
-    console.error("Missing required environment variables:");
-    missing.forEach((varName) => console.error(`  - ${varName}`));
-    process.exit(1);
+    console.error("Missing required environment variables:")
+    missing.forEach((varName) => console.error(`  - ${varName}`))
+    process.exit(1)
   }
 
-  console.log("All required environment variables are set");
+  console.log("All required environment variables are set")
 }

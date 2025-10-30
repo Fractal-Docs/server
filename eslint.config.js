@@ -1,8 +1,16 @@
-import eslint from "@eslint/js";
+import { fileURLToPath } from "node:url"
+import globals from "globals"
+import eslint from "@eslint/js"
+import { FlatCompat } from "@eslint/eslintrc"
 import tseslint from "typescript-eslint";
 import prettierPlugin from "eslint-plugin-prettier";
 import prettierConfig from "eslint-config-prettier";
 import unusedImportsPlugin from "eslint-plugin-unused-imports"
+
+// Needed to adapt legacy configs
+const compat = new FlatCompat({
+  baseDirectory: fileURLToPath(new URL(".", import.meta.url)),
+})
 
 export default [
   // Global ignores
@@ -13,6 +21,12 @@ export default [
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   prettierConfig,
+
+  // Legacy config compatibility
+  ...compat.extends(
+    "plugin:prettier/recommended"
+  ),
+
   {
     plugins: {
       prettier: prettierPlugin,
@@ -39,6 +53,10 @@ export default [
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
+      globals: {
+        ...globals.browser,
+        ...globals.es2021,
+      },
     },
   },
   {

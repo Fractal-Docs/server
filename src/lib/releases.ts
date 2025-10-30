@@ -1,5 +1,5 @@
-import { chooseModel, getAIProvider } from "./ai-providers";
-import { DEFAULT_ROLE_CONTEXTS, Role } from "./roles";
+import { chooseModel, getAIProvider } from "./ai-providers"
+import { DEFAULT_ROLE_CONTEXTS, Role } from "./roles"
 
 export async function analyzeDiff(
   repoId: string,
@@ -14,37 +14,37 @@ export async function analyzeDiff(
           Accept: "application/vnd.github.v3+json",
         },
       }
-    );
+    )
 
     if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.statusText}`);
+      throw new Error(`GitHub API error: ${response.statusText}`)
     }
 
-    const data = await response.json();
+    const data = await response.json()
 
-    let diffSummary = `Comparing main branch to ${branch}:\n\n`;
-    diffSummary += `Files changed: ${data.files?.length || 0}\n`;
-    diffSummary += `Commits: ${data.commits?.length || 0}\n\n`;
+    let diffSummary = `Comparing main branch to ${branch}:\n\n`
+    diffSummary += `Files changed: ${data.files?.length || 0}\n`
+    diffSummary += `Commits: ${data.commits?.length || 0}\n\n`
 
     if (data.files && data.files.length > 0) {
-      diffSummary += "Changed files:\n";
+      diffSummary += "Changed files:\n"
       data.files.forEach((file: any) => {
-        diffSummary += `- ${file.filename} (+${file.additions} -${file.deletions})\n`;
-      });
-      diffSummary += "\n";
+        diffSummary += `- ${file.filename} (+${file.additions} -${file.deletions})\n`
+      })
+      diffSummary += "\n"
     }
 
     if (data.commits && data.commits.length > 0) {
-      diffSummary += "Recent commits:\n";
+      diffSummary += "Recent commits:\n"
       data.commits.slice(0, 10).forEach((commit: any) => {
-        diffSummary += `- ${commit.commit.message.split("\n")[0]}\n`;
-      });
+        diffSummary += `- ${commit.commit.message.split("\n")[0]}\n`
+      })
     }
 
-    return diffSummary;
+    return diffSummary
   } catch (error) {
-    console.error("Error analyzing diff:", error);
-    return `Error analyzing diff: ${error instanceof Error ? error.message : "Unknown error"}`;
+    console.error("Error analyzing diff:", error)
+    return `Error analyzing diff: ${error instanceof Error ? error.message : "Unknown error"}`
   }
 }
 
@@ -71,24 +71,24 @@ ${diffAnalysis}
 5. **Implementation Notes**: Any important technical details
 
 Format the response in HTML with proper headings and structure for display in a web interface.
-`;
+`
 
     const systemPrompt = `
 You are a technical product manager creating release documentation. Always respond in well-formatted HTML.
-`;
-    const { model } = chooseModel("release", systemPrompt, prompt, 0);
+`
+    const { model } = chooseModel("release", systemPrompt, prompt, 0)
 
-    const provider = getAIProvider(model);
+    const provider = getAIProvider(model)
     const content = await provider.generateCompletion(
       systemPrompt,
       prompt,
       model
-    );
+    )
 
-    return content || "Failed to generate release document";
+    return content || "Failed to generate release document"
   } catch (error) {
-    console.error("Error generating release document:", error);
-    return `<p>Error generating release document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
+    console.error("Error generating release document:", error)
+    return `<p>Error generating release document: ${error instanceof Error ? error.message : "Unknown error"}</p>`
   }
 }
 
@@ -96,7 +96,7 @@ export async function generateRoleDocument(
   releaseDocument: string,
   role: Role
 ): Promise<string> {
-  return generateRoleDocumentWithContext(releaseDocument, role);
+  return generateRoleDocumentWithContext(releaseDocument, role)
 }
 
 export async function generateRoleDocumentWithContext(
@@ -104,7 +104,7 @@ export async function generateRoleDocumentWithContext(
   role: Role
 ): Promise<string> {
   try {
-    const roleContext = DEFAULT_ROLE_CONTEXTS[role];
+    const roleContext = DEFAULT_ROLE_CONTEXTS[role]
 
     const prompt = `
 ${roleContext}
@@ -113,23 +113,23 @@ ${roleContext}
 ${releaseDocument}
 
 **Task:** Create a role-specific document that extracts and highlights the information most relevant to this role. Format the response in HTML with proper headings and structure.
-`;
+`
 
     const systemPrompt = `
 You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.
-`;
-    const { model } = chooseModel("role", systemPrompt, prompt, 0, role);
+`
+    const { model } = chooseModel("role", systemPrompt, prompt, 0, role)
 
-    const provider = getAIProvider(model);
+    const provider = getAIProvider(model)
     const content = await provider.generateCompletion(
       systemPrompt,
       prompt,
       model
-    );
+    )
 
-    return content || `Failed to generate ${role} document`;
+    return content || `Failed to generate ${role} document`
   } catch (error) {
-    console.error(`Error generating ${role} document:`, error);
-    return `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`;
+    console.error(`Error generating ${role} document:`, error)
+    return `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`
   }
 }
