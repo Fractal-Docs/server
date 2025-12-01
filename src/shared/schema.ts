@@ -25,7 +25,7 @@ export const ROLES = [
   "ps",
   "executive",
 ] as const
-type Role = (typeof ROLES)[number]
+export type Role = (typeof ROLES)[number]
 
 // Define the type for metadata
 export type RepoDocMetadata = {

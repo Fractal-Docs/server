@@ -1,4 +1,4 @@
-export type Role = "sales" | "marketing" | "csm" | "revops" | "ps" | "executive" // this role is specifically for high quality prose document
+import { Role } from "src/shared/schema"
 
 interface RoleDetails {
   id: Role

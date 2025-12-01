@@ -1,5 +1,6 @@
+import { Role } from "src/shared/schema"
 import { chooseModel, getAIProvider } from "./ai-providers"
-import { DEFAULT_ROLE_CONTEXTS, Role } from "./roles"
+import { DEFAULT_ROLE_CONTEXTS } from "./roles"
 
 export async function analyzeDiff(
   repoId: string,

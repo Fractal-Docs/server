@@ -102,6 +102,8 @@ export interface IStorage {
   // Role operations
   createRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
   upsertRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
+  getRoleDocsForRelease(releaseId: string): Promise<RoleDocument[]>
+  deleteRoleDocsForRelease(releaseId: string): Promise<void>
 
   getOrganization(id: number): Promise<Organization | undefined>
   getOrganizationsByUserId(userId: number): Promise<Organization[]>
@@ -560,6 +562,22 @@ export class DatabaseStorage implements IStorage {
         .returning()
       if (!doc) throw new Error("Role documentation not found")
       return doc
+    })
+  }
+
+  async getRoleDocsForRelease(releaseId: string): Promise<RoleDocument[]> {
+    return this.handleDatabaseOperation(async () => {
+      const docs = await db
+        .select()
+        .from(roleDocs)
+        .where(eq(roleDocs.releaseId, releaseId))
+      return docs
+    })
+  }
+
+  async deleteRoleDocsForRelease(releaseId: string): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      await db.delete(roleDocs).where(eq(roleDocs.releaseId, releaseId))
     })
   }
 
