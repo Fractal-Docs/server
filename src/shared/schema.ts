@@ -133,12 +133,11 @@ export const releases = pgTable("releases", {
   id: serial("id").notNull(),
   releaseId: text("release_id").primaryKey(),
   title: text("title").notNull(),
-  prd: text("prd").notNull(),
   repoId: text("repo_id").notNull(),
   branch: text("branch").notNull(),
-  diffAnalysis: text("diff_analysis").notNull(),
-  releaseDocument: text("release_document").notNull(),
+  content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 })
 
 export const roleDocs = pgTable(
@@ -274,8 +273,7 @@ export const insertReleaseSchema = createInsertSchema(releases)
     prd: true,
     repoId: true,
     branch: true,
-    diffAnalysis: true,
-    releaseDocument: true,
+    content: true,
   })
   .extend({
     title: z.string().min(1, "Title is required"),

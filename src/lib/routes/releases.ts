@@ -23,7 +23,7 @@ export function releaseRoutes(app: Express) {
       const { title, prd, repoId, branch } = req.body
       const diffAnalysis = await analyzeDiff(repoId, branch)
 
-      const releaseDocument = await generateReleaseDocument(prd, diffAnalysis)
+      const content = await generateReleaseDocument(prd, diffAnalysis)
 
       const releaseId = nanoid()
 
@@ -33,14 +33,13 @@ export function releaseRoutes(app: Express) {
         prd,
         repoId,
         branch,
-        diffAnalysis,
-        releaseDocument,
+        content,
       })
 
       // Save role documents separately to role_docs table
       for (const role of ROLES) {
         try {
-          const document = await generateRoleDocument(releaseDocument, role)
+          const document = await generateRoleDocument(content, role)
           await storage.createRoleDoc({
             releaseId,
             repoId,
@@ -141,7 +140,7 @@ export function releaseRoutes(app: Express) {
         for (const role of selectedRoles) {
           try {
             const document = await generateRoleDocumentWithContext(
-              release.releaseDocument,
+              release.content,
               role
             )
             await storage.upsertRoleDoc({
