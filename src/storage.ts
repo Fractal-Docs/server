@@ -30,14 +30,18 @@ import {
   InsertRoleDocument,
   roleDocs,
   RoleDocument,
+  roles,
+  InsertRole,
+  RoleRecord,
+  Role,
 } from "./shared/schema"
 import { db } from "./db"
 import { eq, like, inArray, and } from "drizzle-orm"
 
-type Role = "owner" | "admin" | "member"
+type UserRole = "owner" | "admin" | "member"
 
 interface OrganizationMember extends Omit<User, "themePreferences"> {
-  role: Role
+  role: UserRole
 }
 
 export interface IStorage {
@@ -99,7 +103,18 @@ export interface IStorage {
   ): Promise<Release>
   deleteRelease(releaseId: string): Promise<void>
 
-  // Role operations
+  // Role management operations
+  createRole(role: InsertRole): Promise<RoleRecord>
+  getRole(id: string): Promise<RoleRecord | undefined>
+  getRoleByOrgAndType(
+    organizationId: number,
+    roleType: Role
+  ): Promise<RoleRecord | undefined>
+  getRolesByOrganization(organizationId: number): Promise<RoleRecord[]>
+  updateRole(id: string, role: Partial<InsertRole>): Promise<RoleRecord>
+  deleteRole(id: string): Promise<void>
+
+  // Role document operations
   createRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
   upsertRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
   getRoleDocsForRelease(releaseId: string): Promise<RoleDocument[]>
@@ -540,6 +555,69 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  // Role management operations
+  async createRole(role: InsertRole): Promise<RoleRecord> {
+    return this.handleDatabaseOperation(async () => {
+      const [newRole] = await db.insert(roles).values(role).returning()
+      if (!newRole) throw new Error("Failed to create role")
+      return newRole
+    })
+  }
+
+  async getRole(id: string): Promise<RoleRecord | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [role] = await db.select().from(roles).where(eq(roles.id, id))
+      return role
+    })
+  }
+
+  async getRoleByOrgAndType(
+    organizationId: number,
+    roleType: Role
+  ): Promise<RoleRecord | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [role] = await db
+        .select()
+        .from(roles)
+        .where(
+          and(
+            eq(roles.organizationId, organizationId),
+            eq(roles.roleType, roleType)
+          )
+        )
+      return role
+    })
+  }
+
+  async getRolesByOrganization(organizationId: number): Promise<RoleRecord[]> {
+    return this.handleDatabaseOperation(async () => {
+      const orgRoles = await db
+        .select()
+        .from(roles)
+        .where(eq(roles.organizationId, organizationId))
+      return orgRoles
+    })
+  }
+
+  async updateRole(id: string, role: Partial<InsertRole>): Promise<RoleRecord> {
+    return this.handleDatabaseOperation(async () => {
+      const [updatedRole] = await db
+        .update(roles)
+        .set({ ...role, updatedAt: new Date() })
+        .where(eq(roles.id, id))
+        .returning()
+      if (!updatedRole) throw new Error("Role not found")
+      return updatedRole
+    })
+  }
+
+  async deleteRole(id: string): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      await db.delete(roles).where(eq(roles.id, id))
+    })
+  }
+
+  // Role document operations
   async createRoleDoc(role: InsertRoleDocument): Promise<RoleDocument> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db.insert(roleDocs).values(role).returning()
@@ -556,7 +634,8 @@ export class DatabaseStorage implements IStorage {
         .where(
           and(
             eq(roleDocs.releaseId, role.releaseId),
-            eq(roleDocs.repoId, role.repoId)
+            eq(roleDocs.repoId, role.repoId),
+            eq(roleDocs.roleId, role.roleId)
           )
         )
         .returning()
@@ -677,7 +756,7 @@ export class DatabaseStorage implements IStorage {
         id: member.id,
         email: member.email,
         name: member.name,
-        role: member.role as Role,
+        role: member.role as UserRole,
         userSub: member.userSub,
       }))
     })

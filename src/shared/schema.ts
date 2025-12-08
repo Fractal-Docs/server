@@ -140,17 +140,30 @@ export const releases = pgTable("releases", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 })
 
+export const roles = pgTable("roles", {
+  id: text("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  roleType: text("role_type").$type<Role>().notNull(),
+  context: text("context").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+})
+
 export const roleDocs = pgTable(
   "role_docs",
   {
     releaseId: text("release_id").notNull(),
     repoId: text("repo_id").notNull(),
-    role: text("role").$type<Role>().notNull(),
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
     document: text("doc").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    primaryKey: primaryKey(table.releaseId, table.repoId, table.role),
+    primaryKey: primaryKey(table.releaseId, table.repoId, table.roleId),
     foreignKeys: [
       { from: table.releaseId, to: releases.releaseId },
       { from: table.repoId, to: releases.repoId },
@@ -282,17 +295,31 @@ export const insertReleaseSchema = createInsertSchema(releases)
     branch: z.string().min(1, "Branch is required"),
   })
 
+export const insertRoleSchema = createInsertSchema(roles)
+  .pick({
+    id: true,
+    organizationId: true,
+    roleType: true,
+    context: true,
+  })
+  .extend({
+    id: z.string().min(1, "Role ID is required"),
+    organizationId: z.number().int().positive("Organization ID is required"),
+    roleType: z.enum(ROLES),
+    context: z.string().min(1, "Context is required"),
+  })
+
 export const insertRoleDocSchema = createInsertSchema(roleDocs)
   .pick({
     repoId: true,
     releaseId: true,
-    role: true,
+    roleId: true,
     document: true,
   })
   .extend({
     repoId: z.string().min(1, "Repository is required"),
     releaseId: z.string().min(1, "Release is required"),
-    role: z.enum(ROLES),
+    roleId: z.string().min(1, "Role ID is required"),
     document: z.string().min(1, "Document content is required"),
   })
 
@@ -337,6 +364,8 @@ export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>
 export type RepoDoc = typeof repoDocs.$inferSelect
 export type InsertRelease = z.infer<typeof insertReleaseSchema>
 export type Release = typeof releases.$inferSelect
+export type InsertRole = z.infer<typeof insertRoleSchema>
+export type RoleRecord = typeof roles.$inferSelect
 export type InsertRoleDocument = z.infer<typeof insertRoleDocSchema>
 export type RoleDocument = typeof roleDocs.$inferSelect
 

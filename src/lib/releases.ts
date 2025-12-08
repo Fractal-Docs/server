@@ -1,27 +1,21 @@
-import { Role } from "src/shared/schema"
-import { chooseModel, getAIProvider } from "./ai-providers"
+import { GithubRepo, Organization, Role } from "src/shared/schema"
+import { chooseModel, getAIProvider, ModelType } from "./ai-providers"
 import { DEFAULT_ROLE_CONTEXTS } from "./roles"
+import { compareBranchToDefaultBranch } from "./github"
 
-export async function analyzeDiff(
-  repoId: string,
+export async function createReleaseDiffAnalysis(
+  organization: Organization,
+  repo: GithubRepo,
   branch: string
 ): Promise<string> {
   try {
-    const response = await fetch(
-      `${process.env.GITHUB_API_URL || "https://api.github.com"}/repos/${repoId}/compare/main...${branch}`,
-      {
-        headers: {
-          Authorization: `token ${process.env.GITHUB_TOKEN}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-      }
+    const response = await compareBranchToDefaultBranch(
+      organization,
+      repo,
+      branch
     )
 
-    if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.statusText}`)
-    }
-
-    const data = await response.json()
+    const { data } = response
 
     let diffSummary = `Comparing main branch to ${branch}:\n\n`
     diffSummary += `Files changed: ${data.files?.length || 0}\n`
@@ -33,13 +27,6 @@ export async function analyzeDiff(
         diffSummary += `- ${file.filename} (+${file.additions} -${file.deletions})\n`
       })
       diffSummary += "\n"
-    }
-
-    if (data.commits && data.commits.length > 0) {
-      diffSummary += "Recent commits:\n"
-      data.commits.slice(0, 10).forEach((commit: any) => {
-        diffSummary += `- ${commit.commit.message.split("\n")[0]}\n`
-      })
     }
 
     return diffSummary
@@ -54,7 +41,55 @@ export async function generateReleaseDocument(
   diffAnalysis: string
 ): Promise<string> {
   try {
-    const prompt = `
+    const { model, userPrompt, developerPrompt } =
+      await prepareReleaseDocumentation(prd, diffAnalysis)
+
+    const provider = getAIProvider(model)
+    const content = await provider.generateCompletion(
+      developerPrompt,
+      userPrompt,
+      model
+    )
+
+    return content || "Failed to generate release document"
+  } catch (error) {
+    console.error("Error generating release document:", error)
+    return `<p>Error generating release document: ${error instanceof Error ? error.message : "Unknown error"}</p>`
+  }
+}
+
+export async function generateRoleDocumentWithContext(
+  releaseDocument: string,
+  role: Role,
+  customContext?: string
+): Promise<string> {
+  try {
+    const { model, userPrompt, developerPrompt } =
+      await prepareRoleDocumentation(role, releaseDocument, customContext)
+
+    const provider = getAIProvider(model)
+    const content = await provider.generateCompletion(
+      developerPrompt,
+      userPrompt,
+      model
+    )
+
+    return content || `Failed to generate ${role} document`
+  } catch (error) {
+    console.error(`Error generating ${role} document:`, error)
+    return `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`
+  }
+}
+
+export async function prepareReleaseDocumentation(
+  prd?: string,
+  diffAnalysis?: string
+): Promise<{
+  developerPrompt: string
+  userPrompt: string
+  model: ModelType
+}> {
+  const developerPrompt = `
 You are a technical product manager creating a comprehensive release document.
 
 **PRD (Product Requirements Document):**
@@ -70,67 +105,51 @@ ${diffAnalysis}
 3. **Technical Changes**: Highlight significant technical changes from the diff
 4. **Business Impact**: Explain the business value and user benefits
 5. **Implementation Notes**: Any important technical details
-
-Format the response in HTML with proper headings and structure for display in a web interface.
 `
 
-    const systemPrompt = `
-You are a technical product manager creating release documentation. Always respond in well-formatted HTML.
+  const userPrompt = `
+You are a technical product manager creating release documentation.
 `
-    const { model } = chooseModel("release", systemPrompt, prompt, 0)
 
-    const provider = getAIProvider(model)
-    const content = await provider.generateCompletion(
-      systemPrompt,
-      prompt,
-      model
-    )
+  const { model } = chooseModel("release", developerPrompt, userPrompt, 0)
 
-    return content || "Failed to generate release document"
-  } catch (error) {
-    console.error("Error generating release document:", error)
-    return `<p>Error generating release document: ${error instanceof Error ? error.message : "Unknown error"}</p>`
+  return {
+    developerPrompt,
+    userPrompt,
+    model,
   }
 }
 
-export async function generateRoleDocument(
-  releaseDocument: string,
-  role: Role
-): Promise<string> {
-  return generateRoleDocumentWithContext(releaseDocument, role)
-}
+async function prepareRoleDocumentation(
+  role: Role,
+  customContext?: string,
+  releaseDocument?: string
+): Promise<{
+  developerPrompt: string
+  userPrompt: string
+  model: ModelType
+}> {
+  const roleContext = DEFAULT_ROLE_CONTEXTS[role]
 
-export async function generateRoleDocumentWithContext(
-  releaseDocument: string,
-  role: Role
-): Promise<string> {
-  try {
-    const roleContext = DEFAULT_ROLE_CONTEXTS[role]
-
-    const prompt = `
+  const developerPrompt = `
 ${roleContext}
 
 **Release Document:**
 ${releaseDocument}
 
 **Task:** Create a role-specific document that extracts and highlights the information most relevant to this role. Format the response in HTML with proper headings and structure.
+
+${customContext ? `Use the following information as additional context for this document: ${customContext}` : ""}
 `
 
-    const systemPrompt = `
+  const userPrompt = `
 You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.
 `
-    const { model } = chooseModel("role", systemPrompt, prompt, 0, role)
+  const { model } = chooseModel("role", developerPrompt, userPrompt, 0, role)
 
-    const provider = getAIProvider(model)
-    const content = await provider.generateCompletion(
-      systemPrompt,
-      prompt,
-      model
-    )
-
-    return content || `Failed to generate ${role} document`
-  } catch (error) {
-    console.error(`Error generating ${role} document:`, error)
-    return `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`
+  return {
+    developerPrompt,
+    userPrompt,
+    model,
   }
 }

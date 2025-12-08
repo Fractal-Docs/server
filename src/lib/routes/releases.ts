@@ -2,13 +2,13 @@ import type { Express } from "express"
 import { nanoid } from "nanoid"
 import { storage } from "src/storage"
 import {
-  analyzeDiff,
+  createReleaseDiffAnalysis,
   generateReleaseDocument,
-  generateRoleDocument,
   generateRoleDocumentWithContext,
 } from "../releases"
 import { getParams } from "../helpers"
-import { ROLES } from "src/shared/schema"
+import { ROLES, Role } from "src/shared/schema"
+import { DEFAULT_ROLE_CONTEXTS } from "../roles"
 
 export function releaseRoutes(app: Express) {
   app.post("/api/organization/:org_id/releases", async (req, res) => {
@@ -21,7 +21,17 @@ export function releaseRoutes(app: Express) {
       }
 
       const { title, prd, repoId, branch } = req.body
-      const diffAnalysis = await analyzeDiff(repoId, branch)
+      const repo = await storage.getRepo(repoId)
+      if (!repo) {
+        res.status(404).json({ error: "No repository found" })
+        return
+      }
+
+      const diffAnalysis = await createReleaseDiffAnalysis(
+        organization,
+        repo,
+        branch
+      )
 
       const content = await generateReleaseDocument(prd, diffAnalysis)
 
@@ -36,18 +46,44 @@ export function releaseRoutes(app: Express) {
         content,
       })
 
-      // Save role documents separately to role_docs table
-      for (const role of ROLES) {
-        try {
-          const document = await generateRoleDocument(content, role)
-          await storage.createRoleDoc({
-            releaseId,
-            repoId,
-            role,
-            document,
-          })
-        } catch (error) {
-          console.error(`Error generating role document for ${role}`, error)
+      // Get or create roles for the organization and generate role documents
+      if (repo) {
+        for (const roleType of ROLES) {
+          try {
+            // Get or create role for this organization
+            let role = await storage.getRoleByOrgAndType(
+              repo.organizationId,
+              roleType
+            )
+
+            if (!role) {
+              // Create role with default context if it doesn't exist
+              const roleId = `${repo.organizationId}_${roleType}_${nanoid(10)}`
+              role = await storage.createRole({
+                id: roleId,
+                organizationId: repo.organizationId,
+                roleType: roleType,
+                context: DEFAULT_ROLE_CONTEXTS[roleType],
+              })
+            }
+
+            const document = await generateRoleDocumentWithContext(
+              content,
+              roleType,
+              role.context
+            )
+            await storage.createRoleDoc({
+              releaseId,
+              repoId,
+              roleId: role.id,
+              document,
+            })
+          } catch (error) {
+            console.error(
+              `Error generating role document for ${roleType}`,
+              error
+            )
+          }
         }
       }
 
@@ -126,31 +162,71 @@ export function releaseRoutes(app: Express) {
 
   app.post(
     "/api/organization/:org_id/releases/:id/generate-roles",
-    async (req: any, res: any) => {
+    async (req, res) => {
       try {
-        const { id } = req.params
-        const { roles: selectedRoles } = req.body
+        const { id, org_id } = req.params
+        const { roles: selectedRoleTypes } = req.body
+
+        const orgId = Number(org_id)
+        if (isNaN(orgId)) {
+          res.status(400).json({ error: "Invalid organization ID" })
+          return
+        }
+
+        const organization = await storage.getOrganization(orgId)
+        if (!organization) {
+          res.status(404).json({ error: "Organization not found" })
+          return
+        }
 
         const release = await storage.getRelease(id)
 
         if (!release) {
-          return res.status(404).json({ error: "Release not found" })
+          res.status(404).json({ error: "Release not found" })
+          return
         }
 
-        for (const role of selectedRoles) {
+        for (const roleType of selectedRoleTypes) {
           try {
+            // Validate role type
+            if (!ROLES.includes(roleType as Role)) {
+              console.error(`Invalid role type: ${roleType}`)
+              continue
+            }
+
+            // Get or create role for this organization
+            let role = await storage.getRoleByOrgAndType(
+              orgId,
+              roleType as Role
+            )
+
+            if (!role) {
+              // Create role with default context if it doesn't exist
+              const roleId = `${orgId}_${roleType}_${nanoid(10)}`
+              role = await storage.createRole({
+                id: roleId,
+                organizationId: orgId,
+                roleType: roleType as Role,
+                context: "",
+              })
+            }
+
             const document = await generateRoleDocumentWithContext(
               release.content,
-              role
+              roleType as Role,
+              role.context
             )
             await storage.upsertRoleDoc({
               releaseId: id,
               repoId: release.repoId,
-              role,
+              roleId: role.id,
               document,
             })
           } catch (error) {
-            console.error(`Error generating document for role ${role}:`, error)
+            console.error(
+              `Error generating document for role ${roleType}:`,
+              error
+            )
           }
         }
 
