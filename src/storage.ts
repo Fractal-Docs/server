@@ -116,7 +116,7 @@ export interface IStorage {
 
   // Role document operations
   createRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
-  upsertRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
+  updateRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
   getRoleDocsForRelease(releaseId: string): Promise<RoleDocument[]>
   deleteRoleDocsForRelease(releaseId: string): Promise<void>
 
@@ -528,6 +528,16 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  async getReleaseByBranch(repoId: string, branch: string): Promise<Release> {
+    return this.handleDatabaseOperation(async () => {
+      const [docs] = await db
+        .select()
+        .from(releases)
+        .where(and(eq(releases.repoId, repoId), eq(releases.branch, branch)))
+      return docs
+    })
+  }
+
   async updateRelease(
     releaseId: string,
     updateDoc: Partial<InsertRelease>
@@ -626,7 +636,7 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async upsertRoleDoc(role: InsertRoleDocument): Promise<RoleDocument> {
+  async updateRoleDoc(role: InsertRoleDocument): Promise<RoleDocument> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .update(roleDocs)

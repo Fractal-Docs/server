@@ -86,7 +86,8 @@ export function documentsRoutes(app: Express) {
           await prepareDocumentation(codeWithCfg, businessContext)
 
         registerGenerateWorker(
-          async ({ content, prompts, jobId: id }) => {
+          async ({ content, extra, jobId: id }) => {
+            const { prompts } = extra
             await storage.updateJob(id, {
               status: "completed",
             })
@@ -233,7 +234,8 @@ export function documentsRoutes(app: Express) {
           await prepareDocumentation(fileContents, businessContext)
 
         registerGenerateWorker(
-          async ({ content, prompts, jobId: id }) => {
+          async ({ content, extra, jobId: id }) => {
+            const { prompts } = extra
             // update the job to completed and clean up the old error jobs
             await storage.updateJob(id, { status: "completed" })
             await storage.removeErrorJobsByBranchAndType(

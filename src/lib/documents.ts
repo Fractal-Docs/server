@@ -4,23 +4,25 @@ import { registerWorker } from "./task-manager"
 
 export const registerGenerateWorker = (
   onSuccess: (data: Record<string, any>) => Promise<void>,
-  onError?: (error: unknown, job: any) => Promise<void>
+  onError?: (error: unknown, job: any) => Promise<void>,
+  name = "generateDocumentation"
 ) =>
   registerWorker(
-    "generateDocumentation",
+    name,
     async (
       data: {
         userPrompt: string
         developerPrompt: string
         model: ModelType
+        extra: Record<string, any>
       },
       job
     ): Promise<{
       content: string
-      prompts: Record<string, string>
+      extra: Record<string, any>
       jobId: string
     }> => {
-      const { userPrompt, developerPrompt, model } = data
+      const { userPrompt, developerPrompt, model, extra } = data
       const provider = getAIProvider(model)
       const content = await provider.generateCompletion(
         developerPrompt,
@@ -32,7 +34,8 @@ export const registerGenerateWorker = (
         developer: developerPrompt,
         user: userPrompt,
       }
-      return { content, prompts, jobId: job.id }
+
+      return { content, extra: { prompts, ...extra }, jobId: job.id }
     },
     onSuccess,
     onError

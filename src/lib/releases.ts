@@ -1,5 +1,5 @@
 import { GithubRepo, Organization, Role } from "src/shared/schema"
-import { chooseModel, getAIProvider, ModelType } from "./ai-providers"
+import { chooseModel, ModelType } from "./ai-providers"
 import { DEFAULT_ROLE_CONTEXTS } from "./roles"
 import { compareBranchToDefaultBranch } from "./github"
 
@@ -36,51 +36,6 @@ export async function createReleaseDiffAnalysis(
   }
 }
 
-export async function generateReleaseDocument(
-  prd: string,
-  diffAnalysis: string
-): Promise<string> {
-  try {
-    const { model, userPrompt, developerPrompt } =
-      await prepareReleaseDocumentation(prd, diffAnalysis)
-
-    const provider = getAIProvider(model)
-    const content = await provider.generateCompletion(
-      developerPrompt,
-      userPrompt,
-      model
-    )
-
-    return content || "Failed to generate release document"
-  } catch (error) {
-    console.error("Error generating release document:", error)
-    return `<p>Error generating release document: ${error instanceof Error ? error.message : "Unknown error"}</p>`
-  }
-}
-
-export async function generateRoleDocumentWithContext(
-  releaseDocument: string,
-  role: Role,
-  customContext?: string
-): Promise<string> {
-  try {
-    const { model, userPrompt, developerPrompt } =
-      await prepareRoleDocumentation(role, releaseDocument, customContext)
-
-    const provider = getAIProvider(model)
-    const content = await provider.generateCompletion(
-      developerPrompt,
-      userPrompt,
-      model
-    )
-
-    return content || `Failed to generate ${role} document`
-  } catch (error) {
-    console.error(`Error generating ${role} document:`, error)
-    return `<p>Error generating ${role} document: ${error instanceof Error ? error.message : "Unknown error"}</p>`
-  }
-}
-
 export async function prepareReleaseDocumentation(
   prd?: string,
   diffAnalysis?: string
@@ -90,26 +45,26 @@ export async function prepareReleaseDocumentation(
   model: ModelType
 }> {
   const developerPrompt = `
-You are a technical product manager creating a comprehensive release document.
+    You are a technical product manager creating a comprehensive release document.
 
-**PRD (Product Requirements Document):**
-${prd}
+    **PRD (Product Requirements Document):**
+    ${prd}
 
-**Code Changes Analysis:**
-${diffAnalysis}
+    **Code Changes Analysis:**
+    ${diffAnalysis}
 
-**Task:** Create a comprehensive release document that combines the PRD requirements with the actual code changes. The document should:
+    **Task:** Create a comprehensive release document that combines the PRD requirements with the actual code changes. The document should:
 
-1. **Release Overview**: Summarize what's being released
-2. **Key Features**: List the main features and improvements
-3. **Technical Changes**: Highlight significant technical changes from the diff
-4. **Business Impact**: Explain the business value and user benefits
-5. **Implementation Notes**: Any important technical details
-`
+    1. **Release Overview**: Summarize what's being released
+    2. **Key Features**: List the main features and improvements
+    3. **Technical Changes**: Highlight significant technical changes from the diff
+    4. **Business Impact**: Explain the business value and user benefits
+    5. **Implementation Notes**: Any important technical details
+  `
 
   const userPrompt = `
-You are a technical product manager creating release documentation.
-`
+    You are a technical product manager creating release documentation.
+  `
 
   const { model } = chooseModel("release", developerPrompt, userPrompt, 0)
 
@@ -120,7 +75,7 @@ You are a technical product manager creating release documentation.
   }
 }
 
-async function prepareRoleDocumentation(
+export async function prepareRoleDocumentation(
   role: Role,
   customContext?: string,
   releaseDocument?: string
@@ -132,19 +87,19 @@ async function prepareRoleDocumentation(
   const roleContext = DEFAULT_ROLE_CONTEXTS[role]
 
   const developerPrompt = `
-${roleContext}
+    ${roleContext}
 
-**Release Document:**
-${releaseDocument}
+    **Release Document:**
+    ${releaseDocument}
 
-**Task:** Create a role-specific document that extracts and highlights the information most relevant to this role. Format the response in HTML with proper headings and structure.
+    **Task:** Create a role-specific document that extracts and highlights the information most relevant to this role. Format the response in HTML with proper headings and structure.
 
-${customContext ? `Use the following information as additional context for this document: ${customContext}` : ""}
-`
+    ${customContext ? `Use the following information as additional context for this document: ${customContext}` : ""}
+  `
 
   const userPrompt = `
-You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.
-`
+    You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.
+  `
   const { model } = chooseModel("role", developerPrompt, userPrompt, 0, role)
 
   return {

@@ -14,7 +14,7 @@ import { z } from "zod"
 const DOC_TYPES = ["overview", "cfg", "delta"] as const
 type DocType = (typeof DOC_TYPES)[number]
 
-const JOB_TYPES = ["generate", "analyze"] as const
+const JOB_TYPES = ["generate", "analyze", "release", "role"] as const
 export type JobType = (typeof JOB_TYPES)[number]
 
 export const ROLES = [
@@ -283,14 +283,13 @@ export const insertReleaseSchema = createInsertSchema(releases)
   .pick({
     releaseId: true,
     title: true,
-    prd: true,
     repoId: true,
     branch: true,
     content: true,
+    updatedAt: true,
   })
   .extend({
     title: z.string().min(1, "Title is required"),
-    prd: z.string().min(1, "PRD content is required"),
     repoId: z.string().min(1, "Repository is required"),
     branch: z.string().min(1, "Branch is required"),
   })
