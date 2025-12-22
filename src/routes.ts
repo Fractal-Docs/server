@@ -6,12 +6,14 @@ import { authRoutes } from "./lib/routes/auth"
 import { releaseRoutes } from "./lib/routes/releases"
 import { organizationRoutes } from "./lib/routes/organizations"
 import { documentsRoutes } from "./lib/routes/documents"
+import { roleRoutes } from "./lib/routes/roles"
 
 export async function registerProtectedRoutes(app: Express): Promise<void> {
   prdRoutes(app)
   githubRoutes(app)
   codeRoutes(app)
   releaseRoutes(app)
+  roleRoutes(app)
   organizationRoutes(app)
   documentsRoutes(app)
   authRoutes(app)
