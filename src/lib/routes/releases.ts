@@ -35,6 +35,10 @@ export function releaseRoutes(app: Express) {
       await storage.removeJobsByBranchAndType(repoId, branch, "role")
 
       const release = await storage.getReleaseByBranch(repoId, branch)
+      // delete old release and role documents (cascade)
+      if (release) {
+        await storage.deleteRelease(release?.releaseId)
+      }
 
       const orgRoles = await storage.getRolesByOrganization(org_id)
 
@@ -101,9 +105,6 @@ export function releaseRoutes(app: Express) {
             "release",
             "error"
           )
-          // delete old release and role documents (cascade)
-          await storage.deleteRelease(release.releaseId)
-
           const releaseId = nanoid()
           await storage.createRelease({
             releaseId,
