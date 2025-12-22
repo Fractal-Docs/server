@@ -3,9 +3,9 @@ import { chooseModel, getAIProvider, ModelType } from "./ai-providers"
 import { registerWorker } from "./task-manager"
 
 export const registerGenerateWorker = (
+  name: string,
   onSuccess: (data: Record<string, any>) => Promise<void>,
-  onError?: (error: unknown, job: any) => Promise<void>,
-  name = "generateDocumentation"
+  onError?: (error: unknown, job: any) => Promise<void>
 ) =>
   registerWorker(
     name,

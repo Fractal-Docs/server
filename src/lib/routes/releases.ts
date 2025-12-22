@@ -10,6 +10,9 @@ import { getParams } from "../helpers"
 import { registerGenerateWorker } from "../documents"
 import { enqueueTask } from "../task-manager"
 
+const RELEASE_GENERATION = "generateReleaseDocumentation"
+const ROLE_DOC_GENERATION = "generateRoleDocumentation"
+
 export function releaseRoutes(app: Express) {
   app.post("/api/organization/:org_id/releases", async (req, res) => {
     try {
@@ -47,6 +50,7 @@ export function releaseRoutes(app: Express) {
       // Register the workers for generating role documentation
       for (let i = 0; i < roles.length; i++) {
         registerGenerateWorker(
+          ROLE_DOC_GENERATION,
           async ({ content, extra, jobId: id }) => {
             const { role, releaseId } = extra
             console.log(
@@ -79,13 +83,13 @@ export function releaseRoutes(app: Express) {
               status: "error",
               message: error instanceof Error ? error.message : String(error),
             })
-          },
-          "generateRoleDocumentation"
+          }
         )
       }
 
       // Register the worker for generating release documentation
       registerGenerateWorker(
+        RELEASE_GENERATION,
         async ({ content, jobId: id }) => {
           await storage.updateJob(id, {
             status: "completed",
@@ -136,7 +140,7 @@ export function releaseRoutes(app: Express) {
                 await prepareRoleDocumentation(roleType, roleContext, content)
 
               // enqueue a task for each role that needs generation
-              const jobId = await enqueueTask("generateRoleDocumentation", {
+              const jobId = await enqueueTask(ROLE_DOC_GENERATION, {
                 developerPrompt,
                 userPrompt,
                 model,
@@ -174,7 +178,7 @@ export function releaseRoutes(app: Express) {
         }
       )
 
-      const jobId = await enqueueTask("generateDocumentation", {
+      const jobId = await enqueueTask(RELEASE_GENERATION, {
         developerPrompt,
         userPrompt,
         model,
