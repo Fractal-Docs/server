@@ -1,17 +1,11 @@
-export type Role =
-  | "sales"
-  | "marketing"
-  | "csm"
-  | "revops"
-  | "ps"
-  | "executive"; // this role is specifically for high quality prose document
+import { Role } from "src/shared/schema"
 
 interface RoleDetails {
-  id: Role;
-  name: string;
-  description: string;
-  icon: string;
-  color: string;
+  id: Role
+  name: string
+  description: string
+  icon: string
+  color: string
 }
 
 export const AVAILABLE_ROLES: RoleDetails[] = [
@@ -54,7 +48,7 @@ export const AVAILABLE_ROLES: RoleDetails[] = [
     icon: "Settings",
     color: "gray",
   },
-];
+]
 
 export const DEFAULT_ROLE_CONTEXTS: Record<Role, string> = {
   sales: `You are analyzing a software release from a Sales perspective. Focus on:
@@ -115,4 +109,4 @@ Create a document specifically for Professional Services with implementation gui
 - Key performance indicators and metrics
 
 Create a document specifically for Executives with financial analysis, market positioning, and strategic planning.`,
-};
+}

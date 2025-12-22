@@ -7,15 +7,36 @@ import {
   primaryKey,
   boolean,
   integer,
-} from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+} from "drizzle-orm/pg-core"
+import { createInsertSchema } from "drizzle-zod"
+import { z } from "zod"
 
-const DOC_TYPES = ["overview", "cfg", "delta"] as const;
-type DocType = (typeof DOC_TYPES)[number];
+const DOC_TYPES = ["overview", "cfg", "delta"] as const
+type DocType = (typeof DOC_TYPES)[number]
 
-const JOB_TYPES = ["generate", "analyze"] as const;
-export type JobType = (typeof JOB_TYPES)[number];
+const JOB_TYPES = ["generate", "analyze", "release", "role"] as const
+export type JobType = (typeof JOB_TYPES)[number]
+
+const STATUS_TYPES = ["pending", "completed", "error"] as const
+export type StatusType = (typeof STATUS_TYPES)[number]
+
+export const ROLES = [
+  "sales",
+  "marketing",
+  "csm",
+  "revops",
+  "ps",
+  "executive",
+] as const
+export type Role = (typeof ROLES)[number]
+
+// Define the type for metadata
+export type RepoDocMetadata = {
+  generatedFrom: string[]
+  aiModel: string
+  timestamp: string
+  prompts?: Record<string, string>
+}
 
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
@@ -24,7 +45,7 @@ export const prds = pgTable("prds", {
   businessContext: text("business_context").notNull(),
   repoId: text("repo_id").notNull(),
   branch: text("branch"),
-});
+})
 
 export const githubRepos = pgTable("github_repos", {
   id: serial("id").primaryKey(),
@@ -37,7 +58,7 @@ export const githubRepos = pgTable("github_repos", {
     .references(() => organizations.id, { onDelete: "cascade" }),
   fileFilterRegex: text("file_filter_regex"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+})
 
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
@@ -50,7 +71,7 @@ export const organizations = pgTable("organizations", {
   accessToken: text("access_token"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+})
 
 export const userOrganizations = pgTable(
   "user_organizations",
@@ -65,7 +86,7 @@ export const userOrganizations = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.organizationId] })]
-);
+)
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -73,7 +94,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email"),
   themePreferences: jsonb("theme_preferences"),
-});
+})
 
 // New tables for repository analysis
 export const repoFiles = pgTable(
@@ -91,7 +112,7 @@ export const repoFiles = pgTable(
   (table) => [
     primaryKey({ columns: [table.repoId, table.filePath, table.branch] }),
   ]
-);
+)
 
 export const repoDocs = pgTable(
   "repo_docs",
@@ -102,44 +123,76 @@ export const repoDocs = pgTable(
     content: text("content").notNull(),
     docType: text("doc_type").$type<DocType>().notNull(),
     branch: text("branch").notNull(),
-    metadata: jsonb("metadata").notNull(), // Additional documentation metadata
+    metadata: jsonb("metadata").$type<RepoDocMetadata>().notNull(), // Typed metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.repoId, table.docType, table.branch] }),
   ]
-);
+)
 
 export const releases = pgTable("releases", {
   id: serial("id").notNull(),
   releaseId: text("release_id").primaryKey(),
   title: text("title").notNull(),
-  prd: text("prd").notNull(),
   repoId: text("repo_id").notNull(),
   branch: text("branch").notNull(),
-  diffAnalysis: text("diff_analysis").notNull(),
-  releaseDocument: text("release_document").notNull(),
-  salesDocument: text("sales_document"),
-  marketingDocument: text("marketing_document"),
-  csmDocument: text("csm_document"),
-  revopsDocument: text("revops_document"),
-  psDocument: text("ps_document"),
-  roleDocuments: jsonb("role_documents"),
+  content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+})
+
+export const roles = pgTable("roles", {
+  id: text("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  roleType: text("role_type").$type<Role>().notNull(),
+  context: text("context").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+})
+
+export const roleDocs = pgTable(
+  "role_docs",
+  {
+    releaseId: text("release_id").notNull(),
+    repoId: text("repo_id").notNull(),
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    document: text("doc").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    primaryKey: primaryKey(table.releaseId, table.repoId, table.roleId),
+    foreignKeys: [
+      { from: table.releaseId, to: releases.releaseId },
+      { from: table.repoId, to: releases.repoId },
+    ],
+  })
+)
 
 // New table for tracking enqueued tasks
-export const enqueuedTasks = pgTable("enqueued_tasks", {
-  jobId: text("job_id").notNull().primaryKey(),
-  branch: text("branch").notNull(),
-  repoId: text("repo_id").notNull(),
-  type: text("type").$type<JobType>().notNull(),
-  status: text("status").notNull(),
-  message: text("message").notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const enqueuedTasks = pgTable(
+  "enqueued_tasks",
+  {
+    jobId: text("job_id").notNull().primaryKey(),
+    branch: text("branch").notNull(),
+    repoId: text("repo_id").notNull(),
+    organizationId: integer("organization_id").notNull(),
+    type: text("type").$type<JobType>().notNull(),
+    status: text("status").$type<StatusType>().notNull(),
+    message: text("message").notNull(),
+    details: jsonb("details"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    foreignKeys: [{ from: table.organizationId, to: organizations.id }],
+  })
+)
 
 export const insertPrdSchema = createInsertSchema(prds)
   .pick({
@@ -154,7 +207,7 @@ export const insertPrdSchema = createInsertSchema(prds)
     businessContext: z.string().min(1, "Business context is required"),
     title: z.string().min(1, "Title is required"),
     repoId: z.string().min(1, "Please select a GitHub repository"),
-  });
+  })
 
 export const insertOrganizationSchema = createInsertSchema(organizations).pick({
   name: true,
@@ -164,7 +217,7 @@ export const insertOrganizationSchema = createInsertSchema(organizations).pick({
   profileImageUrl: true,
   installationId: true,
   isPersonal: true,
-});
+})
 
 export const insertUserOrganizationSchema = createInsertSchema(
   userOrganizations
@@ -172,7 +225,7 @@ export const insertUserOrganizationSchema = createInsertSchema(
   userId: true,
   organizationId: true,
   role: true,
-});
+})
 
 export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   name: true,
@@ -181,13 +234,13 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   repoId: true,
   organizationId: true,
   fileFilterRegex: true,
-});
+})
 
 export const themePreferencesSchema = z.object({
   accentColor: z.string().optional(),
   grayColor: z.string().optional(),
   mode: z.enum(["light", "dark", "system"]).optional(),
-});
+})
 
 export const insertUserSchema = createInsertSchema(users)
   .pick({
@@ -198,7 +251,7 @@ export const insertUserSchema = createInsertSchema(users)
   })
   .extend({
     themePreferences: themePreferencesSchema.optional(),
-  });
+  })
 
 // New schemas for repository analysis
 export const insertRepoFileSchema = createInsertSchema(repoFiles)
@@ -215,7 +268,7 @@ export const insertRepoFileSchema = createInsertSchema(repoFiles)
       size: z.number(),
       language: z.string(),
     }),
-  });
+  })
 
 export const insertRepoDocSchema = createInsertSchema(repoDocs)
   .pick({
@@ -235,72 +288,99 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
       timestamp: z.string(),
       prompts: z.record(z.string(), z.string()).optional(),
     }),
-  });
+  })
 
 export const insertReleaseSchema = createInsertSchema(releases)
   .pick({
     releaseId: true,
     title: true,
-    prd: true,
     repoId: true,
     branch: true,
-    diffAnalysis: true,
-    releaseDocument: true,
-    salesDocument: true,
-    marketingDocument: true,
-    csmDocument: true,
-    revopsDocument: true,
-    psDocument: true,
-    roleDocuments: true,
+    content: true,
+    updatedAt: true,
   })
   .extend({
     title: z.string().min(1, "Title is required"),
-    prd: z.string().min(1, "PRD content is required"),
     repoId: z.string().min(1, "Repository is required"),
     branch: z.string().min(1, "Branch is required"),
-  });
+  })
+
+export const insertRoleSchema = createInsertSchema(roles)
+  .pick({
+    id: true,
+    organizationId: true,
+    roleType: true,
+    context: true,
+  })
+  .extend({
+    id: z.string().min(1, "Role ID is required"),
+    organizationId: z.number().int().positive("Organization ID is required"),
+    roleType: z.enum(ROLES),
+    context: z.string().min(1, "Context is required"),
+  })
+
+export const insertRoleDocSchema = createInsertSchema(roleDocs)
+  .pick({
+    repoId: true,
+    releaseId: true,
+    roleId: true,
+    document: true,
+  })
+  .extend({
+    repoId: z.string().min(1, "Repository is required"),
+    releaseId: z.string().min(1, "Release is required"),
+    roleId: z.string().min(1, "Role ID is required"),
+    document: z.string().min(1, "Document content is required"),
+  })
 
 export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
   .pick({
     jobId: true,
     branch: true,
     repoId: true,
+    organizationId: true,
     type: true,
     status: true,
     message: true,
+    details: true,
     updatedAt: true,
   })
   .extend({
     jobId: z.string().min(1, "Job ID is required"),
     type: z.enum(JOB_TYPES),
+    status: z.enum(STATUS_TYPES),
     branch: z.string().min(1, "Branch is required"),
     repoId: z.string().min(1, "Repository is required"),
-  });
+  })
 
 // Organization types
-export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
-export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>
+export type Organization = typeof organizations.$inferSelect
 export type InsertUserOrganization = z.infer<
   typeof insertUserOrganizationSchema
->;
+>
 
-export type UserOrganization = typeof userOrganizations.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
-export type ThemePreferences = z.infer<typeof themePreferencesSchema>;
+export type UserOrganization = typeof userOrganizations.$inferSelect
+export type InsertUser = z.infer<typeof insertUserSchema>
+export type User = typeof users.$inferSelect
+export type ThemePreferences = z.infer<typeof themePreferencesSchema>
 
-export type InsertPrd = z.infer<typeof insertPrdSchema>;
-export type Prd = typeof prds.$inferSelect;
+export type InsertPrd = z.infer<typeof insertPrdSchema>
+export type Prd = typeof prds.$inferSelect
 
-export type InsertGithubRepo = z.infer<typeof insertGithubRepoSchema>;
-export type GithubRepo = typeof githubRepos.$inferSelect;
+export type InsertGithubRepo = z.infer<typeof insertGithubRepoSchema>
+export type GithubRepo = typeof githubRepos.$inferSelect
 
-export type InsertRepoFile = z.infer<typeof insertRepoFileSchema>;
-export type RepoFile = typeof repoFiles.$inferSelect;
-export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>;
-export type RepoDoc = typeof repoDocs.$inferSelect;
-export type InsertRelease = z.infer<typeof insertReleaseSchema>;
-export type Release = typeof releases.$inferSelect;
+export type InsertRepoFile = z.infer<typeof insertRepoFileSchema>
+export type RepoFile = typeof repoFiles.$inferSelect
+export type InsertRepoDoc = z.infer<typeof insertRepoDocSchema>
+export type RepoDoc = typeof repoDocs.$inferSelect
+export type InsertRelease = z.infer<typeof insertReleaseSchema>
+export type Release = typeof releases.$inferSelect
+export type InsertRole = z.infer<typeof insertRoleSchema>
+export type RoleRecord = typeof roles.$inferSelect
+export type InsertRoleDocument = z.infer<typeof insertRoleDocSchema>
+export type RoleDocument = typeof roleDocs.$inferSelect
 
-export type InsertEnqueuedTask = z.infer<typeof insertEnqueuedTaskSchema>;
-export type EnqueuedTask = typeof enqueuedTasks.$inferSelect;
+export type InsertEnqueuedTask = z.infer<typeof insertEnqueuedTaskSchema>
+export type EnqueuedTask = typeof enqueuedTasks.$inferSelect
