@@ -50,7 +50,7 @@ export function roleRoutes(app: Express) {
         return
       }
 
-      const roleId = `${org_id}_${roleType}_${nanoid(10)}`
+      const roleId = nanoid(10)
       const newRole = await storage.createRole({
         id: roleId,
         organizationId: org_id,
