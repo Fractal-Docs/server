@@ -121,7 +121,7 @@ export function releaseRoutes(app: Express) {
           })
 
           console.log("Release created")
-          console.log(`Creating role documents for ${roles}`)
+          console.log(`Creating role documents for ${roles.join(", ")}`)
           for (const roleType of roles) {
             try {
               let role = orgRoles.find((r) => r.roleType === roleType)
