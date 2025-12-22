@@ -55,6 +55,9 @@ export function registerWorker<TInput, TOutput>(
   onComplete?: (output: TOutput & { id?: string }) => Promise<void>,
   onError?: (error: unknown, job: any) => Promise<void>
 ) {
+  let idleTimer: NodeJS.Timeout | null = null
+  const queueName = `tasks-${type}`
+
   const worker = new Worker(
     `tasks-${type}`,
     async (job) => {
@@ -75,6 +78,18 @@ export function registerWorker<TInput, TOutput>(
     },
     { connection }
   )
+
+  const scheduleShutdown = (why?: string) => {
+    if (idleTimer) return
+
+    idleTimer = setTimeout(async () => {
+      console.log(`[Worker ${queueName}] Idle, shutting down ${why || ""}`)
+      await worker.close()
+    }, 30000)
+  }
+
+  worker.on("completed", () => scheduleShutdown("completed"))
+  worker.on("failed", () => scheduleShutdown("failed"))
 
   return worker
 }
