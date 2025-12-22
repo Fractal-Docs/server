@@ -30,7 +30,12 @@ export function releaseRoutes(app: Express) {
         return
       }
 
+      // delete old jobs for release and role documentation
+      await storage.removeJobsByBranchAndType(repoId, branch, "release")
+      await storage.removeJobsByBranchAndType(repoId, branch, "role")
+
       const release = await storage.getReleaseByBranch(repoId, branch)
+
       const orgRoles = await storage.getRolesByOrganization(org_id)
 
       const prd = (await storage.getPrdForBranch(repoId, branch)) || {
@@ -58,18 +63,17 @@ export function releaseRoutes(app: Express) {
             )
             await storage.updateJob(id, {
               status: "completed",
-            })
-            await storage.removeErrorJobsByBranchAndType(repoId, branch, "role")
-
-            if (release) {
-              await storage.updateRoleDoc({
-                releaseId: release.releaseId,
-                repoId,
+              details: {
+                releaseId,
                 roleId: role.id,
-                document: content,
-              })
-              return
-            }
+              },
+            })
+            await storage.removeJobsByBranchAndType(
+              repoId,
+              branch,
+              "role",
+              "error"
+            )
 
             await storage.createRoleDoc({
               releaseId,
@@ -91,30 +95,28 @@ export function releaseRoutes(app: Express) {
       registerGenerateWorker(
         RELEASE_GENERATION,
         async ({ content, jobId: id }) => {
-          await storage.updateJob(id, {
-            status: "completed",
-          })
-          await storage.removeErrorJobsByBranchAndType(
+          await storage.removeJobsByBranchAndType(
             repoId,
             branch,
-            "release"
+            "release",
+            "error"
           )
+          // delete old release and role documents (cascade)
+          await storage.deleteRelease(release.releaseId)
 
-          if (release) {
-            await storage.updateRelease(release.releaseId, {
-              content,
-              updatedAt: new Date(),
-            })
-            return
-          }
           const releaseId = nanoid()
-
           await storage.createRelease({
             releaseId,
             title,
             repoId,
             branch,
             content,
+          })
+          await storage.updateJob(id, {
+            status: "completed",
+            details: {
+              releaseId,
+            },
           })
 
           console.log("Release created")
@@ -156,10 +158,15 @@ export function releaseRoutes(app: Express) {
                 await storage.addJob({
                   jobId,
                   repoId,
+                  organizationId: org_id,
                   type: "role",
                   branch,
+                  details: {
+                    releaseId,
+                    roleId: role.id,
+                  },
                   status: "pending",
-                  message: `${roleType} Job started`,
+                  message: `${roleType} documentation generation started`,
                 })
               }
             } catch (error) {
@@ -189,10 +196,11 @@ export function releaseRoutes(app: Express) {
         await storage.addJob({
           jobId,
           repoId,
+          organizationId: org_id,
           type: "release",
           branch,
           status: "pending",
-          message: "Job started",
+          message: "Release generation started",
         })
       }
 
@@ -229,6 +237,21 @@ export function releaseRoutes(app: Express) {
         error instanceof Error
           ? error.message
           : "Failed to fetch recent documents"
+      res.status(500).json({ error: message })
+    }
+  })
+
+  app.get("/api/organization/:org_id/pending-releases", async (req, res) => {
+    const { org_id } = getParams(req, res, ["org_id"])
+    try {
+      // get jobs status
+      const jobs = await storage.getJobs(org_id, ["role", "release"])
+      res.json(jobs)
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch pending releases"
       res.status(500).json({ error: message })
     }
   })

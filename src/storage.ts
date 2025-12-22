@@ -34,6 +34,7 @@ import {
   InsertRole,
   RoleRecord,
   Role,
+  StatusType,
 } from "./shared/schema"
 import { db } from "./db"
 import { eq, like, inArray, and } from "drizzle-orm"
@@ -150,7 +151,7 @@ export interface IStorage {
   ): Promise<EnqueuedTask>
   removeJob(jobId: string): Promise<void>
   getJobsByBranch(repoId: string, branch: string): Promise<EnqueuedTask[]>
-  removeErrorJobsByBranchAndType(
+  removeJobsByBranchAndType(
     repoId: string,
     branch: string,
     type: JobType
@@ -831,6 +832,24 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  async getJobs(
+    organizationId: number,
+    jobTypes: JobType[]
+  ): Promise<EnqueuedTask[]> {
+    return this.handleDatabaseOperation(async () => {
+      const pendingJobs = await db
+        .select()
+        .from(enqueuedTasks)
+        .where(
+          and(
+            eq(enqueuedTasks.organizationId, organizationId),
+            inArray(enqueuedTasks.type, jobTypes)
+          )
+        )
+      return pendingJobs
+    })
+  }
+
   async getJob(jobId: string): Promise<EnqueuedTask | null> {
     return this.handleDatabaseOperation(async () => {
       const [job] = await db
@@ -889,10 +908,11 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async removeErrorJobsByBranchAndType(
+  async removeJobsByBranchAndType(
     repoId: string,
     branch: string,
-    type: JobType
+    type: JobType,
+    status?: StatusType
   ): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       await db
@@ -902,7 +922,7 @@ export class DatabaseStorage implements IStorage {
             eq(enqueuedTasks.repoId, repoId),
             eq(enqueuedTasks.branch, branch),
             eq(enqueuedTasks.type, type),
-            eq(enqueuedTasks.status, "error")
+            status ? eq(enqueuedTasks.status, status) : undefined
           )
         )
     })

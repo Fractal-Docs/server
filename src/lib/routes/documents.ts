@@ -92,10 +92,11 @@ export function documentsRoutes(app: Express) {
             await storage.updateJob(id, {
               status: "completed",
             })
-            await storage.removeErrorJobsByBranchAndType(
+            await storage.removeJobsByBranchAndType(
               repo_id,
               branch,
-              "generate"
+              "generate",
+              "error"
             )
             // Store the generated documentation with actual prompts in metadata
             if (repoDoc) {
@@ -146,6 +147,7 @@ export function documentsRoutes(app: Express) {
           await storage.addJob({
             jobId,
             repoId: repo_id,
+            organizationId: org_id,
             type: "generate",
             branch,
             status: "pending",
@@ -240,10 +242,11 @@ export function documentsRoutes(app: Express) {
             const { prompts } = extra
             // update the job to completed and clean up the old error jobs
             await storage.updateJob(id, { status: "completed" })
-            await storage.removeErrorJobsByBranchAndType(
+            await storage.removeJobsByBranchAndType(
               repo_id,
               branch,
-              "generate"
+              "generate",
+              "error"
             )
             // Store the generated documentation with actual prompts in metadata
             if (repoDoc) {
@@ -294,6 +297,7 @@ export function documentsRoutes(app: Express) {
           await storage.addJob({
             jobId,
             repoId: repo_id,
+            organizationId: org_id,
             type: "generate",
             branch,
             status: "pending",

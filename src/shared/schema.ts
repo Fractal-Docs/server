@@ -17,6 +17,9 @@ type DocType = (typeof DOC_TYPES)[number]
 const JOB_TYPES = ["generate", "analyze", "release", "role"] as const
 export type JobType = (typeof JOB_TYPES)[number]
 
+const STATUS_TYPES = ["pending", "completed", "error"] as const
+export type StatusType = (typeof STATUS_TYPES)[number]
+
 export const ROLES = [
   "sales",
   "marketing",
@@ -172,16 +175,24 @@ export const roleDocs = pgTable(
 )
 
 // New table for tracking enqueued tasks
-export const enqueuedTasks = pgTable("enqueued_tasks", {
-  jobId: text("job_id").notNull().primaryKey(),
-  branch: text("branch").notNull(),
-  repoId: text("repo_id").notNull(),
-  type: text("type").$type<JobType>().notNull(),
-  status: text("status").notNull(),
-  message: text("message").notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-})
+export const enqueuedTasks = pgTable(
+  "enqueued_tasks",
+  {
+    jobId: text("job_id").notNull().primaryKey(),
+    branch: text("branch").notNull(),
+    repoId: text("repo_id").notNull(),
+    organizationId: integer("organization_id").notNull(),
+    type: text("type").$type<JobType>().notNull(),
+    status: text("status").$type<StatusType>().notNull(),
+    message: text("message").notNull(),
+    details: jsonb("details"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    foreignKeys: [{ from: table.organizationId, to: organizations.id }],
+  })
+)
 
 export const insertPrdSchema = createInsertSchema(prds)
   .pick({
@@ -327,14 +338,17 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
     jobId: true,
     branch: true,
     repoId: true,
+    organizationId: true,
     type: true,
     status: true,
     message: true,
+    details: true,
     updatedAt: true,
   })
   .extend({
     jobId: z.string().min(1, "Job ID is required"),
     type: z.enum(JOB_TYPES),
+    status: z.enum(STATUS_TYPES),
     branch: z.string().min(1, "Branch is required"),
     repoId: z.string().min(1, "Repository is required"),
   })

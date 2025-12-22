@@ -288,10 +288,11 @@ export function codeRoutes(app: Express) {
           },
           async ({ id }) => {
             await storage.updateJob(id, { status: "completed" })
-            await storage.removeErrorJobsByBranchAndType(
+            await storage.removeJobsByBranchAndType(
               repo_id,
               branch,
-              "analyze"
+              "analyze",
+              "error"
             )
           },
           async (error, { id }) => {
@@ -308,6 +309,7 @@ export function codeRoutes(app: Express) {
           await storage.addJob({
             jobId,
             repoId: repo_id,
+            organizationId: org_id,
             type: "analyze",
             branch,
             status: "pending",
