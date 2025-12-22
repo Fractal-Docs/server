@@ -1,4 +1,4 @@
-import { Queue, Worker, QueueEvents } from "bullmq"
+import { Queue, Worker } from "bullmq"
 import IORedis from "ioredis"
 import { v4 as uuid } from "uuid"
 
@@ -16,17 +16,25 @@ const connection = new IORedis({
   ...redisOptions,
 })
 
-const queue = new Queue("tasks", { connection })
-const events = new QueueEvents("tasks", { connection })
+const queues = new Map<string, Queue>()
+
+export function getQueue(type: string) {
+  if (!queues.has(type)) {
+    queues.set(type, new Queue(`tasks-${type}`, { connection }))
+  }
+  return queues.get(type)!
+}
 
 // Add a job
 export async function enqueueTask(type: string, data?: Record<string, any>) {
+  const queue = getQueue(type)
   const job = await queue.add(type, data, { jobId: uuid() })
   return job.id
 }
 
 // Query status
-export async function getTaskStatus(id: string) {
+export async function getTaskStatus(type: string, id: string) {
+  const queue = getQueue(type)
   const job = await queue.getJob(id)
   if (!job) return null
 
@@ -41,29 +49,28 @@ export async function getTaskStatus(id: string) {
 }
 
 // Worker registration
-export function registerWorker(
+export function registerWorker<TInput, TOutput>(
   type: string,
-  handler: (data: any, job: any) => Promise<any>,
-  onComplete?: (output: Record<string, any> & { id: string }) => Promise<void>,
+  handler: (data: TInput, job: any) => Promise<TOutput>,
+  onComplete?: (output: TOutput & { id?: string }) => Promise<void>,
   onError?: (error: unknown, job: any) => Promise<void>
 ) {
   const worker = new Worker(
-    "tasks",
+    `tasks-${type}`,
     async (job) => {
-      if (job.name === type) {
-        try {
-          const output = await handler(job.data, job)
-          if (onComplete) {
-            await onComplete(output)
-          }
-          return output
-        } catch (error) {
-          if (onError) {
-            await onError(error, job)
-          }
-          console.error(`Error processing job ${job.id}:`, error)
-          throw error
+      try {
+        const result = await handler(job.data, job)
+
+        if (onComplete) {
+          await onComplete({ ...result, id: job.id })
         }
+
+        return result
+      } catch (err) {
+        if (onError) {
+          await onError(err, job)
+        }
+        throw err
       }
     },
     { connection }
@@ -71,5 +78,3 @@ export function registerWorker(
 
   return worker
 }
-
-export { events }

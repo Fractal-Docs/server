@@ -92,13 +92,13 @@ export async function prepareRoleDocumentation(
     **Release Document:**
     ${releaseDocument}
 
-    **Task:** Create a role-specific document that extracts and highlights the information most relevant to this role. Format the response in HTML with proper headings and structure.
+    **Task:** Create a role-specific document that extracts and highlights the information most relevant to this role.
 
     ${customContext ? `Use the following information as additional context for this document: ${customContext}` : ""}
   `
 
   const userPrompt = `
-    You are creating role-specific documentation for a ${role} team. Always respond in well-formatted HTML.
+    You are creating role-specific documentation for a ${role} team.
   `
   const { model } = chooseModel("role", developerPrompt, userPrompt, 0, role)
 

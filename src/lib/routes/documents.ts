@@ -396,7 +396,10 @@ export function documentsRoutes(app: Express) {
     "/api/organization/:org_id/repos/:repo_id/docs_status/:job_id",
     async (req, res) => {
       try {
-        const status = await getTaskStatus(req.params.job_id)
+        const status = await getTaskStatus(
+          "generateDocumentation",
+          req.params.job_id
+        )
         if (!status) {
           res.status(404).json({ error: "Not found" })
           return

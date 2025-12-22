@@ -44,43 +44,45 @@ export function releaseRoutes(app: Express) {
       const { developerPrompt, userPrompt, model } =
         await prepareReleaseDocumentation(prdContent, diffAnalysis)
 
-      // Register the worker for generating role documentation
-      registerGenerateWorker(
-        async ({ content, extra, jobId: id }) => {
-          const { role, releaseId } = extra
-          console.log(
-            `Generating role documentation for role ${role}, releaseId ${releaseId}`
-          )
-          await storage.updateJob(id, {
-            status: "completed",
-          })
-          await storage.removeErrorJobsByBranchAndType(repoId, branch, "role")
+      // Register the workers for generating role documentation
+      for (let i = 0; i < roles.length; i++) {
+        registerGenerateWorker(
+          async ({ content, extra, jobId: id }) => {
+            const { role, releaseId } = extra
+            console.log(
+              `Generated role documentation for role ${role?.roleType}, releaseId ${releaseId}`
+            )
+            await storage.updateJob(id, {
+              status: "completed",
+            })
+            await storage.removeErrorJobsByBranchAndType(repoId, branch, "role")
 
-          if (release) {
-            await storage.updateRoleDoc({
-              releaseId: release.releaseId,
+            if (release) {
+              await storage.updateRoleDoc({
+                releaseId: release.releaseId,
+                repoId,
+                roleId: role.id,
+                document: content,
+              })
+              return
+            }
+
+            await storage.createRoleDoc({
+              releaseId,
               repoId,
               roleId: role.id,
               document: content,
             })
-            return
-          }
-
-          await storage.createRoleDoc({
-            releaseId,
-            repoId,
-            roleId: role.id,
-            document: content,
-          })
-        },
-        async (error, { id }) => {
-          await storage.updateJob(id, {
-            status: "error",
-            message: error instanceof Error ? error.message : String(error),
-          })
-        },
-        "generateRoleDocumentation"
-      )
+          },
+          async (error, { id }) => {
+            await storage.updateJob(id, {
+              status: "error",
+              message: error instanceof Error ? error.message : String(error),
+            })
+          },
+          "generateRoleDocumentation"
+        )
+      }
 
       // Register the worker for generating release documentation
       registerGenerateWorker(
@@ -129,7 +131,6 @@ export function releaseRoutes(app: Express) {
               }
 
               const roleContext = role?.context || ""
-              console.log(roleType, roleContext)
 
               const { developerPrompt, userPrompt, model } =
                 await prepareRoleDocumentation(roleType, roleContext, content)
@@ -145,7 +146,7 @@ export function releaseRoutes(app: Express) {
                   role,
                 },
               })
-              console.log("enqueued task for ", roleType, " at ", new Date())
+              console.log("enqueued task for", roleType, "at", new Date())
 
               if (jobId) {
                 await storage.addJob({

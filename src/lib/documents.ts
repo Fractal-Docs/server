@@ -24,11 +24,14 @@ export const registerGenerateWorker = (
     }> => {
       const { userPrompt, developerPrompt, model, extra } = data
       const provider = getAIProvider(model)
+      console.log("Generating documentation...", model)
+
       const content = await provider.generateCompletion(
         developerPrompt,
         userPrompt,
         model
       )
+      console.log("Documentation generated")
 
       const prompts = {
         developer: developerPrompt,
