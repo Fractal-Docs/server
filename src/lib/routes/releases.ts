@@ -276,6 +276,27 @@ export function releaseRoutes(app: Express) {
     }
   })
 
+  app.get(
+    "/api/organization/:org_id/repos/:repo_id/releases/check",
+    async (req, res) => {
+      const { branch, repo_id } = getParams(req, res, ["repo_id", "branch"])
+
+      try {
+        const release = await storage.getReleaseByBranch(repo_id, branch)
+
+        if (!release) {
+          res.json({ exists: false })
+          return
+        }
+
+        res.json({ exists: true, release })
+      } catch (error) {
+        console.error("Error fetching release:", error)
+        res.status(500).json({ error: "Failed to fetch release" })
+      }
+    }
+  )
+
   app.get("/api/organization/:org_id/releases/:id", async (req, res) => {
     try {
       const { id } = req.params
