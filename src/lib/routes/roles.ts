@@ -42,7 +42,6 @@ export function roleRoutes(app: Express) {
       const role = await storage.getRoleByOrgAndType(org_id, role_type as Role)
 
       if (!role) {
-        // Return default role context if not customized yet
         res.json({
           roleType: role_type,
           context: "",
