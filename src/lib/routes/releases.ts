@@ -9,6 +9,7 @@ import {
 import { getParams } from "../helpers"
 import { registerGenerateWorker } from "../documents"
 import { enqueueTask } from "../task-manager"
+import { getRepoById } from "./code"
 
 const RELEASE_GENERATION = "generateReleaseDocumentation"
 const ROLE_DOC_GENERATION = "generateRoleDocumentation"
@@ -243,8 +244,21 @@ export function releaseRoutes(app: Express) {
   })
 
   app.get("/api/organization/:org_id/pending-releases", async (req, res) => {
-    const { org_id } = getParams(req, res, ["org_id"])
     try {
+      const { org_id, repo_id } = getParams(req, res, ["org_id", "repo_id"])
+      const organization = await storage.getOrganization(org_id)
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" })
+        return
+      }
+      const repo = await getRepoById(repo_id, res)
+      if (!repo) {
+        res.status(404).json({ error: "Repo not found" })
+        return
+      } else if (repo.organizationId !== organization.id) {
+        res.status(403).json({ error: "Repo not part of organization" })
+        return
+      }
       // get jobs status
       const jobs = await storage.getJobs(org_id, ["role", "release"])
       res.json(jobs)
@@ -258,8 +272,13 @@ export function releaseRoutes(app: Express) {
   })
 
   app.get("/api/organization/:org_id/releases", async (req, res) => {
-    const { org_id } = getParams(req, res, ["org_id"])
     try {
+      const { org_id } = getParams(req, res, ["org_id"])
+      const organization = await storage.getOrganization(org_id)
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" })
+        return
+      }
       // need to get the releases for a users repos
       const allReleases = await storage.getOrganizationReleases(org_id)
 
@@ -279,9 +298,25 @@ export function releaseRoutes(app: Express) {
   app.get(
     "/api/organization/:org_id/repos/:repo_id/releases/check",
     async (req, res) => {
-      const { branch, repo_id } = getParams(req, res, ["repo_id", "branch"])
-
       try {
+        const { org_id, repo_id, branch } = getParams(req, res, [
+          "org_id",
+          "repo_id",
+          "branch",
+        ])
+        const organization = await storage.getOrganization(org_id)
+        if (!organization) {
+          res.status(404).json({ error: "Organization not found" })
+          return
+        }
+        const repo = await getRepoById(repo_id, res)
+        if (!repo) {
+          res.status(404).json({ error: "Repo not found" })
+          return
+        } else if (repo.organizationId !== organization.id) {
+          res.status(403).json({ error: "Repo not part of organization" })
+          return
+        }
         const release = await storage.getReleaseByBranch(repo_id, branch)
 
         if (!release) {
