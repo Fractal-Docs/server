@@ -23,49 +23,6 @@ export function roleRoutes(app: Express) {
     }
   })
 
-  // Create a new role for an organization
-  app.post("/api/organization/:org_id/roles", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
-
-      const { roleType, context } = req.body
-
-      if (!roleType || !ROLES.includes(roleType)) {
-        res.status(400).json({ error: "Invalid role type" })
-        return
-      }
-
-      // Check if role already exists for this organization
-      const existingRole = await storage.getRoleByOrgAndType(org_id, roleType)
-      if (existingRole) {
-        res
-          .status(409)
-          .json({ error: "Role already exists for this organization" })
-        return
-      }
-
-      const roleId = nanoid(10)
-      const newRole = await storage.createRole({
-        id: roleId,
-        organizationId: org_id,
-        roleType,
-        context: context,
-      })
-
-      res.status(201).json(newRole)
-    } catch (error) {
-      console.error("Error creating role:", error)
-      res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to create role",
-      })
-    }
-  })
-
   // Get a specific role by organization ID and role type
   app.get("/api/organization/:org_id/roles/:role_type", async (req, res) => {
     try {
@@ -129,7 +86,7 @@ export function roleRoutes(app: Express) {
 
       if (!role) {
         // Create the role if it doesn't exist
-        const roleId = `${org_id}_${role_type}_${nanoid(10)}`
+        const roleId = nanoid()
         role = await storage.createRole({
           id: roleId,
           organizationId: org_id,
@@ -146,44 +103,6 @@ export function roleRoutes(app: Express) {
       console.error("Error updating role:", error)
       res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to update role",
-      })
-    }
-  })
-
-  // Delete a role (revert to default)
-  app.delete("/api/organization/:org_id/roles/:role_type", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
-      const { role_type } = req.params
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
-
-      if (!ROLES.includes(role_type as Role)) {
-        res.status(400).json({ error: "Invalid role type" })
-        return
-      }
-
-      const role = await storage.getRoleByOrgAndType(org_id, role_type as Role)
-
-      if (!role) {
-        res.status(404).json({ error: "Role not found" })
-        return
-      }
-
-      await storage.deleteRole(role.id)
-
-      res.json({
-        success: true,
-        message: "Role deleted successfully (reverted to default)",
-        roleType: role_type,
-      })
-    } catch (error) {
-      console.error("Error deleting role:", error)
-      res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to delete role",
       })
     }
   })
