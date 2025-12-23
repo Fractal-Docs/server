@@ -12,12 +12,16 @@ import {
 } from "../cfg-analyzer"
 import { getParams } from "../helpers"
 import { enqueueTask, registerWorker } from "../task-manager"
+import { GithubRepo } from "src/shared/schema"
 
-async function getRepoById(id: string, res) {
+export async function getRepoById(
+  id: string,
+  res
+): Promise<GithubRepo | undefined> {
   const data = await storage.getRepo(id)
   if (!data) {
     res.status(404).json({ error: "No repository found" })
-    return
+    return undefined
   }
 
   return data
