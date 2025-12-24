@@ -1,60 +1,4 @@
-export type Role =
-  | "sales"
-  | "marketing"
-  | "csm"
-  | "revops"
-  | "ps"
-  | "executive"; // this role is specifically for high quality prose document
-
-interface RoleDetails {
-  id: Role;
-  name: string;
-  description: string;
-  icon: string;
-  color: string;
-}
-
-export const AVAILABLE_ROLES: RoleDetails[] = [
-  {
-    id: "sales",
-    name: "Sales",
-    description:
-      "Focus on selling opportunities, customer benefits, and ROI propositions",
-    icon: "TrendingUp",
-    color: "blue",
-  },
-  {
-    id: "marketing",
-    name: "Marketing",
-    description: "Campaign ideas, messaging frameworks, and promotional angles",
-    icon: "Users",
-    color: "purple",
-  },
-  {
-    id: "csm",
-    name: "Customer Success Manager",
-    description:
-      "Knowledge base articles, customer communication templates, and success metrics",
-    icon: "UserCheck",
-    color: "teal",
-  },
-  {
-    id: "revops",
-    name: "Revenue Operations",
-    description:
-      "Pricing updates, revenue forecasts, and operational considerations",
-    icon: "DollarSign",
-    color: "orange",
-  },
-  {
-    id: "ps",
-    name: "Professional Services",
-    description:
-      "Implementation guides, risk assessments, and validation procedures",
-    icon: "Settings",
-    color: "gray",
-  },
-];
+import { Role } from "src/shared/schema"
 
 export const DEFAULT_ROLE_CONTEXTS: Record<Role, string> = {
   sales: `You are analyzing a software release from a Sales perspective. Focus on:
@@ -115,4 +59,4 @@ Create a document specifically for Professional Services with implementation gui
 - Key performance indicators and metrics
 
 Create a document specifically for Executives with financial analysis, market positioning, and strategic planning.`,
-};
+}

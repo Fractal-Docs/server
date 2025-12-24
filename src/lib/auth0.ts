@@ -1,11 +1,11 @@
-import crypto from "crypto";
+import crypto from "crypto"
 
-const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
-const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID;
-const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET;
+const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN
+const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID
+const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET
 
 function generateRandomPassword(length = 32) {
-  return `!${crypto.randomBytes(length).toString("hex")}!`;
+  return `!${crypto.randomBytes(length).toString("hex")}!`
 }
 
 /**
@@ -25,21 +25,21 @@ export async function getAuth0AccessToken(): Promise<string> {
         client_id: AUTH0_CLIENT_ID,
         client_secret: AUTH0_CLIENT_SECRET,
       }),
-    });
+    })
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json()
       throw new Error(
         `Authentication failed: ${errorData.error_description || response.statusText}`
-      );
+      )
     }
 
-    const data = await response.json();
-    return data.access_token;
+    const data = await response.json()
+    return data.access_token
   } catch (error: any) {
     throw new Error(
       `Authentication failed: ${error.response?.data?.error_description || error.message}`
-    );
+    )
   }
 }
 
@@ -61,21 +61,21 @@ export async function getUserRoles(
           Authorization: `Bearer ${accessToken}`,
         },
       }
-    );
+    )
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json()
       throw new Error(
         `Failed to retrieve roles: ${errorData.error_description || response.statusText}`
-      );
+      )
     }
 
-    const data = await response.json();
-    return data.map((role: { name: string }) => role.name);
+    const data = await response.json()
+    return data.map((role: { name: string }) => role.name)
   } catch (error: any) {
     throw new Error(
       `Failed to retrieve roles: ${error.response?.data?.error_description || error.message}`
-    );
+    )
   }
 }
 
@@ -101,18 +101,18 @@ export async function inviteUser(
         connection: "Username-Password-Authentication",
         password: generateRandomPassword(),
       }),
-    });
+    })
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.log("error", errorData);
-      throw new Error(errorData.error_description || response.statusText);
+      const errorData = await response.json()
+      console.log("error", errorData)
+      throw new Error(errorData.error_description || response.statusText)
     }
 
-    const data = await response.json();
-    return data.user_id;
+    const data = await response.json()
+    return data.user_id
   } catch (error: any) {
-    throw new Error(error.response?.data?.error_description || error.message);
+    throw new Error(error.response?.data?.error_description || error.message)
   }
 }
 
@@ -130,18 +130,18 @@ export async function getUserByEmail(
           "Content-Type": "application/json",
         },
       }
-    );
+    )
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error_description || response.statusText);
+      const errorData = await response.json()
+      throw new Error(errorData.error_description || response.statusText)
     }
 
-    const data = await response.json();
-    const user = data.find((user: { email: string }) => user.email === email);
-    if (!user) return undefined;
-    return user.user_id;
+    const data = await response.json()
+    const user = data.find((user: { email: string }) => user.email === email)
+    if (!user) return undefined
+    return user.user_id
   } catch (error: any) {
-    throw new Error(error.response?.data?.error_description || error.message);
+    throw new Error(error.response?.data?.error_description || error.message)
   }
 }
