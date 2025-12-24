@@ -233,13 +233,21 @@ export function releaseRoutes(app: Express) {
           res.status(404).json({ error: "Release not found" })
           return
         }
+
         const repo = await getRepoById(release.repoId, res)
         if (!repo) {
-          res.status(404).json({ error: "Repository not found" })
+          res.status(404).json({ error: "Repo not found" })
+          return
+        } else if (repo.organizationId !== organization.id) {
+          res.status(403).json({ error: "Repo not part of organization" })
           return
         }
 
         const { roles } = req.body
+        if (!Array.isArray(roles)) {
+          res.status(400).json({ error: "roles must be an array" })
+          return
+        }
 
         // Register the workers for generating role documentation
         for (let i = 0; i < roles.length; i++) {
@@ -294,6 +302,8 @@ export function releaseRoutes(app: Express) {
               message: `${roleType} document generation started`,
               details: {
                 roleType,
+                releaseId: release.releaseId,
+                roleId: role.id,
               },
             })
           }
