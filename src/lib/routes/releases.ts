@@ -14,6 +14,39 @@ import { getRepoById } from "./code"
 const RELEASE_GENERATION = "generateReleaseDocumentation"
 const ROLE_DOC_GENERATION = "generateRoleDocumentation"
 
+const registerRoleWorker = (repoId: string, branch: string) => {
+  registerGenerateWorker(
+    ROLE_DOC_GENERATION,
+    async ({ content, extra, jobId: id }) => {
+      const { role, releaseId } = extra
+      console.log(
+        `Generated role documentation for role ${role?.roleType}, releaseId ${releaseId}`
+      )
+      await storage.updateJob(id, {
+        status: "completed",
+        details: {
+          releaseId,
+          roleId: role.id,
+        },
+      })
+      await storage.removeJobsByBranchAndType(repoId, branch, "role", "error")
+
+      await storage.createRoleDoc({
+        releaseId,
+        repoId,
+        roleId: role.id,
+        document: content,
+      })
+    },
+    async (error, { id }) => {
+      await storage.updateJob(id, {
+        status: "error",
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  )
+}
+
 export function releaseRoutes(app: Express) {
   app.post("/api/organization/:org_id/releases", async (req, res) => {
     try {
@@ -59,41 +92,7 @@ export function releaseRoutes(app: Express) {
 
       // Register the workers for generating role documentation
       for (let i = 0; i < roles.length; i++) {
-        registerGenerateWorker(
-          ROLE_DOC_GENERATION,
-          async ({ content, extra, jobId: id }) => {
-            const { role, releaseId } = extra
-            console.log(
-              `Generated role documentation for role ${role?.roleType}, releaseId ${releaseId}`
-            )
-            await storage.updateJob(id, {
-              status: "completed",
-              details: {
-                releaseId,
-                roleId: role.id,
-              },
-            })
-            await storage.removeJobsByBranchAndType(
-              repoId,
-              branch,
-              "role",
-              "error"
-            )
-
-            await storage.createRoleDoc({
-              releaseId,
-              repoId,
-              roleId: role.id,
-              document: content,
-            })
-          },
-          async (error, { id }) => {
-            await storage.updateJob(id, {
-              status: "error",
-              message: error instanceof Error ? error.message : String(error),
-            })
-          }
-        )
+        registerRoleWorker(repoId, branch)
       }
 
       // Register the worker for generating release documentation
@@ -166,6 +165,7 @@ export function releaseRoutes(app: Express) {
                   details: {
                     releaseId,
                     roleId: role.id,
+                    roleType,
                   },
                   status: "pending",
                   message: `${roleType} documentation generation started`,
@@ -216,6 +216,102 @@ export function releaseRoutes(app: Express) {
     }
   })
 
+  // endpoint for generating role documents after a release has been created
+  app.post(
+    "/api/organization/:org_id/releases/:release_id/roles",
+    async (req, res) => {
+      try {
+        const { release_id } = req.params
+        const { org_id } = getParams(req, res, ["org_id"])
+        const organization = await storage.getOrganization(org_id)
+        if (!organization) {
+          res.status(404).json({ error: "Organization not found" })
+          return
+        }
+        const release = await storage.getRelease(release_id)
+        if (!release) {
+          res.status(404).json({ error: "Release not found" })
+          return
+        }
+        const repo = await getRepoById(release.repoId, res)
+        if (!repo) {
+          res.status(404).json({ error: "Repository not found" })
+          return
+        }
+
+        const { roles } = req.body
+
+        // Register the workers for generating role documentation
+        for (let i = 0; i < roles.length; i++) {
+          registerRoleWorker(release.repoId, release.branch)
+        }
+
+        const orgRoles = await storage.getRolesByOrganization(org_id)
+
+        for (const roleType of roles) {
+          let role = orgRoles.find((r) => r.roleType === roleType)
+
+          if (!role) {
+            const id = nanoid()
+            // create role
+            role = await storage.createRole({
+              id,
+              organizationId: org_id,
+              roleType,
+              context: "",
+            })
+          }
+
+          const roleContext = role?.context || ""
+
+          const { developerPrompt, userPrompt, model } =
+            await prepareRoleDocumentation(
+              roleType,
+              roleContext,
+              release.content
+            )
+
+          // enqueue a task for each role that needs generation
+          const jobId = await enqueueTask(ROLE_DOC_GENERATION, {
+            developerPrompt,
+            userPrompt,
+            model,
+            // pass the role and releaseId to the role generation task
+            extra: {
+              releaseId: release_id,
+              role,
+            },
+          })
+
+          if (jobId) {
+            await storage.addJob({
+              jobId,
+              organizationId: org_id,
+              repoId: release.repoId,
+              type: "role",
+              branch: release.branch,
+              status: "pending",
+              message: `${roleType} document generation started`,
+              details: {
+                roleType,
+              },
+            })
+          }
+        }
+
+        res.json({ success: true })
+      } catch (error) {
+        console.error("Error creating role documents:", error)
+        res.status(500).json({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to create role documents",
+        })
+      }
+    }
+  )
+
   app.get("/api/organization/:org_id/recent-releases", async (req, res) => {
     try {
       const { org_id } = getParams(req, res, ["org_id"])
@@ -245,18 +341,10 @@ export function releaseRoutes(app: Express) {
 
   app.get("/api/organization/:org_id/pending-releases", async (req, res) => {
     try {
-      const { org_id, repo_id } = getParams(req, res, ["org_id", "repo_id"])
+      const { org_id } = getParams(req, res, ["org_id"])
       const organization = await storage.getOrganization(org_id)
       if (!organization) {
         res.status(404).json({ error: "Organization not found" })
-        return
-      }
-      const repo = await getRepoById(repo_id, res)
-      if (!repo) {
-        res.status(404).json({ error: "Repo not found" })
-        return
-      } else if (repo.organizationId !== organization.id) {
-        res.status(403).json({ error: "Repo not part of organization" })
         return
       }
       // get jobs status
