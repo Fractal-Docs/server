@@ -218,7 +218,7 @@ export function releaseRoutes(app: Express) {
 
   // endpoint for generating role documents after a release has been created
   app.post(
-    "/api/organization/:org_id/releases/:release_id/roles",
+    "/api/organization/:org_id/releases/:release_id/role-docs",
     async (req, res) => {
       try {
         const { release_id } = req.params
