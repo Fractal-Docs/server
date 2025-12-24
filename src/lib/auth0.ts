@@ -87,7 +87,7 @@ export async function getUserRoles(
 export async function inviteUser(
   accessToken: string,
   email: string
-): Promise<string> {
+): Promise<any> {
   try {
     const response = await fetch(`https://${AUTH0_DOMAIN}/api/v2/users`, {
       method: "POST",
@@ -110,7 +110,7 @@ export async function inviteUser(
     }
 
     const data = await response.json()
-    return data.user_id
+    return data
   } catch (error: any) {
     throw new Error(error.response?.data?.error_description || error.message)
   }
@@ -119,7 +119,7 @@ export async function inviteUser(
 export async function getUserByEmail(
   accessToken: string,
   email: string
-): Promise<string | undefined> {
+): Promise<any> {
   try {
     const response = await fetch(
       `https://${AUTH0_DOMAIN}/api/v2/users-by-email?email=${encodeURIComponent(email)}`,
@@ -140,7 +140,7 @@ export async function getUserByEmail(
     const data = await response.json()
     const user = data.find((user: { email: string }) => user.email === email)
     if (!user) return undefined
-    return user.user_id
+    return user
   } catch (error: any) {
     throw new Error(error.response?.data?.error_description || error.message)
   }

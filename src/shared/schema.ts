@@ -18,8 +18,11 @@ type DocType = (typeof DOC_TYPES)[number]
 const JOB_TYPES = ["generate", "analyze", "release", "role"] as const
 export type JobType = (typeof JOB_TYPES)[number]
 
-const STATUS_TYPES = ["pending", "completed", "error"] as const
-export type StatusType = (typeof STATUS_TYPES)[number]
+const JOB_STATUS_TYPES = ["pending", "completed", "error"] as const
+export type JobStatusType = (typeof JOB_STATUS_TYPES)[number]
+
+const INVITATION_STATUS_TYPES = ["pending", "accepted", "rejected"] as const
+export type InvitationStatusType = (typeof INVITATION_STATUS_TYPES)[number]
 
 export const ROLES = [
   "sales",
@@ -184,7 +187,7 @@ export const enqueuedTasks = pgTable(
     repoId: text("repo_id").notNull(),
     organizationId: integer("organization_id").notNull(),
     type: text("type").$type<JobType>().notNull(),
-    status: text("status").$type<StatusType>().notNull(),
+    status: text("status").$type<JobStatusType>().notNull(),
     message: text("message").notNull(),
     details: jsonb("details"),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -198,7 +201,9 @@ export const enqueuedTasks = pgTable(
 export const invitations = pgTable("invitations", {
   userId: text("user_id").notNull(),
   organizationId: serial("organization_id").notNull(),
+  email: text("email").notNull(),
   token: uuid("token").primaryKey().defaultRandom(),
+  status: text("status").$type<InvitationStatusType>().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 })
@@ -358,16 +363,22 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
   .extend({
     jobId: z.string().min(1, "Job ID is required"),
     type: z.enum(JOB_TYPES),
-    status: z.enum(STATUS_TYPES),
+    status: z.enum(JOB_STATUS_TYPES),
     branch: z.string().min(1, "Branch is required"),
     repoId: z.string().min(1, "Repository is required"),
   })
 
-export const insertInvitationSchema = createInsertSchema(invitations).pick({
-  userId: true,
-  organizationId: true,
-  token: true,
-})
+export const insertInvitationSchema = createInsertSchema(invitations)
+  .pick({
+    userId: true,
+    organizationId: true,
+    token: true,
+    email: true,
+    status: true,
+  })
+  .extend({
+    status: z.enum(INVITATION_STATUS_TYPES),
+  })
 
 // Organization types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>

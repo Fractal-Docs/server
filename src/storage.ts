@@ -34,7 +34,7 @@ import {
   InsertRole,
   RoleRecord,
   Role,
-  StatusType,
+  JobStatusType,
   Invitation,
   invitations,
 } from "./shared/schema"
@@ -914,7 +914,7 @@ export class DatabaseStorage implements IStorage {
     repoId: string,
     branch: string,
     type: JobType,
-    status?: StatusType
+    status?: JobStatusType
   ): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       await db
@@ -932,7 +932,8 @@ export class DatabaseStorage implements IStorage {
 
   async createInvitation(
     organizationId: number,
-    userId: string
+    userId: string,
+    email: string
   ): Promise<Invitation> {
     return this.handleDatabaseOperation(async () => {
       const [invitation] = await db
@@ -940,10 +941,31 @@ export class DatabaseStorage implements IStorage {
         .values({
           organizationId,
           userId,
+          email,
+          status: "pending",
         })
         .returning()
       if (!invitation) throw new Error("Failed to create invitation")
       return invitation
+    })
+  }
+
+  async getInvitationByToken(token: string): Promise<Invitation | null> {
+    return this.handleDatabaseOperation(async () => {
+      const [invitation] = await db
+        .select()
+        .from(invitations)
+        .where(eq(invitations.token, token))
+      return invitation || null
+    })
+  }
+
+  async acceptInvitation(token: string): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      await db
+        .update(invitations)
+        .set({ status: "accepted" })
+        .where(eq(invitations.token, token))
     })
   }
 }
