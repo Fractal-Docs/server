@@ -932,7 +932,6 @@ export class DatabaseStorage implements IStorage {
 
   async createInvitation(
     organizationId: number,
-    userId: string,
     email: string
   ): Promise<Invitation> {
     return this.handleDatabaseOperation(async () => {
@@ -940,7 +939,6 @@ export class DatabaseStorage implements IStorage {
         .insert(invitations)
         .values({
           organizationId,
-          userId,
           email,
           status: "pending",
         })

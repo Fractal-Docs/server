@@ -2,13 +2,13 @@ import type { Express } from "express"
 
 import { getAuth0AccessToken, getUserRoles } from "../auth0"
 import { storage } from "src/storage"
+import { getUserSub } from "../helpers"
 
 export function authRoutes(app: Express) {
   app.get("/api/user", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string
+      const userSub = getUserSub(req, res)
       if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" })
         return
       }
       const user = await storage.getUser(userSub)
@@ -26,9 +26,8 @@ export function authRoutes(app: Express) {
 
   app.patch("/api/user", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string
+      const userSub = getUserSub(req, res)
       if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" })
         return
       }
       const user = await storage.updateUser({ ...req.body, userSub })
@@ -42,9 +41,8 @@ export function authRoutes(app: Express) {
 
   app.post("/api/user", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string
+      const userSub = getUserSub(req, res)
       if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" })
         return
       }
       const user = await storage.createUser({ userSub, ...req.body })
@@ -59,16 +57,15 @@ export function authRoutes(app: Express) {
   app.get("/api/auth/roles", async (req, res) => {
     try {
       const accessToken = await getAuth0AccessToken()
-      const userSub = req.headers["user-sub"] as string
+      const userSub = getUserSub(req, res)
       if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" })
         return
       }
-      const roles = await getUserRoles(accessToken, userSub as string)
+      const roles = await getUserRoles(accessToken, userSub)
       res.json(roles)
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : "Failed to fetch repositories"
+        error instanceof Error ? error.message : "Failed to fetch roles"
       res.status(500).json({ error: message })
     }
   })

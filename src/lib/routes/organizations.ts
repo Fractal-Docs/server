@@ -5,17 +5,15 @@ import {
   insertUserOrganizationSchema,
 } from "../../shared/schema"
 import { fromZodError } from "zod-validation-error"
-import { getParams } from "../helpers"
-import { getAuth0AccessToken, getUserByEmail, inviteUser } from "../auth0"
+import { getParams, getUserSub } from "../helpers"
 import { sendInviteEmail } from "../email"
 
 export function organizationRoutes(app: Express) {
   // Get user's organizations
   app.get("/api/organizations", async (req, res) => {
     try {
-      const userSub = req.headers["user-sub"] as string
+      const userSub = getUserSub(req, res)
       if (!userSub) {
-        res.status(401).json({ error: "User sub not provided" })
         return
       }
       const user = await storage.getUser(userSub)
@@ -221,15 +219,7 @@ export function organizationRoutes(app: Express) {
         return
       }
 
-      const accessToken = await getAuth0AccessToken()
-
-      // either we find the user in Auth0, or we invite them
-      const response =
-        (await getUserByEmail(accessToken, email)) ||
-        (await inviteUser(accessToken, email))
-      const userId = response?.user_id
-
-      const invitation = await storage.createInvitation(orgId, userId, email)
+      const invitation = await storage.createInvitation(orgId, email)
 
       const inviteLink = `${process.env.APP_BASE_URL}/accept?token=${invitation.token}`
 
@@ -239,77 +229,6 @@ export function organizationRoutes(app: Express) {
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to invite user"
-      res.status(500).json({ error: message })
-    }
-  })
-
-  app.get("/api/organization/:id/invite/validate", async (req, res) => {
-    try {
-      const { token } = req.query
-
-      if (!token || typeof token !== "string") {
-        res.status(400).json({ error: "Token is required" })
-        return
-      }
-
-      const invitation = await storage.getInvitationByToken(token)
-
-      if (!invitation) {
-        res.status(404).json({ error: "Invitation not found" })
-        return
-      }
-
-      const organization = await storage.getOrganization(
-        invitation.organizationId
-      )
-
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
-
-      const accessToken = await getAuth0AccessToken()
-      const user = await getUserByEmail(accessToken, invitation.email)
-
-      res.json({ invitation, user, organization })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to validate invitation"
-      res.status(500).json({ error: message })
-    }
-  })
-
-  app.post("/api/organization/:id/invite/accept", async (req, res) => {
-    try {
-      const { token } = req.body
-
-      if (!token || typeof token !== "string") {
-        res.status(400).json({ error: "Token is required" })
-        return
-      }
-
-      const invitation = await storage.getInvitationByToken(token)
-
-      if (!invitation) {
-        res.status(404).json({ error: "Invitation not found" })
-        return
-      }
-
-      const organization = await storage.getOrganization(
-        invitation.organizationId
-      )
-
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
-
-      await storage.acceptInvitation(invitation.token)
-
-      res.json({ success: true })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to accept invitation"
       res.status(500).json({ error: message })
     }
   })

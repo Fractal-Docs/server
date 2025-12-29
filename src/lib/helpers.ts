@@ -1,4 +1,25 @@
+import type { Request, Response } from "express"
+
 type Params = "org_id" | "repo_id" | "prd_id" | "branch"
+
+/**
+ * Extracts the user sub from the JWT token in the Authorization header
+ * @param req - Express request object with auth property from express-oauth2-jwt-bearer
+ * @param res - Express response object
+ * @returns The user's sub identifier or undefined if not found
+ */
+export function getUserSub(req: Request, res: Response): string | undefined {
+  // express-oauth2-jwt-bearer adds the decoded JWT payload to req.auth
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const auth = (req as any).auth
+
+  if (!auth?.payload?.sub) {
+    res.status(401).json({ error: "User not authenticated" })
+    return undefined
+  }
+
+  return auth.payload.sub as string
+}
 
 export function getParams(req, res, fieldsToReturn: Params[]) {
   const { org_id, repo_id, prd_id } = req.params
@@ -38,7 +59,7 @@ export function getParams(req, res, fieldsToReturn: Params[]) {
   return { org_id, repo_id, prd_id, branch: branch || "main" }
 }
 
-export function getOrigin(req, res) {
+export function getOrigin(req: Request, res: Response) {
   const origin = req.get("origin") || req.headers.host || ""
   let normalizedOrigin
   try {
@@ -46,7 +67,7 @@ export function getOrigin(req, res) {
       origin.startsWith("http") ? origin : `https://${origin}`
     )
     normalizedOrigin = url.hostname + (url.port ? `:${url.port}` : "")
-  } catch (error: any) {
+  } catch (error: unknown) {
     res.status(400).json({
       error,
     })

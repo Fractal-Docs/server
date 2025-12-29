@@ -8,7 +8,7 @@ import { env, isProduction, validateEnvironment } from "./config/env"
 validateEnvironment()
 
 // this needs to be imported after validateEnvironment
-import { registerProtectedRoutes } from "./routes"
+import { registerProtectedRoutes, registerPublicRoutes } from "./routes"
 
 // Only import supabase-keep-alive in production
 if (isProduction()) {
@@ -56,6 +56,7 @@ app.use((req, res, next) => {
   next()
 })
 ;(async () => {
+  await registerPublicRoutes(app)
   app.use(checkJwt)
   await registerProtectedRoutes(app)
   const server = createServer(app)

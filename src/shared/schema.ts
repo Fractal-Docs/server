@@ -199,7 +199,6 @@ export const enqueuedTasks = pgTable(
 )
 
 export const invitations = pgTable("invitations", {
-  userId: text("user_id").notNull(),
   organizationId: serial("organization_id").notNull(),
   email: text("email").notNull(),
   token: uuid("token").primaryKey().defaultRandom(),
@@ -370,7 +369,6 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
 
 export const insertInvitationSchema = createInsertSchema(invitations)
   .pick({
-    userId: true,
     organizationId: true,
     token: true,
     email: true,
