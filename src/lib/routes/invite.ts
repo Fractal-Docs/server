@@ -6,7 +6,7 @@ import { getUserSub } from "../helpers"
 export function inviteUnprotectedRoutes(app: Express) {
   app.get("/api/invite/validate", async (req, res) => {
     try {
-      const { token } = req.query
+      const token = req.headers["x-invite-token"]
 
       if (!token || typeof token !== "string") {
         res.status(400).json({ error: "Token is required" })
