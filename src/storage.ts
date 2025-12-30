@@ -998,17 +998,24 @@ export class DatabaseStorage implements IStorage {
 
   async acceptInvitation(token: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
-      const [invitation] = await db
+      // First check if invitation exists
+      const existingInvitation = await this.getInvitationByToken(token)
+      if (!existingInvitation) {
+        throw new Error("Invitation not found")
+      }
+
+      if (existingInvitation.status !== "pending") {
+        throw new Error(
+          `Invitation cannot be accepted: current status is ${existingInvitation.status}`
+        )
+      }
+
+      await db
         .update(invitations)
         .set({ status: "accepted" })
         .where(
           and(eq(invitations.token, token), eq(invitations.status, "pending"))
         )
-        .returning()
-
-      if (!invitation) {
-        throw new Error("Invitation not found or not in a pending state")
-      }
     })
   }
 }
