@@ -211,11 +211,59 @@ export function organizationRoutes(app: Express) {
   // Invite user to organization
   app.post("/api/organization/:id/invite", async (req, res) => {
     try {
+      const userSub = getUserSub(req, res)
+      if (!userSub) {
+        return
+      }
+
       const orgId = parseInt(req.params.id)
       const { email } = req.body
 
+      if (Number.isNaN(orgId)) {
+        res.status(400).json({ error: "Invalid organization id" })
+        return
+      }
+
       if (!email || typeof email !== "string") {
         res.status(400).json({ error: "Email is required" })
+        return
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(email)) {
+        res.status(400).json({ error: "Invalid email format" })
+        return
+      }
+
+      // Check if organization exists
+      const organization = await storage.getOrganization(orgId)
+      if (!organization) {
+        res.status(404).json({ error: "Organization not found" })
+        return
+      }
+
+      // Check if user has permission to invite users to this organization
+      const user = await storage.getUser(userSub)
+      if (!user) {
+        res.status(404).json({ error: "User not found" })
+        return
+      }
+
+      const userOrg = await storage.getUserOrganizationRole(user.id, orgId)
+
+      if (!userOrg) {
+        res
+          .status(403)
+          .json({ error: "You are not a member of this organization" })
+        return
+      }
+
+      // Only owners and admins can invite users
+      if (userOrg.role !== "owner" && userOrg.role !== "admin") {
+        res
+          .status(403)
+          .json({ error: "Only owners and admins can invite users" })
         return
       }
 
@@ -227,9 +275,23 @@ export function organizationRoutes(app: Express) {
 
       res.json(true)
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to invite user"
-      res.status(500).json({ error: message })
+      if (error instanceof Error) {
+        // Check if it's an email sending error
+        if (
+          error.message.includes("Postmark") ||
+          error.message.includes("email")
+        ) {
+          res.status(500).json({
+            error:
+              "Failed to send invitation email. Please check email service configuration.",
+            details: error.message,
+          })
+          return
+        }
+        res.status(500).json({ error: error.message })
+      } else {
+        res.status(500).json({ error: "Failed to invite user" })
+      }
     }
   })
 }

@@ -27,6 +27,14 @@ export function inviteUnprotectedRoutes(app: Express) {
         return
       }
 
+      if (invitation.status === "accepted") {
+        res.status(200).json({
+          message: "Invitation has already been accepted",
+          invitationStatus: invitation.status,
+        })
+        return
+      }
+
       const organization = await storage.getOrganization(
         invitation.organizationId
       )
@@ -81,10 +89,23 @@ export function inviteProtectedRoutes(app: Express) {
         return
       }
 
+      // Validate that the authenticated user matches the Auth0 user
+      if (auth0User.user_id !== userSub) {
+        res
+          .status(403)
+          .json({ error: "Authenticated user does not match invitation" })
+        return
+      }
+
       if (invitation.status === "rejected") {
         res
           .status(410)
           .json({ error: "Invitation has expired or been rejected" })
+        return
+      }
+
+      if (invitation.status === "accepted") {
+        res.status(409).json({ error: "Invitation has already been accepted" })
         return
       }
 

@@ -8,6 +8,7 @@ import {
   boolean,
   integer,
   uuid,
+  index,
 } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod"
 import { z } from "zod"
@@ -198,14 +199,22 @@ export const enqueuedTasks = pgTable(
   })
 )
 
-export const invitations = pgTable("invitations", {
-  organizationId: serial("organization_id").notNull(),
-  email: text("email").notNull(),
-  token: uuid("token").primaryKey().defaultRandom(),
-  status: text("status").$type<InvitationStatusType>().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-})
+export const invitations = pgTable(
+  "invitations",
+  {
+    organizationId: serial("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    token: uuid("token").primaryKey().defaultRandom(),
+    status: text("status").$type<InvitationStatusType>().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    emailIdx: index("invitations_email_idx").on(table.email),
+  })
+)
 
 // Existing schemas
 export const insertPrdSchema = createInsertSchema(prds)

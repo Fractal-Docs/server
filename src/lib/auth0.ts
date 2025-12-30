@@ -1,13 +1,18 @@
-import crypto from "crypto"
+export interface Auth0User {
+  user_id: string
+  email: string
+  email_verified: boolean
+  name?: string
+  nickname?: string
+  picture?: string
+  created_at: string
+  updated_at: string
+}
 
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN
 // Management API credentials (M2M application)
 const AUTH0_MGMT_CLIENT_ID = process.env.AUTH0_MGMT_CLIENT_ID
 const AUTH0_MGMT_CLIENT_SECRET = process.env.AUTH0_MGMT_CLIENT_SECRET
-
-function generateRandomPassword(length = 32) {
-  return `!${crypto.randomBytes(length).toString("hex")}!`
-}
 
 /**
  * Function to get Auth0 Management API token
@@ -45,10 +50,10 @@ export async function getAuth0AccessToken(): Promise<string> {
 
     const data = await response.json()
     return data.access_token
-  } catch (error: any) {
-    throw new Error(
-      `Authentication failed: ${error.response?.data?.error_description || error.message}`
-    )
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Authentication failed"
+    throw new Error(`Authentication failed: ${message}`)
   }
 }
 
@@ -81,54 +86,17 @@ export async function getUserRoles(
 
     const data = await response.json()
     return data.map((role: { name: string }) => role.name)
-  } catch (error: any) {
-    throw new Error(
-      `Failed to retrieve roles: ${error.response?.data?.error_description || error.message}`
-    )
-  }
-}
-
-/**
- * Function to create a user in Auth0
- * @param {string} email - The user's email address
- * @returns {Promise<string>} - Returns the user's Auth0 sub identifier
- */
-export async function inviteUser(
-  accessToken: string,
-  email: string
-): Promise<any> {
-  try {
-    const response = await fetch(`https://${AUTH0_DOMAIN}/api/v2/users`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        email_verified: false,
-        connection: "Username-Password-Authentication",
-        password: generateRandomPassword(),
-      }),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      console.log("error", errorData)
-      throw new Error(errorData.error_description || response.statusText)
-    }
-
-    const data = await response.json()
-    return data
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error_description || error.message)
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Failed to retrieve roles"
+    throw new Error(`Failed to retrieve roles: ${message}`)
   }
 }
 
 export async function getUserByEmail(
   accessToken: string,
   email: string
-): Promise<any> {
+): Promise<Auth0User | undefined> {
   try {
     const response = await fetch(
       `https://${AUTH0_DOMAIN}/api/v2/users-by-email?email=${encodeURIComponent(email)}`,
@@ -150,7 +118,9 @@ export async function getUserByEmail(
     const user = data.find((user: { email: string }) => user.email === email)
     if (!user) return undefined
     return user
-  } catch (error: any) {
-    throw new Error(error.response?.data?.error_description || error.message)
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Failed to get user by email"
+    throw new Error(message)
   }
 }
