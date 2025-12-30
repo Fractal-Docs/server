@@ -269,7 +269,7 @@ export function organizationRoutes(app: Express) {
 
       const invitation = await storage.createInvitation(orgId, email)
 
-      const inviteLink = `${process.env.APP_BASE_URL}/accept?token=${invitation.token}`
+      const inviteLink = `${process.env.APP_BASE_URL}/accept?token=${encodeURIComponent(invitation.token)}`
 
       await sendInviteEmail(email, inviteLink)
 

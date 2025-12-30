@@ -84,8 +84,8 @@ export function inviteProtectedRoutes(app: Express) {
 
       const accessToken = await getAuth0AccessToken()
       const auth0User = await getUserByEmail(accessToken, invitation.email)
-      if (!auth0User || invitation.email !== auth0User.email) {
-        res.status(400).json({ error: "Invalid email" })
+      if (!auth0User) {
+        res.status(400).json({ error: "User not found" })
         return
       }
 
