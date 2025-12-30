@@ -3,7 +3,7 @@ import { storage } from "src/storage"
 import { getAuth0AccessToken, getUserByEmail } from "../auth0"
 import { getUserSub } from "../helpers"
 
-export function inviteRoutes(app: Express) {
+export function inviteUnprotectedRoutes(app: Express) {
   app.get("/api/invite/validate", async (req, res) => {
     try {
       const { token } = req.query
@@ -51,7 +51,9 @@ export function inviteRoutes(app: Express) {
       res.status(500).json({ error: message })
     }
   })
+}
 
+export function inviteProtectedRoutes(app: Express) {
   app.post("/api/invite/accept", async (req, res) => {
     try {
       const { token } = req.body
@@ -95,7 +97,7 @@ export function inviteRoutes(app: Express) {
         return
       }
 
-      const user = await storage.getUser(auth0User.sub)
+      const user = await storage.getUser(auth0User.user_id)
 
       if (!user) {
         res.status(404).json({ error: "User not found" })
