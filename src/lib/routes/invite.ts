@@ -1,6 +1,7 @@
 import type { Express } from "express"
 import { storage } from "src/storage"
 import { getAuth0AccessToken, getUserByEmail } from "../auth0"
+import { getUserSub } from "../helpers"
 
 export function inviteRoutes(app: Express) {
   app.get("/api/invite/validate", async (req, res) => {
@@ -19,6 +20,13 @@ export function inviteRoutes(app: Express) {
         return
       }
 
+      if (invitation.status === "rejected") {
+        res
+          .status(410)
+          .json({ error: "Invitation has expired or been rejected" })
+        return
+      }
+
       const organization = await storage.getOrganization(
         invitation.organizationId
       )
@@ -34,6 +42,7 @@ export function inviteRoutes(app: Express) {
       res.json({
         invitation,
         user: auth0User,
+        userExists: !!auth0User,
         organization,
       })
     } catch (error: unknown) {
@@ -46,6 +55,10 @@ export function inviteRoutes(app: Express) {
   app.post("/api/invite/accept", async (req, res) => {
     try {
       const { token } = req.body
+      const userSub = getUserSub(req, res)
+      if (!userSub) {
+        return
+      }
 
       if (!token || typeof token !== "string") {
         res.status(400).json({ error: "Token is required" })
@@ -59,6 +72,20 @@ export function inviteRoutes(app: Express) {
         return
       }
 
+      const accessToken = await getAuth0AccessToken()
+      const auth0User = await getUserByEmail(accessToken, invitation.email)
+      if (!auth0User || invitation.email !== auth0User.email) {
+        res.status(400).json({ error: "Invalid email" })
+        return
+      }
+
+      if (invitation.status === "rejected") {
+        res
+          .status(410)
+          .json({ error: "Invitation has expired or been rejected" })
+        return
+      }
+
       const organization = await storage.getOrganization(
         invitation.organizationId
       )
@@ -68,7 +95,19 @@ export function inviteRoutes(app: Express) {
         return
       }
 
+      const user = await storage.getUser(auth0User.sub)
+
+      if (!user) {
+        res.status(404).json({ error: "User not found" })
+        return
+      }
+
       await storage.acceptInvitation(invitation.token)
+      await storage.addUserToOrganization({
+        userId: user.id,
+        organizationId: organization.id,
+        role: "member",
+      })
 
       res.json({ success: true })
     } catch (error: unknown) {
