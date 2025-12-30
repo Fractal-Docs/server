@@ -6,7 +6,7 @@ import { getUserSub } from "../helpers"
 export function inviteUnprotectedRoutes(app: Express) {
   app.get("/api/invite/validate", async (req, res) => {
     try {
-      const { token } = req.query
+      const token = req.headers["x-invite-token"]
 
       if (!token || typeof token !== "string") {
         res.status(400).json({ error: "Token is required" })
@@ -24,6 +24,14 @@ export function inviteUnprotectedRoutes(app: Express) {
         res
           .status(410)
           .json({ error: "Invitation has expired or been rejected" })
+        return
+      }
+
+      if (invitation.status === "accepted") {
+        res.status(200).json({
+          message: "Invitation has already been accepted",
+          invitationStatus: invitation.status,
+        })
         return
       }
 
@@ -76,8 +84,16 @@ export function inviteProtectedRoutes(app: Express) {
 
       const accessToken = await getAuth0AccessToken()
       const auth0User = await getUserByEmail(accessToken, invitation.email)
-      if (!auth0User || invitation.email !== auth0User.email) {
-        res.status(400).json({ error: "Invalid email" })
+      if (!auth0User) {
+        res.status(400).json({ error: "User not found" })
+        return
+      }
+
+      // Validate that the authenticated user matches the Auth0 user
+      if (auth0User.user_id !== userSub) {
+        res
+          .status(403)
+          .json({ error: "Authenticated user does not match invitation" })
         return
       }
 
@@ -85,6 +101,11 @@ export function inviteProtectedRoutes(app: Express) {
         res
           .status(410)
           .json({ error: "Invitation has expired or been rejected" })
+        return
+      }
+
+      if (invitation.status === "accepted") {
+        res.status(409).json({ error: "Invitation has already been accepted" })
         return
       }
 

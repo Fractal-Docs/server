@@ -145,6 +145,10 @@ export interface IStorage {
     organizationId: number,
     role: string
   ): Promise<UserOrganization>
+  getUserOrganizationRole(
+    userId: number,
+    organizationId: number
+  ): Promise<UserOrganization | undefined>
   getJob(jobId: string): Promise<EnqueuedTask | null>
   addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask>
   updateJob(
@@ -834,6 +838,24 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  async getUserOrganizationRole(
+    userId: number,
+    organizationId: number
+  ): Promise<UserOrganization | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [userOrg] = await db
+        .select()
+        .from(userOrganizations)
+        .where(
+          and(
+            eq(userOrganizations.userId, userId),
+            eq(userOrganizations.organizationId, organizationId)
+          )
+        )
+      return userOrg
+    })
+  }
+
   async getJobs(
     organizationId: number,
     jobTypes: JobType[]
@@ -935,6 +957,22 @@ export class DatabaseStorage implements IStorage {
     email: string
   ): Promise<Invitation> {
     return this.handleDatabaseOperation(async () => {
+      // Check if a pending invitation already exists
+      const [existingInvitation] = await db
+        .select()
+        .from(invitations)
+        .where(
+          and(
+            eq(invitations.organizationId, organizationId),
+            eq(invitations.email, email),
+            eq(invitations.status, "pending")
+          )
+        )
+
+      if (existingInvitation) {
+        return existingInvitation
+      }
+
       const [invitation] = await db
         .insert(invitations)
         .values({
@@ -960,10 +998,24 @@ export class DatabaseStorage implements IStorage {
 
   async acceptInvitation(token: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
+      // First check if invitation exists
+      const existingInvitation = await this.getInvitationByToken(token)
+      if (!existingInvitation) {
+        throw new Error("Invitation not found")
+      }
+
+      if (existingInvitation.status !== "pending") {
+        throw new Error(
+          `Invitation cannot be accepted: current status is ${existingInvitation.status}`
+        )
+      }
+
       await db
         .update(invitations)
         .set({ status: "accepted" })
-        .where(eq(invitations.token, token))
+        .where(
+          and(eq(invitations.token, token), eq(invitations.status, "pending"))
+        )
     })
   }
 }

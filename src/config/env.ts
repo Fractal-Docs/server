@@ -39,6 +39,8 @@ export const env = {
   AUTH0_CLIENT_SECRET: process.env.AUTH0_CLIENT_SECRET || "",
   AUTH0_MGMT_CLIENT_ID: process.env.AUTH0_MGMT_CLIENT_ID || "",
   AUTH0_MGMT_CLIENT_SECRET: process.env.AUTH0_MGMT_CLIENT_SECRET || "",
+  APP_BASE_URL: process.env.APP_BASE_URL || "",
+  POSTMARK_API_KEY: process.env.POSTMARK_API_KEY || "",
 } as const
 
 // Helper functions
