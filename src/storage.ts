@@ -34,7 +34,9 @@ import {
   InsertRole,
   RoleRecord,
   Role,
-  StatusType,
+  JobStatusType,
+  Invitation,
+  invitations,
 } from "./shared/schema"
 import { db } from "./db"
 import { eq, like, inArray, and } from "drizzle-orm"
@@ -143,6 +145,10 @@ export interface IStorage {
     organizationId: number,
     role: string
   ): Promise<UserOrganization>
+  getUserOrganizationRole(
+    userId: number,
+    organizationId: number
+  ): Promise<UserOrganization | undefined>
   getJob(jobId: string): Promise<EnqueuedTask | null>
   addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask>
   updateJob(
@@ -832,6 +838,24 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  async getUserOrganizationRole(
+    userId: number,
+    organizationId: number
+  ): Promise<UserOrganization | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [userOrg] = await db
+        .select()
+        .from(userOrganizations)
+        .where(
+          and(
+            eq(userOrganizations.userId, userId),
+            eq(userOrganizations.organizationId, organizationId)
+          )
+        )
+      return userOrg
+    })
+  }
+
   async getJobs(
     organizationId: number,
     jobTypes: JobType[]
@@ -912,7 +936,7 @@ export class DatabaseStorage implements IStorage {
     repoId: string,
     branch: string,
     type: JobType,
-    status?: StatusType
+    status?: JobStatusType
   ): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       await db
@@ -924,6 +948,73 @@ export class DatabaseStorage implements IStorage {
             eq(enqueuedTasks.type, type),
             status ? eq(enqueuedTasks.status, status) : undefined
           )
+        )
+    })
+  }
+
+  async createInvitation(
+    organizationId: number,
+    email: string
+  ): Promise<Invitation> {
+    return this.handleDatabaseOperation(async () => {
+      // Check if a pending invitation already exists
+      const [existingInvitation] = await db
+        .select()
+        .from(invitations)
+        .where(
+          and(
+            eq(invitations.organizationId, organizationId),
+            eq(invitations.email, email),
+            eq(invitations.status, "pending")
+          )
+        )
+
+      if (existingInvitation) {
+        return existingInvitation
+      }
+
+      const [invitation] = await db
+        .insert(invitations)
+        .values({
+          organizationId,
+          email,
+          status: "pending",
+        })
+        .returning()
+      if (!invitation) throw new Error("Failed to create invitation")
+      return invitation
+    })
+  }
+
+  async getInvitationByToken(token: string): Promise<Invitation | null> {
+    return this.handleDatabaseOperation(async () => {
+      const [invitation] = await db
+        .select()
+        .from(invitations)
+        .where(eq(invitations.token, token))
+      return invitation || null
+    })
+  }
+
+  async acceptInvitation(token: string): Promise<void> {
+    return this.handleDatabaseOperation(async () => {
+      // First check if invitation exists
+      const existingInvitation = await this.getInvitationByToken(token)
+      if (!existingInvitation) {
+        throw new Error("Invitation not found")
+      }
+
+      if (existingInvitation.status !== "pending") {
+        throw new Error(
+          `Invitation cannot be accepted: current status is ${existingInvitation.status}`
+        )
+      }
+
+      await db
+        .update(invitations)
+        .set({ status: "accepted" })
+        .where(
+          and(eq(invitations.token, token), eq(invitations.status, "pending"))
         )
     })
   }

@@ -7,7 +7,7 @@ import {
   listOrganizationRepos,
   listUserRepos,
 } from "../github"
-import { getOrigin, getParams } from "../helpers"
+import { getOrigin, getParams, getUserSub } from "../helpers"
 
 interface GithubTokenResponse {
   access_token?: string
@@ -29,16 +29,18 @@ export function githubRoutes(app: Express) {
     res.json({ url: githubAuthUrl })
   })
   app.get("/api/github/complete-oauth", async (req, res) => {
-    const { code, userSub } = req.query
-    const orgSlug = req.headers["org-slug"] as string
+    const { code, orgSlug } = req.query as {
+      code?: string
+      orgSlug?: string
+    }
 
     if (!code || typeof code !== "string") {
       res.status(400).json({ error: "No code provided" })
       return
     }
 
+    const userSub = getUserSub(req, res)
     if (!userSub) {
-      res.status(400).json({ error: "User sub not provided" })
       return
     }
 
@@ -81,9 +83,9 @@ export function githubRoutes(app: Express) {
         throw new Error("No access token received from GitHub")
       }
 
-      const user = await storage.getUser(userSub as string)
+      const user = await storage.getUser(userSub)
       if (user) {
-        await storage.updateOrganization(orgSlug, {
+        await storage.updateOrganization(orgSlug as string, {
           accessToken: data.access_token,
         })
       } else {
@@ -110,15 +112,14 @@ export function githubRoutes(app: Express) {
   })
 
   app.get("/api/github/app/install/callback", async (req, res) => {
-    const { installation_id } = req.query
-    const orgSlug = req.headers["org-slug"] as string
-    const organization = await storage.getOrganizationBySlug(orgSlug)
+    const { installation_id, orgSlug } = req.query
+    const organization = await storage.getOrganizationBySlug(orgSlug as string)
     if (!organization) {
       res.status(404).json({ error: "Organization not found" })
       return
     }
 
-    await storage.updateOrganization(orgSlug, {
+    await storage.updateOrganization(orgSlug as string, {
       installationId: parseInt(installation_id as string),
     })
 
@@ -128,8 +129,8 @@ export function githubRoutes(app: Express) {
   // Gets repos
   app.get("/api/github/available-repos", async (req, res) => {
     try {
-      const orgSlug = req.headers["org-slug"] as string
-      if (!orgSlug) {
+      const { orgSlug } = req.query
+      if (!orgSlug || typeof orgSlug !== "string") {
         res.status(401).json({ error: "Organization not provided" })
         return
       }
@@ -171,8 +172,8 @@ export function githubRoutes(app: Express) {
   // Add new route for GitHub user status
   app.get("/api/github/auth", async (req, res) => {
     try {
-      const orgSlug = req.headers["org-slug"] as string
-      if (!orgSlug) {
+      const { orgSlug } = req.query
+      if (!orgSlug || typeof orgSlug !== "string") {
         res.status(401).json({ error: "Organization not provided" })
         return
       }
@@ -193,8 +194,8 @@ export function githubRoutes(app: Express) {
 
   app.post("/api/github/import-repos", async (req, res) => {
     try {
-      const orgSlug = req.headers["org-slug"] as string
-      if (!orgSlug) {
+      const { orgSlug } = req.query
+      if (!orgSlug || typeof orgSlug !== "string") {
         res.status(401).json({ error: "Organization not provided" })
         return
       }
@@ -234,8 +235,8 @@ export function githubRoutes(app: Express) {
   app.get("/api/github/repos/:repo_id/files", async (req, res) => {
     try {
       const { repo_id, branch } = getParams(req, res, ["repo_id", "branch"])
-      const orgSlug = req.headers["org-slug"] as string
-      if (!orgSlug) {
+      const { orgSlug } = req.query
+      if (!orgSlug || typeof orgSlug !== "string") {
         res.status(401).json({ error: "Organization not provided" })
         return
       }
@@ -267,8 +268,8 @@ export function githubRoutes(app: Express) {
   app.get("/api/github/repos/:repo_id/branches", async (req, res) => {
     try {
       const { repo_id } = getParams(req, res, ["repo_id"])
-      const orgSlug = req.headers["org-slug"] as string
-      if (!orgSlug) {
+      const { orgSlug } = req.query
+      if (!orgSlug || typeof orgSlug !== "string") {
         res.status(401).json({ error: "Organization not provided" })
         return
       }

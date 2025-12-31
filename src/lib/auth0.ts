@@ -1,9 +1,29 @@
+export interface Auth0User {
+  user_id: string
+  email: string
+  email_verified: boolean
+  name?: string
+  nickname?: string
+  picture?: string
+  created_at: string
+  updated_at: string
+}
+
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN
-const AUTH0_CLIENT_ID = process.env.AUTH0_CLIENT_ID
-const AUTH0_CLIENT_SECRET = process.env.AUTH0_CLIENT_SECRET
+// Management API credentials (M2M application)
+const AUTH0_MGMT_CLIENT_ID = process.env.AUTH0_MGMT_CLIENT_ID
+const AUTH0_MGMT_CLIENT_SECRET = process.env.AUTH0_MGMT_CLIENT_SECRET
 
 /**
  * Function to get Auth0 Management API token
+ * Uses separate M2M application credentials for Management API access
+ *
+ * Setup required:
+ * 1. Create a Machine-to-Machine application in Auth0
+ * 2. Authorize it for Auth0 Management API
+ * 3. Grant it read:users and read:roles permissions
+ * 4. Set AUTH0_MGMT_CLIENT_ID and AUTH0_MGMT_CLIENT_SECRET in .env
+ *
  * @returns {Promise<string>} - Returns a JWT token if authentication is successful
  */
 export async function getAuth0AccessToken(): Promise<string> {
@@ -16,8 +36,8 @@ export async function getAuth0AccessToken(): Promise<string> {
       body: JSON.stringify({
         grant_type: "client_credentials",
         audience: `https://${AUTH0_DOMAIN}/api/v2/`,
-        client_id: AUTH0_CLIENT_ID,
-        client_secret: AUTH0_CLIENT_SECRET,
+        client_id: AUTH0_MGMT_CLIENT_ID,
+        client_secret: AUTH0_MGMT_CLIENT_SECRET,
       }),
     })
 
@@ -30,10 +50,10 @@ export async function getAuth0AccessToken(): Promise<string> {
 
     const data = await response.json()
     return data.access_token
-  } catch (error: any) {
-    throw new Error(
-      `Authentication failed: ${error.response?.data?.error_description || error.message}`
-    )
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Authentication failed"
+    throw new Error(`Authentication failed: ${message}`)
   }
 }
 
@@ -66,9 +86,41 @@ export async function getUserRoles(
 
     const data = await response.json()
     return data.map((role: { name: string }) => role.name)
-  } catch (error: any) {
-    throw new Error(
-      `Failed to retrieve roles: ${error.response?.data?.error_description || error.message}`
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Failed to retrieve roles"
+    throw new Error(`Failed to retrieve roles: ${message}`)
+  }
+}
+
+export async function getUserByEmail(
+  accessToken: string,
+  email: string
+): Promise<Auth0User | undefined> {
+  try {
+    const response = await fetch(
+      `https://${AUTH0_DOMAIN}/api/v2/users-by-email?email=${encodeURIComponent(email)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
     )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error_description || response.statusText)
+    }
+
+    const data = await response.json()
+    const user = data.find((user: { email: string }) => user.email === email)
+    if (!user) return undefined
+    return user
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Failed to get user by email"
+    throw new Error(message)
   }
 }

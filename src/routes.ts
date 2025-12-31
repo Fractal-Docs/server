@@ -7,6 +7,10 @@ import { releaseRoutes } from "./lib/routes/releases"
 import { organizationRoutes } from "./lib/routes/organizations"
 import { documentsRoutes } from "./lib/routes/documents"
 import { roleRoutes } from "./lib/routes/roles"
+import {
+  inviteProtectedRoutes,
+  inviteUnprotectedRoutes,
+} from "./lib/routes/invite"
 
 export async function registerProtectedRoutes(app: Express): Promise<void> {
   prdRoutes(app)
@@ -17,4 +21,9 @@ export async function registerProtectedRoutes(app: Express): Promise<void> {
   organizationRoutes(app)
   documentsRoutes(app)
   authRoutes(app)
+  inviteProtectedRoutes(app)
+}
+
+export async function registerPublicRoutes(app: Express): Promise<void> {
+  inviteUnprotectedRoutes(app)
 }
