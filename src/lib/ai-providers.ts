@@ -1,7 +1,7 @@
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import { encodingForModel } from "js-tiktoken"
-import { InsertRepoDoc, Role } from "src/shared/schema"
+import { DocType, Role } from "src/shared/schema"
 
 export type ModelType =
   | "gpt-4.1"
@@ -150,7 +150,7 @@ function estimateTokens(
 }
 
 export function chooseModel(
-  docType: InsertRepoDoc["docType"] | "release" | "role",
+  docType: DocType,
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,

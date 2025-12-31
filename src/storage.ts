@@ -37,6 +37,7 @@ import {
   JobStatusType,
   Invitation,
   invitations,
+  DocType,
 } from "./shared/schema"
 import { db } from "./db"
 import { eq, like, inArray, and } from "drizzle-orm"
@@ -90,7 +91,7 @@ export interface IStorage {
   getRepoDoc(
     repoId: string,
     branchName: string,
-    docType: InsertRepoDoc["docType"]
+    docType: DocType
   ): Promise<RepoDoc | undefined>
   updateRepoDoc(id: number, doc: Partial<InsertRepoDoc>): Promise<RepoDoc>
   deleteRepoDoc(id: number): Promise<void>
@@ -461,7 +462,7 @@ export class DatabaseStorage implements IStorage {
   async getRepoDoc(
     repoId: string,
     branch: string,
-    docType: InsertRepoDoc["docType"]
+    docType: DocType
   ): Promise<RepoDoc | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db

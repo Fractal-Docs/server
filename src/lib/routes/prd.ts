@@ -1,69 +1,59 @@
 import type { Express } from "express"
 import { insertPrdSchema } from "src/shared/schema"
 import { storage } from "src/storage"
-import { getParams } from "../helpers"
+import {
+  asyncHandler,
+  withOrganization,
+  OrganizationRequest,
+} from "./middleware"
 
 export function prdRoutes(app: Express) {
-  // PRD routes
-  app.get("/api/organization/:org_id/prds", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
-      const prds = await storage.getPrds(organization.id)
+  // PRD routes - all routes use withOrganization middleware
+  const orgMiddleware = withOrganization()
+
+  app.get(
+    "/api/organization/:org_id/prds",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
+      const prds = await storage.getPrds(req.organization.id)
       res.json(prds)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to fetch PRDs"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to fetch PRDs")
+  )
 
-  app.get("/api/organization/:org_id/prds/:prd_id", async (req, res) => {
-    const { org_id, prd_id } = getParams(req, res, ["org_id", "prd_id"])
-    const organization = await storage.getOrganization(org_id)
-    if (!organization) {
-      res.status(404).json({ error: "Organization not found" })
-      return
-    }
-
-    const prd = await storage.getPrd(prd_id)
-    if (!prd) {
-      res.status(404).json({ error: "PRD not found" })
-      return
-    }
-
-    res.json(prd)
-  })
-
-  app.get("/api/organization/:org_id/prds/search", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
+  app.get(
+    "/api/organization/:org_id/prds/search",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
       const query = req.query.q as string
-      const results = await storage.searchPrds(organization.id, query)
+      const results = await storage.searchPrds(req.organization.id, query)
       res.json(results)
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Search failed"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Search failed")
+  )
 
-  app.post("/api/organization/:org_id/prds", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
+  app.get(
+    "/api/organization/:org_id/prds/:prd_id",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
+      const prdId = parseInt(req.params.prd_id)
+      if (isNaN(prdId)) {
+        res.status(400).json({ error: "Invalid PRD ID" })
         return
       }
+
+      const prd = await storage.getPrd(prdId)
+      if (!prd) {
+        res.status(404).json({ error: "PRD not found" })
+        return
+      }
+
+      res.json(prd)
+    }, "Failed to fetch PRD")
+  )
+
+  app.post(
+    "/api/organization/:org_id/prds",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
       const result = insertPrdSchema.safeParse(req.body)
       if (!result.success) {
         res.status(400).json({
@@ -75,37 +65,16 @@ export function prdRoutes(app: Express) {
 
       const prd = await storage.createPrd(result.data)
       res.json(prd)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create PRD"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to create PRD")
+  )
 
-  app.delete("/api/organization/:org_id/prds/:prd_id", async (req, res) => {
-    try {
-      const { org_id, prd_id } = getParams(req, res, ["org_id", "prd_id"])
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
-
-      await storage.deletePrd(prd_id)
-      res.status(204).end()
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to delete PRD"
-      res.status(500).json({ error: message })
-    }
-  })
-
-  app.patch("/api/organization/:org_id/prds/:prd_id", async (req, res) => {
-    try {
-      const { org_id, prd_id } = getParams(req, res, ["org_id", "prd_id"])
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
+  app.patch(
+    "/api/organization/:org_id/prds/:prd_id",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
+      const prdId = parseInt(req.params.prd_id)
+      if (isNaN(prdId)) {
+        res.status(400).json({ error: "Invalid PRD ID" })
         return
       }
 
@@ -118,12 +87,23 @@ export function prdRoutes(app: Express) {
         return
       }
 
-      const prd = await storage.updatePrd(prd_id, result.data)
+      const prd = await storage.updatePrd(prdId, result.data)
       res.json(prd)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update PRD"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to update PRD")
+  )
+
+  app.delete(
+    "/api/organization/:org_id/prds/:prd_id",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
+      const prdId = parseInt(req.params.prd_id)
+      if (isNaN(prdId)) {
+        res.status(400).json({ error: "Invalid PRD ID" })
+        return
+      }
+
+      await storage.deletePrd(prdId)
+      res.status(204).end()
+    }, "Failed to delete PRD")
+  )
 }

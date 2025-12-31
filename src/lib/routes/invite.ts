@@ -1,11 +1,12 @@
 import type { Express } from "express"
 import { storage } from "src/storage"
 import { getAuth0AccessToken, getUserByEmail } from "../auth0"
-import { getUserSub } from "../helpers"
+import { asyncHandler, withUserSub, UserRequest } from "./middleware"
 
 export function inviteUnprotectedRoutes(app: Express) {
-  app.get("/api/invite/validate", async (req, res) => {
-    try {
+  app.get(
+    "/api/invite/validate",
+    asyncHandler(async (req, res) => {
       const token = req.headers["x-invite-token"]
 
       if (!token || typeof token !== "string") {
@@ -53,22 +54,18 @@ export function inviteUnprotectedRoutes(app: Express) {
         userExists: !!auth0User,
         organization,
       })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to validate invitation"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to validate invitation")
+  )
 }
 
 export function inviteProtectedRoutes(app: Express) {
-  app.post("/api/invite/accept", async (req, res) => {
-    try {
+  const userMiddleware = withUserSub()
+
+  app.post(
+    "/api/invite/accept",
+    userMiddleware,
+    asyncHandler<UserRequest>(async (req, res) => {
       const { token } = req.body
-      const userSub = getUserSub(req, res)
-      if (!userSub) {
-        return
-      }
 
       if (!token || typeof token !== "string") {
         res.status(400).json({ error: "Token is required" })
@@ -90,7 +87,7 @@ export function inviteProtectedRoutes(app: Express) {
       }
 
       // Validate that the authenticated user matches the Auth0 user
-      if (auth0User.user_id !== userSub) {
+      if (auth0User.user_id !== req.userSub) {
         res
           .status(403)
           .json({ error: "Authenticated user does not match invitation" })
@@ -133,10 +130,6 @@ export function inviteProtectedRoutes(app: Express) {
       })
 
       res.json({ success: true })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to accept invitation"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to accept invitation")
+  )
 }

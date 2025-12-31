@@ -20,6 +20,27 @@ async function getGithubAppInstallation(installationId: number) {
   return await appOctokit.getInstallationOctokit(installationId)
 }
 
+// Common helper to get authenticated Octokit instance for an organization
+async function getOctokit(organization: Organization): Promise<Octokit> {
+  if (organization.isPersonal && organization.accessToken) {
+    return new Octokit({ auth: organization.accessToken })
+  }
+
+  if (organization.installationId) {
+    return (await getGithubAppInstallation(
+      organization.installationId
+    )) as unknown as Octokit
+  }
+
+  throw new Error("No GitHub access found for organization")
+}
+
+// Helper to parse repository full name into owner and repo
+function parseRepoFullName(fullName: string): { owner: string; repo: string } {
+  const [owner, repo] = fullName.split("/")
+  return { owner, repo }
+}
+
 export async function getRepoContent(
   organization: Organization,
   repository: GithubRepo,
@@ -27,7 +48,7 @@ export async function getRepoContent(
   branch: string = "main"
 ): Promise<{ path: string; content: string }[]> {
   const fileRegex = new RegExp(fileRegexString)
-  const [owner, repo] = repository.fullName.split("/")
+  const { owner, repo } = parseRepoFullName(repository.fullName)
 
   // Helper function to check if file path matches regex
   const isMatchingFile = (path: string): boolean => {
@@ -38,20 +59,13 @@ export async function getRepoContent(
     )
   }
 
-  const octokit = organization.isPersonal
-    ? new Octokit({ auth: organization.accessToken })
-    : organization.installationId
-      ? await getGithubAppInstallation(organization.installationId)
-      : null
+  const octokit = await getOctokit(organization)
+
   // Recursive function to get content
   async function getContentRecursive(
     path: string = ""
   ): Promise<{ path: string; content: string }[]> {
     try {
-      if (!octokit) {
-        throw new Error("No Github access found")
-      }
-
       const response = await octokit.request({
         method: "GET",
         url: `/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
@@ -128,18 +142,10 @@ export async function getRepoBranches(
   organization: Organization,
   repository: GithubRepo
 ): Promise<string[]> {
-  const octokit = organization.isPersonal
-    ? new Octokit({ auth: organization.accessToken })
-    : organization.installationId
-      ? await getGithubAppInstallation(organization.installationId)
-      : null
-  // Parse repo URL to get owner and repo name
-  const [owner, repo] = repository.fullName.split("/")
-  try {
-    if (!octokit) {
-      throw new Error("No Github access found")
-    }
+  const octokit = await getOctokit(organization)
+  const { owner, repo } = parseRepoFullName(repository.fullName)
 
+  try {
     const { data: branches } = await octokit.request({
       method: "GET",
       url: `/repos/${owner}/${repo}/branches`,
@@ -197,19 +203,11 @@ export async function listRepoFileSystem(
   repository: GithubRepo,
   branch: string
 ): Promise<FileSystemItem[]> {
-  const octokit = organization.isPersonal
-    ? new Octokit({ auth: organization.accessToken })
-    : organization.installationId
-      ? await getGithubAppInstallation(organization.installationId)
-      : null
-
-  const [owner, repo] = repository.fullName.split("/")
+  const octokit = await getOctokit(organization)
+  const { owner, repo } = parseRepoFullName(repository.fullName)
 
   async function fetchFileSystem(path: string = ""): Promise<FileSystemItem[]> {
     try {
-      if (!octokit) {
-        throw new Error("No Github access found")
-      }
       const response = await octokit.request({
         method: "GET",
         url: `/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
@@ -273,15 +271,9 @@ export async function getGithubRepo(
   organization: Organization,
   repository: GithubRepo
 ) {
-  const [owner, repo] = repository.fullName.split("/")
-  const octokit = organization.isPersonal
-    ? new Octokit({ auth: organization.accessToken })
-    : organization.installationId
-      ? await getGithubAppInstallation(organization.installationId)
-      : null
-  if (!octokit) {
-    throw new Error("No Github access found")
-  }
+  const { owner, repo } = parseRepoFullName(repository.fullName)
+  const octokit = await getOctokit(organization)
+
   const { data } = await octokit.request({
     method: "GET",
     url: `/repos/${owner}/${repo}`,
@@ -295,15 +287,8 @@ export async function getLatestCommit(
   repository: GithubRepo,
   branch: string
 ) {
-  const [owner, repo] = repository.fullName.split("/")
-  const octokit = organization.isPersonal
-    ? new Octokit({ auth: organization.accessToken })
-    : organization.installationId
-      ? await getGithubAppInstallation(organization.installationId)
-      : null
-  if (!octokit) {
-    throw new Error("No Github access found")
-  }
+  const { owner, repo } = parseRepoFullName(repository.fullName)
+  const octokit = await getOctokit(organization)
 
   const { data } = await octokit.request({
     method: "GET",
@@ -318,15 +303,8 @@ export async function compareBranches(
   base: string,
   head: string
 ) {
-  const [owner, repo] = repository.fullName.split("/")
-  const octokit = organization.isPersonal
-    ? new Octokit({ auth: organization.accessToken })
-    : organization.installationId
-      ? await getGithubAppInstallation(organization.installationId)
-      : null
-  if (!octokit) {
-    throw new Error("No Github access found")
-  }
+  const { owner, repo } = parseRepoFullName(repository.fullName)
+  const octokit = await getOctokit(organization)
 
   const basehead = `${base}...${head}`
 
