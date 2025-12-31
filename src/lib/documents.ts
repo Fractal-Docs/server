@@ -1,4 +1,4 @@
-import { InsertRepoDoc } from "src/shared/schema"
+import { DocType } from "src/shared/schema"
 import { chooseModel, getAIProvider, ModelType } from "./ai-providers"
 import { registerWorker } from "./task-manager"
 
@@ -47,7 +47,7 @@ export const registerGenerateWorker = (
 export async function prepareDocumentation(
   code: string,
   businessContext: string,
-  docType: InsertRepoDoc["docType"] = "overview"
+  docType: DocType = "overview"
 ): Promise<{
   developerPrompt: string
   userPrompt: string

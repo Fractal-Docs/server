@@ -1,45 +1,42 @@
 import type { Express } from "express"
 import { storage } from "src/storage"
-import { getParams } from "../helpers"
 import { ROLES, Role } from "src/shared/schema"
 import { nanoid } from "nanoid"
+import {
+  asyncHandler,
+  withOrganization,
+  OrganizationRequest,
+} from "./middleware"
 
 export function roleRoutes(app: Express) {
-  // Get all roles for an organization
-  app.get("/api/organization/:org_id/roles", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
+  const orgMiddleware = withOrganization()
 
-      const roles = await storage.getRolesByOrganization(org_id)
+  // Get all roles for an organization
+  app.get(
+    "/api/organization/:org_id/roles",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
+      const roles = await storage.getRolesByOrganization(req.orgId)
       res.json(roles)
-    } catch (error) {
-      console.error("Error fetching roles:", error)
-      res.status(500).json({ error: "Failed to fetch roles" })
-    }
-  })
+    }, "Failed to fetch roles")
+  )
 
   // Get a specific role by organization ID and role type
-  app.get("/api/organization/:org_id/roles/:role_type", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
+  app.get(
+    "/api/organization/:org_id/roles/:role_type",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
       const { role_type } = req.params
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
 
       if (!ROLES.includes(role_type as Role)) {
         res.status(400).json({ error: "Invalid role type" })
         return
       }
 
-      const role = await storage.getRoleByOrgAndType(org_id, role_type as Role)
+      const role = await storage.getRoleByOrgAndType(
+        req.orgId,
+        role_type as Role
+      )
 
       if (!role) {
         res.json({
@@ -50,29 +47,21 @@ export function roleRoutes(app: Express) {
       }
 
       res.json(role)
-    } catch (error) {
-      console.error("Error fetching role:", error)
-      res.status(500).json({ error: "Failed to fetch role" })
-    }
-  })
+    }, "Failed to fetch role")
+  )
 
   // Update a role's context
-  app.put("/api/organization/:org_id/roles/:role_type", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
+  app.put(
+    "/api/organization/:org_id/roles/:role_type",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
       const { role_type } = req.params
-      const organization = await storage.getOrganization(org_id)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
+      const { context } = req.body
 
       if (!ROLES.includes(role_type as Role)) {
         res.status(400).json({ error: "Invalid role type" })
         return
       }
-
-      const { context } = req.body
 
       if (!context || typeof context !== "string") {
         res
@@ -81,14 +70,14 @@ export function roleRoutes(app: Express) {
         return
       }
 
-      let role = await storage.getRoleByOrgAndType(org_id, role_type as Role)
+      let role = await storage.getRoleByOrgAndType(req.orgId, role_type as Role)
 
       if (!role) {
         // Create the role if it doesn't exist
         const roleId = nanoid()
         role = await storage.createRole({
           id: roleId,
-          organizationId: org_id,
+          organizationId: req.orgId,
           roleType: role_type as Role,
           context,
         })
@@ -98,11 +87,6 @@ export function roleRoutes(app: Express) {
       }
 
       res.json(role)
-    } catch (error) {
-      console.error("Error updating role:", error)
-      res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to update role",
-      })
-    }
-  })
+    }, "Failed to update role")
+  )
 }

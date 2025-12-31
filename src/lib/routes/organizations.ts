@@ -5,53 +5,58 @@ import {
   insertUserOrganizationSchema,
 } from "../../shared/schema"
 import { fromZodError } from "zod-validation-error"
-import { getParams, getUserSub } from "../helpers"
 import { sendInviteEmail } from "../email"
+import {
+  asyncHandler,
+  withOrganization,
+  withUserSub,
+  OrganizationRequest,
+  UserRequest,
+} from "./middleware"
 
 export function organizationRoutes(app: Express) {
+  const userMiddleware = withUserSub()
+  const orgMiddleware = withOrganization()
+
   // Get user's organizations
-  app.get("/api/organizations", async (req, res) => {
-    try {
-      const userSub = getUserSub(req, res)
-      if (!userSub) {
-        return
-      }
-      const user = await storage.getUser(userSub)
+  app.get(
+    "/api/organizations",
+    userMiddleware,
+    asyncHandler<UserRequest>(async (req, res) => {
+      const user = await storage.getUser(req.userSub)
       if (!user) {
         res.status(404).json({ error: "User not found" })
         return
       }
-      const userOrganizations = await storage.getOrganizationsByUserId(user?.id)
+      const userOrganizations = await storage.getOrganizationsByUserId(user.id)
       res.json(userOrganizations)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to fetch organizations"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to fetch organizations")
+  )
 
   // Get specific organization
-  app.get("/api/organization/:id", async (req, res) => {
-    try {
+  app.get(
+    "/api/organization/:id",
+    asyncHandler(async (req, res) => {
       const orgId = parseInt(req.params.id)
-      const organization = await storage.getOrganization(orgId)
+      if (isNaN(orgId)) {
+        res.status(400).json({ error: "Invalid organization ID" })
+        return
+      }
 
+      const organization = await storage.getOrganization(orgId)
       if (!organization) {
         res.status(404).json({ error: "Organization not found" })
         return
       }
 
       res.json(organization)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to fetch organization"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to fetch organization")
+  )
 
   // Create new organization
-  app.post("/api/organizations", async (req, res) => {
-    try {
+  app.post(
+    "/api/organizations",
+    asyncHandler(async (req, res) => {
       const result = insertOrganizationSchema.safeParse(req.body)
       if (!result.success) {
         res.status(400).json({ error: fromZodError(result.error).toString() })
@@ -59,68 +64,70 @@ export function organizationRoutes(app: Express) {
       }
 
       const organization = await storage.createOrganization(result.data)
-
       res.json(organization)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create organization"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to create organization")
+  )
 
   // Update organization
-  app.put("/api/organization/:org_id", async (req, res) => {
-    try {
-      const { org_id } = getParams(req, res, ["org_id"])
+  app.put(
+    "/api/organization/:org_id",
+    orgMiddleware,
+    asyncHandler<OrganizationRequest>(async (req, res) => {
       const result = insertOrganizationSchema.partial().safeParse(req.body)
-
       if (!result.success) {
         res.status(400).json({ error: fromZodError(result.error).toString() })
         return
       }
 
-      const organization = await storage.updateOrganization(org_id, result.data)
+      const organization = await storage.updateOrganization(
+        String(req.orgId),
+        result.data
+      )
       res.json(organization)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update organization"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to update organization")
+  )
 
   // Delete organization
-  app.delete("/api/organization/:id", async (req, res) => {
-    try {
+  app.delete(
+    "/api/organization/:id",
+    asyncHandler(async (req, res) => {
       const orgId = parseInt(req.params.id)
+      if (isNaN(orgId)) {
+        res.status(400).json({ error: "Invalid organization ID" })
+        return
+      }
+
       await storage.removeAllUsersFromOrganization(orgId)
       await storage.deleteOrganization(orgId)
       res.json({ success: true })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to delete organization"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to delete organization")
+  )
 
   // Get all users in organization
-  app.get("/api/organization/:id/users", async (req, res) => {
-    try {
+  app.get(
+    "/api/organization/:id/users",
+    asyncHandler(async (req, res) => {
       const orgId = parseInt(req.params.id)
+      if (isNaN(orgId)) {
+        res.status(400).json({ error: "Invalid organization ID" })
+        return
+      }
+
       const users = await storage.getUsersInOrganization(orgId)
       res.json(users)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to get users in organization"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to get users in organization")
+  )
 
   // Add user to organization
-  app.post("/api/organization/:id/users", async (req, res) => {
-    try {
+  app.post(
+    "/api/organization/:id/users",
+    asyncHandler(async (req, res) => {
       const orgId = parseInt(req.params.id)
+      if (isNaN(orgId)) {
+        res.status(400).json({ error: "Invalid organization ID" })
+        return
+      }
+
       const result = insertUserOrganizationSchema.safeParse({
         ...req.body,
         organizationId: orgId,
@@ -133,39 +140,39 @@ export function organizationRoutes(app: Express) {
 
       const userOrganization = await storage.addUserToOrganization(result.data)
       res.json(userOrganization)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to add user to organization"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to add user to organization")
+  )
 
   // Remove user from organization
-  app.delete("/api/organization/:id/users/:userId", async (req, res) => {
-    try {
+  app.delete(
+    "/api/organization/:id/users/:userId",
+    asyncHandler(async (req, res) => {
       const orgId = parseInt(req.params.id)
       const userId = parseInt(req.params.userId)
+
+      if (isNaN(orgId) || isNaN(userId)) {
+        res.status(400).json({ error: "Invalid organization or user ID" })
+        return
+      }
 
       await storage.removeUserFromOrganization(userId, orgId)
       res.json({ success: true })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to remove user from organization"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to remove user from organization")
+  )
 
   // Update user role in organization
-  app.put("/api/organization/:id/users/:userId/role", async (req, res) => {
-    try {
+  app.put(
+    "/api/organization/:id/users/:userId/role",
+    asyncHandler(async (req, res) => {
       const orgId = parseInt(req.params.id)
       const userId = parseInt(req.params.userId)
-      const { role } = req.body
 
+      if (isNaN(orgId) || isNaN(userId)) {
+        res.status(400).json({ error: "Invalid organization or user ID" })
+        return
+      }
+
+      const { role } = req.body
       if (!role || typeof role !== "string") {
         res.status(400).json({ error: "Role is required" })
         return
@@ -177,16 +184,13 @@ export function organizationRoutes(app: Express) {
         role
       )
       res.json(userOrganization)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to update user role"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to update user role")
+  )
 
   // Check uniqueness of org slug
-  app.post("/api/organization/slug", async (req, res) => {
-    try {
+  app.post(
+    "/api/organization/slug",
+    asyncHandler(async (req, res) => {
       const { slug } = req.body
 
       if (!slug || typeof slug !== "string") {
@@ -201,25 +205,18 @@ export function organizationRoutes(app: Express) {
       }
 
       res.json({ available: true })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to check slug"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to check slug")
+  )
 
   // Invite user to organization
-  app.post("/api/organization/:id/invite", async (req, res) => {
-    try {
-      const userSub = getUserSub(req, res)
-      if (!userSub) {
-        return
-      }
-
+  app.post(
+    "/api/organization/:id/invite",
+    userMiddleware,
+    asyncHandler<UserRequest>(async (req, res) => {
       const orgId = parseInt(req.params.id)
       const { email } = req.body
 
-      if (Number.isNaN(orgId)) {
+      if (isNaN(orgId)) {
         res.status(400).json({ error: "Invalid organization id" })
         return
       }
@@ -244,7 +241,7 @@ export function organizationRoutes(app: Express) {
       }
 
       // Check if user has permission to invite users to this organization
-      const user = await storage.getUser(userSub)
+      const user = await storage.getUser(req.userSub)
       if (!user) {
         res.status(404).json({ error: "User not found" })
         return
@@ -271,27 +268,27 @@ export function organizationRoutes(app: Express) {
 
       const inviteLink = `${process.env.APP_BASE_URL}/accept?token=${encodeURIComponent(invitation.token)}`
 
-      await sendInviteEmail(email, inviteLink)
-
-      res.json(true)
-    } catch (error: unknown) {
-      if (error instanceof Error) {
+      try {
+        await sendInviteEmail(email, inviteLink)
+      } catch (emailError) {
+        const errorMessage =
+          emailError instanceof Error ? emailError.message : String(emailError)
         // Check if it's an email sending error
         if (
-          error.message.includes("Postmark") ||
-          error.message.includes("email")
+          errorMessage.includes("Postmark") ||
+          errorMessage.includes("email")
         ) {
           res.status(500).json({
             error:
               "Failed to send invitation email. Please check email service configuration.",
-            details: error.message,
+            details: errorMessage,
           })
           return
         }
-        res.status(500).json({ error: error.message })
-      } else {
-        res.status(500).json({ error: "Failed to invite user" })
+        throw emailError
       }
-    }
-  })
+
+      res.json(true)
+    }, "Failed to invite user")
+  )
 }

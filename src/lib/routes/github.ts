@@ -7,7 +7,13 @@ import {
   listOrganizationRepos,
   listUserRepos,
 } from "../github"
-import { getOrigin, getParams, getUserSub } from "../helpers"
+import { getOrigin, getUserSub } from "../helpers"
+import {
+  asyncHandler,
+  withOrganizationBySlug,
+  requireGitHubAuth,
+  OrgSlugRequest,
+} from "./middleware"
 
 interface GithubTokenResponse {
   access_token?: string
@@ -16,6 +22,9 @@ interface GithubTokenResponse {
 }
 
 export function githubRoutes(app: Express) {
+  const orgSlugMiddleware = withOrganizationBySlug()
+  const githubAuthMiddleware = [orgSlugMiddleware, requireGitHubAuth()]
+
   // GitHub OAuth routes
   app.get("/api/github/login", (req, res) => {
     const { origin, normalizedOrigin } = getOrigin(req, res)
@@ -28,30 +37,34 @@ export function githubRoutes(app: Express) {
     const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo`
     res.json({ url: githubAuthUrl })
   })
-  app.get("/api/github/complete-oauth", async (req, res) => {
-    const { code, orgSlug } = req.query as {
-      code?: string
-      orgSlug?: string
-    }
 
-    if (!code || typeof code !== "string") {
-      res.status(400).json({ error: "No code provided" })
-      return
-    }
+  app.get(
+    "/api/github/complete-oauth",
+    asyncHandler(async (req, res) => {
+      const { code, orgSlug } = req.query as {
+        code?: string
+        orgSlug?: string
+      }
 
-    const userSub = getUserSub(req, res)
-    if (!userSub) {
-      return
-    }
+      if (!code || typeof code !== "string") {
+        res.status(400).json({ error: "No code provided" })
+        return
+      }
 
-    try {
+      const userSub = getUserSub(req, res)
+      if (!userSub) {
+        return
+      }
+
       const { origin, normalizedOrigin } = getOrigin(req, res)
       if (!origin || !normalizedOrigin) {
         return
       }
+
       const redirectUri = origin.startsWith("https")
         ? `https://${normalizedOrigin}/repos`
         : `http://${normalizedOrigin}/repos`
+
       const tokenRes = await fetch(
         "https://github.com/login/oauth/access_token",
         {
@@ -84,66 +97,52 @@ export function githubRoutes(app: Express) {
       }
 
       const user = await storage.getUser(userSub)
-      if (user) {
-        await storage.updateOrganization(orgSlug as string, {
-          accessToken: data.access_token,
-        })
-      } else {
+      if (!user) {
         throw new Error("User not found")
       }
 
+      await storage.updateOrganization(orgSlug as string, {
+        accessToken: data.access_token,
+      })
+
       res.json({ success: true })
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to authenticate with GitHub"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to authenticate with GitHub")
+  )
 
   // Github App routes
   app.get("/api/github/app/install/start", (_, res) => {
     const githubAppSlug = process.env.GITHUB_APP_SLUG
-
     res.json({
       url: `https://github.com/apps/${githubAppSlug}/installations/new`,
     })
   })
 
-  app.get("/api/github/app/install/callback", async (req, res) => {
-    const { installation_id, orgSlug } = req.query
-    const organization = await storage.getOrganizationBySlug(orgSlug as string)
-    if (!organization) {
-      res.status(404).json({ error: "Organization not found" })
-      return
-    }
-
-    await storage.updateOrganization(orgSlug as string, {
-      installationId: parseInt(installation_id as string),
-    })
-
-    res.json({ success: true })
-  })
-
-  // Gets repos
-  app.get("/api/github/available-repos", async (req, res) => {
-    try {
-      const { orgSlug } = req.query
-      if (!orgSlug || typeof orgSlug !== "string") {
-        res.status(401).json({ error: "Organization not provided" })
-        return
-      }
-      const organization = await storage.getOrganizationBySlug(orgSlug)
+  app.get(
+    "/api/github/app/install/callback",
+    asyncHandler(async (req, res) => {
+      const { installation_id, orgSlug } = req.query
+      const organization = await storage.getOrganizationBySlug(
+        orgSlug as string
+      )
       if (!organization) {
         res.status(404).json({ error: "Organization not found" })
         return
       }
 
-      if (!organization.accessToken && !organization.installationId) {
-        res.status(401).json({ error: "Organization not authenticated" })
-        return
-      }
+      await storage.updateOrganization(orgSlug as string, {
+        installationId: parseInt(installation_id as string),
+      })
+
+      res.json({ success: true })
+    }, "Failed to complete GitHub app installation")
+  )
+
+  // Get available repos (requires GitHub auth)
+  app.get(
+    "/api/github/available-repos",
+    ...githubAuthMiddleware,
+    asyncHandler<OrgSlugRequest>(async (req, res) => {
+      const { organization } = req
 
       const availableRepos = organization.accessToken
         ? await listUserRepos(organization.accessToken)
@@ -160,52 +159,27 @@ export function githubRoutes(app: Express) {
       )
 
       res.json(filteredRepos)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to fetch available repositories"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to fetch available repositories")
+  )
 
-  // Add new route for GitHub user status
-  app.get("/api/github/auth", async (req, res) => {
-    try {
-      const { orgSlug } = req.query
-      if (!orgSlug || typeof orgSlug !== "string") {
-        res.status(401).json({ error: "Organization not provided" })
-        return
-      }
-      const organization = await storage.getOrganizationBySlug(orgSlug)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
+  // Check GitHub auth status
+  app.get(
+    "/api/github/auth",
+    orgSlugMiddleware,
+    asyncHandler<OrgSlugRequest>(async (req, res) => {
+      const { organization } = req
       res.json(!!organization.accessToken || !!organization.installationId)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to get GitHub user status"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to get GitHub auth status")
+  )
 
-  app.post("/api/github/import-repos", async (req, res) => {
-    try {
-      const { orgSlug } = req.query
-      if (!orgSlug || typeof orgSlug !== "string") {
-        res.status(401).json({ error: "Organization not provided" })
-        return
-      }
-      const organization = await storage.getOrganizationBySlug(orgSlug)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
-
+  // Import repos
+  app.post(
+    "/api/github/import-repos",
+    orgSlugMiddleware,
+    asyncHandler<OrgSlugRequest>(async (req, res) => {
+      const { organization } = req
       const { repositories } = req.body
+
       if (!Array.isArray(repositories)) {
         res.status(400).json({ error: "Invalid repositories format" })
         return
@@ -225,62 +199,38 @@ export function githubRoutes(app: Express) {
       )
 
       res.json(createdRepos)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Failed to import repositories"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to import repositories")
+  )
 
-  app.get("/api/github/repos/:repo_id/files", async (req, res) => {
-    try {
-      const { repo_id, branch } = getParams(req, res, ["repo_id", "branch"])
-      const { orgSlug } = req.query
-      if (!orgSlug || typeof orgSlug !== "string") {
-        res.status(401).json({ error: "Organization not provided" })
-        return
-      }
-      const organization = await storage.getOrganizationBySlug(orgSlug)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
+  // Get repo files
+  app.get(
+    "/api/github/repos/:repo_id/files",
+    orgSlugMiddleware,
+    asyncHandler<OrgSlugRequest>(async (req, res) => {
+      const { organization } = req
+      const { repo_id } = req.params
+      const branch = (req.query.branch as string) || "main"
 
       const repo = await storage.getRepo(repo_id)
-
       if (!repo) {
         res.status(404).json({ error: "Repository not found" })
         return
       }
 
-      // Utilize the listRepoFileSystem function from /github
       const fileSystem = await listRepoFileSystem(organization, repo, branch)
       res.status(200).json(fileSystem)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to list repository files"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to list repository files")
+  )
 
-  app.get("/api/github/repos/:repo_id/branches", async (req, res) => {
-    try {
-      const { repo_id } = getParams(req, res, ["repo_id"])
-      const { orgSlug } = req.query
-      if (!orgSlug || typeof orgSlug !== "string") {
-        res.status(401).json({ error: "Organization not provided" })
-        return
-      }
-      const organization = await storage.getOrganizationBySlug(orgSlug)
-      if (!organization) {
-        res.status(404).json({ error: "Organization not found" })
-        return
-      }
+  // Get repo branches
+  app.get(
+    "/api/github/repos/:repo_id/branches",
+    orgSlugMiddleware,
+    asyncHandler<OrgSlugRequest>(async (req, res) => {
+      const { organization } = req
+      const { repo_id } = req.params
 
       const repo = await storage.getRepo(repo_id)
-
       if (!repo) {
         res.status(404).json({ error: "Repository not found" })
         return
@@ -288,12 +238,6 @@ export function githubRoutes(app: Express) {
 
       const branches = await getRepoBranches(organization, repo)
       res.json(branches)
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to list repository files"
-      res.status(500).json({ error: message })
-    }
-  })
+    }, "Failed to list repository branches")
+  )
 }

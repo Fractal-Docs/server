@@ -13,8 +13,8 @@ import {
 import { createInsertSchema } from "drizzle-zod"
 import { z } from "zod"
 
-const DOC_TYPES = ["overview", "cfg", "delta"] as const
-type DocType = (typeof DOC_TYPES)[number]
+const DOC_TYPES = ["overview", "cfg", "delta", "release", "role"] as const
+export type DocType = (typeof DOC_TYPES)[number]
 
 const JOB_TYPES = ["generate", "analyze", "release", "role"] as const
 export type JobType = (typeof JOB_TYPES)[number]
