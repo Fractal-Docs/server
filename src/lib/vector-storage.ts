@@ -2,7 +2,7 @@ import { Pinecone, RecordMetadata } from "@pinecone-database/pinecone"
 import { cosineSimilarity } from "./embeddings"
 
 export interface VectorMetadata extends RecordMetadata {
-  repoId: string
+  repoId: string // Stores the repo's publicId (format: repo_xxxxxxxxxxxx), not GitHub's external ID
   filePath: string
   branch: string
   fileId: number

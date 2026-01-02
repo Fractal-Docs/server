@@ -5,17 +5,16 @@ import { prepareDocumentation, registerGenerateWorker } from "../documents"
 import { compareBranchToDefaultBranch } from "../github"
 import { enqueueTask, getTaskStatus } from "../task-manager"
 import {
-  asyncHandler,
-  withOrganization,
-  withRepo,
-  RepoRequest,
-  OrganizationRequest,
-} from "./middleware"
+  requireOrgMember,
+  authorizedHandler,
+  AuthorizedOrgRequest,
+} from "./authorization"
+import { withRepo, RepoRequest } from "./middleware"
 import type { DocType, JobType } from "src/shared/schema"
 
 // Helper to create/update repo documentation
 async function saveRepoDoc(
-  repoId: string,
+  repoPublicId: string,
   branch: string,
   existingDoc: Awaited<ReturnType<typeof storage.getRepoDoc>>,
   docData: {
@@ -36,7 +35,7 @@ async function saveRepoDoc(
 
   if (existingDoc) {
     return storage.updateRepoDoc(existingDoc.id, {
-      repoId,
+      repoPublicId,
       title: docData.title,
       content: docData.content,
       docType: docData.docType,
@@ -46,7 +45,7 @@ async function saveRepoDoc(
   }
 
   return storage.createRepoDoc({
-    repoId,
+    repoPublicId,
     branch,
     title: docData.title,
     content: docData.content,
@@ -57,13 +56,18 @@ async function saveRepoDoc(
 
 // Common worker completion handler
 function createWorkerCompletionHandler(
-  repoId: string,
+  repoPublicId: string,
   branch: string,
   jobType: JobType
 ) {
   return async (id: string) => {
     await storage.updateJob(id, { status: "completed" })
-    await storage.removeJobsByBranchAndType(repoId, branch, jobType, "error")
+    await storage.removeJobsByBranchAndType(
+      repoPublicId,
+      branch,
+      jobType,
+      "error"
+    )
   }
 }
 
@@ -78,18 +82,16 @@ function createWorkerErrorHandler() {
 }
 
 export function documentsRoutes(app: Express) {
-  const orgMiddleware = withOrganization()
-  const repoMiddleware = [orgMiddleware, withRepo()]
-
-  // Generate documentation
+  // Generate documentation - requires membership
   app.post(
-    "/api/organization/:org_id/repos/:repo_id/generate",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
-      const { repoId, branch, orgId } = req
+    "/api/organization/:org_public_id/repos/:repo_public_id/generate",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
+      const { repoPublicId, branch, orgId } = req
 
-      const repoDoc = await storage.getRepoDoc(repoId, branch, "overview")
-      const relevantFiles = await storage.getRepoFiles(repoId, branch)
+      const repoDoc = await storage.getRepoDoc(repoPublicId, branch, "overview")
+      const relevantFiles = await storage.getRepoFiles(repoPublicId, branch)
 
       if (!relevantFiles.length) {
         res.status(404).json({ error: "No analyzed files found" })
@@ -99,7 +101,7 @@ export function documentsRoutes(app: Express) {
       // Try to get CFG data if it exists
       let cfgContent = ""
       try {
-        const cfgDocs = await storage.getRepoDocsByBranch(repoId, branch)
+        const cfgDocs = await storage.getRepoDocsByBranch(repoPublicId, branch)
         const cfgDoc = cfgDocs.find((doc) => doc.docType === "cfg")
         if (cfgDoc) {
           cfgContent = cfgDoc.content
@@ -126,7 +128,7 @@ export function documentsRoutes(app: Express) {
         ? `${fileContents}\n\n${cfgContent}`
         : fileContents
 
-      const prd = await storage.getPrdForBranch(repoId, branch)
+      const prd = await storage.getPrdForBranch(repoPublicId, branch)
       const businessContext = prd
         ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
         : ""
@@ -142,8 +144,12 @@ export function documentsRoutes(app: Express) {
         "generateDocumentation",
         async ({ content, extra, jobId: id }) => {
           const { prompts } = extra
-          await createWorkerCompletionHandler(repoId, branch, "generate")(id)
-          await saveRepoDoc(repoId, branch, repoDoc, {
+          await createWorkerCompletionHandler(
+            repoPublicId,
+            branch,
+            "generate"
+          )(id)
+          await saveRepoDoc(repoPublicId, branch, repoDoc, {
             title: "Repo Documentation",
             content,
             docType: "overview",
@@ -164,7 +170,7 @@ export function documentsRoutes(app: Express) {
       if (jobId) {
         await storage.addJob({
           jobId,
-          repoId,
+          repoPublicId,
           organizationId: orgId,
           type: "generate",
           branch,
@@ -177,15 +183,16 @@ export function documentsRoutes(app: Express) {
     }, "Failed to generate documentation")
   )
 
-  // Generate change documentation (compare branch)
+  // Generate change documentation (compare branch) - requires membership
   app.post(
-    "/api/organization/:org_id/repos/:repo_id/compare",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
-      const { organization, repo, repoId, branch, orgId } = req
+    "/api/organization/:org_public_id/repos/:repo_public_id/compare",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
+      const { organization, repo, repoPublicId, branch, orgId } = req
       const docType = "delta"
 
-      const repoDoc = await storage.getRepoDoc(repoId, branch, docType)
+      const repoDoc = await storage.getRepoDoc(repoPublicId, branch, docType)
 
       const response = await compareBranchToDefaultBranch(
         organization,
@@ -222,7 +229,7 @@ export function documentsRoutes(app: Express) {
         )
         .join("\n\n")
 
-      const prd = await storage.getPrdForBranch(repoId, branch)
+      const prd = await storage.getPrdForBranch(repoPublicId, branch)
       const businessContext = prd
         ? `PRD Business Context: ${prd?.businessContext}\n\n PRD Content: ${prd?.content}`
         : ""
@@ -238,8 +245,12 @@ export function documentsRoutes(app: Express) {
         "generateDocumentation",
         async ({ content, extra, jobId: id }) => {
           const { prompts } = extra
-          await createWorkerCompletionHandler(repoId, branch, "generate")(id)
-          await saveRepoDoc(repoId, branch, repoDoc, {
+          await createWorkerCompletionHandler(
+            repoPublicId,
+            branch,
+            "generate"
+          )(id)
+          await saveRepoDoc(repoPublicId, branch, repoDoc, {
             title: `Delta Documentation: ${branch}`,
             content,
             docType,
@@ -260,7 +271,7 @@ export function documentsRoutes(app: Express) {
       if (jobId) {
         await storage.addJob({
           jobId,
-          repoId,
+          repoPublicId,
           organizationId: orgId,
           type: "generate",
           branch,
@@ -273,12 +284,16 @@ export function documentsRoutes(app: Express) {
     }, "Failed to generate change documentation")
   )
 
-  // Get docs for a repo
+  // Get docs for a repo - requires membership
   app.get(
-    "/api/organization/:org_id/repos/:repo_id/docs",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
-      const docs = await storage.getRepoDocsByBranch(req.repoId, req.branch)
+    "/api/organization/:org_public_id/repos/:repo_public_id/docs",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
+      const docs = await storage.getRepoDocsByBranch(
+        req.repoPublicId,
+        req.branch
+      )
 
       // Sort by updatedAt to get the most recent doc
       const sortedDocs = docs.sort(
@@ -297,21 +312,23 @@ export function documentsRoutes(app: Express) {
     }, "Failed to fetch repository documentation")
   )
 
-  // Check for any job status
+  // Check for any job status - requires membership
   app.get(
-    "/api/organization/:org_id/repos/:repo_id/docs_status",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
-      const jobs = await storage.getJobsByBranch(req.repoId, req.branch)
+    "/api/organization/:org_public_id/repos/:repo_public_id/docs_status",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
+      const jobs = await storage.getJobsByBranch(req.repoPublicId, req.branch)
       res.json(jobs)
     }, "Failed to fetch repository documentation status")
   )
 
-  // Check for specific job status
+  // Check for specific job status - requires membership
   app.get(
-    "/api/organization/:org_id/repos/:repo_id/docs_status/:job_id",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos/:repo_public_id/docs_status/:job_id",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
       const status = await getTaskStatus(
         "generateDocumentation",
         req.params.job_id
@@ -324,11 +341,11 @@ export function documentsRoutes(app: Express) {
     }, "Failed to get task status")
   )
 
-  // Get recent documents for organization
+  // Get recent documents for organization - requires membership
   app.get(
-    "/api/organization/:org_id/recent-documents",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/recent-documents",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const docs = await storage.getOrganizationDocs(req.orgId)
       const recentDocs = docs
         .filter((doc) => doc.docType !== "cfg")

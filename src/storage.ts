@@ -41,38 +41,53 @@ import {
 } from "./shared/schema"
 import { db } from "./db"
 import { eq, like, inArray, and } from "drizzle-orm"
+import { publicIdGenerators } from "./lib/public-ids"
 
 type UserRole = "owner" | "admin" | "member"
 
-interface OrganizationMember extends Omit<User, "themePreferences"> {
+export interface OrganizationMember
+  extends Omit<User, "themePreferences" | "createdAt" | "updatedAt"> {
   role: UserRole
 }
 
 export interface IStorage {
   // PRD operations
-  getPrds(organizationId: number): Promise<Prd[]>
-  getPrd(id: number): Promise<Prd | undefined>
+  getPrds(organizationId: string): Promise<Prd[]>
+  getPrd(publicId: string): Promise<Prd | undefined>
+  getPrdByPublicId(publicId: string): Promise<Prd | undefined>
   createPrd(prd: InsertPrd): Promise<Prd>
-  updatePrd(id: number, prd: InsertPrd): Promise<Prd>
-  deletePrd(id: number): Promise<void>
-  searchPrds(organizationId: number, query: string): Promise<Prd[]>
+  updatePrd(publicId: string, prd: InsertPrd): Promise<Prd>
+  updatePrdByPublicId(publicId: string, prd: InsertPrd): Promise<Prd>
+  deletePrd(publicId: string): Promise<void>
+  deletePrdByPublicId(publicId: string): Promise<void>
+  searchPrds(organizationId: string, query: string): Promise<Prd[]>
 
   // GitHub repo operations
-  getRepos(organizationId: number): Promise<GithubRepo[]>
+  getRepos(organizationId: string): Promise<GithubRepo[]>
   getRepo(id: string): Promise<GithubRepo | undefined>
+  getRepoByPublicId(publicId: string): Promise<GithubRepo | undefined>
+  getRepoByGithubId(githubRepoId: string): Promise<GithubRepo | undefined>
   createRepo(repo: InsertGithubRepo): Promise<GithubRepo>
+  updateRepo(id: string, repo: Partial<InsertGithubRepo>): Promise<GithubRepo>
+  updateRepoByPublicId(
+    publicId: string,
+    repo: Partial<InsertGithubRepo>
+  ): Promise<GithubRepo>
   deleteRepo(id: string): Promise<void[]>
+  deleteRepoByPublicId(publicId: string): Promise<void[]>
 
   // GitHub auth operations
   getUser(user_sub: string): Promise<User | undefined>
+  getUserById(publicId: string): Promise<User | undefined>
+  getUserByPublicId(publicId: string): Promise<User | undefined>
   createUser(user: InsertUser): Promise<User>
   updateUser(user: InsertUser): Promise<User>
 
   // Repository file analysis operations
-  getRepoFiles(repoId: string, branchName: string): Promise<RepoFile[]>
+  getRepoFiles(repoPublicId: string, branchName: string): Promise<RepoFile[]>
   createRepoFile(file: InsertRepoFile): Promise<RepoFile>
   getRepoFile(
-    repoId: string,
+    repoPublicId: string,
     filePath: string,
     branchName: string
   ): Promise<RepoFile | undefined>
@@ -84,12 +99,15 @@ export interface IStorage {
   deleteRepoFile(id: number): Promise<void>
 
   // Repository documentation operations
-  getOrganizationDocs(orgId: number): Promise<RepoDoc[]>
-  getRepoDocs(repoId: string): Promise<RepoDoc[]>
-  getRepoDocsByBranch(repoId: string, branchName: string): Promise<RepoDoc[]>
+  getOrganizationDocs(orgId: string): Promise<RepoDoc[]>
+  getRepoDocs(repoPublicId: string): Promise<RepoDoc[]>
+  getRepoDocsByBranch(
+    repoPublicId: string,
+    branchName: string
+  ): Promise<RepoDoc[]>
   createRepoDoc(doc: InsertRepoDoc): Promise<RepoDoc>
   getRepoDoc(
-    repoId: string,
+    repoPublicId: string,
     branchName: string,
     docType: DocType
   ): Promise<RepoDoc | undefined>
@@ -97,59 +115,66 @@ export interface IStorage {
   deleteRepoDoc(id: number): Promise<void>
 
   // Release operations
-  getOrganizationReleases(orgId: number): Promise<Release[]>
-  getReleases(repoId: string): Promise<Release[]>
-  getRelease(releaseId: string): Promise<Release | undefined>
-  createRelease(release: InsertRelease): Promise<Release>
+  getOrganizationReleases(orgId: string): Promise<Release[]>
+  getReleases(repoPublicId: string): Promise<Release[]>
+  getRelease(publicId: string): Promise<Release | undefined>
+  getReleaseByBranch(
+    repoPublicId: string,
+    branch: string
+  ): Promise<Release | undefined>
+  createRelease(release: Omit<InsertRelease, "publicId">): Promise<Release>
   updateRelease(
-    releaseId: string,
+    publicId: string,
     release: Partial<InsertRelease>
   ): Promise<Release>
-  deleteRelease(releaseId: string): Promise<void>
+  deleteRelease(publicId: string): Promise<void>
 
   // Role management operations
-  createRole(role: InsertRole): Promise<RoleRecord>
-  getRole(id: string): Promise<RoleRecord | undefined>
+  createRole(role: Omit<InsertRole, "publicId">): Promise<RoleRecord>
+  getRole(publicId: string): Promise<RoleRecord | undefined>
   getRoleByOrgAndType(
-    organizationId: number,
+    organizationId: string,
     roleType: Role
   ): Promise<RoleRecord | undefined>
-  getRolesByOrganization(organizationId: number): Promise<RoleRecord[]>
-  updateRole(id: string, role: Partial<InsertRole>): Promise<RoleRecord>
-  deleteRole(id: string): Promise<void>
+  getRolesByOrganization(organizationId: string): Promise<RoleRecord[]>
+  updateRole(publicId: string, role: Partial<InsertRole>): Promise<RoleRecord>
+  deleteRole(publicId: string): Promise<void>
 
   // Role document operations
   createRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
   updateRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
-  getRoleDocsForRelease(releaseId: string): Promise<RoleDocument[]>
-  deleteRoleDocsForRelease(releaseId: string): Promise<void>
+  getRoleDocsForRelease(releasePublicId: string): Promise<RoleDocument[]>
+  deleteRoleDocsForRelease(releasePublicId: string): Promise<void>
 
-  getOrganization(id: number): Promise<Organization | undefined>
-  getOrganizationsByUserId(userId: number): Promise<Organization[]>
+  getOrganization(publicId: string): Promise<Organization | undefined>
+  getOrganizationByPublicId(publicId: string): Promise<Organization | undefined>
+  getOrganizationsByUserId(userId: string): Promise<Organization[]>
   getOrganizationBySlug(slug: string): Promise<Organization | undefined>
   createOrganization(org: InsertOrganization): Promise<Organization>
   updateOrganization(
     orgSlug: string,
     org: Partial<InsertOrganization>
   ): Promise<Organization>
-  deleteOrganization(id: number): Promise<void>
-  getUsersInOrganization(id: number): Promise<OrganizationMember[]>
+  deleteOrganization(publicId: string): Promise<void>
+  getUsersInOrganization(publicId: string): Promise<OrganizationMember[]>
   addUserToOrganization(
     userOrg: InsertUserOrganization
   ): Promise<UserOrganization>
   removeUserFromOrganization(
-    userId: number,
-    organizationId: number
+    userId: string,
+    organizationId: string
   ): Promise<void>
   updateUserOrganizationRole(
-    userId: number,
-    organizationId: number,
+    userId: string,
+    organizationId: string,
     role: string
   ): Promise<UserOrganization>
   getUserOrganizationRole(
-    userId: number,
-    organizationId: number
+    userId: string,
+    organizationId: string
   ): Promise<UserOrganization | undefined>
+  removeAllUsersFromOrganization(organizationId: string): Promise<void>
+  getJobs(organizationId: string, jobTypes: JobType[]): Promise<EnqueuedTask[]>
   getJob(jobId: string): Promise<EnqueuedTask | null>
   addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask>
   updateJob(
@@ -157,12 +182,15 @@ export interface IStorage {
     job: Partial<InsertEnqueuedTask>
   ): Promise<EnqueuedTask>
   removeJob(jobId: string): Promise<void>
-  getJobsByBranch(repoId: string, branch: string): Promise<EnqueuedTask[]>
+  getJobsByBranch(repoPublicId: string, branch: string): Promise<EnqueuedTask[]>
   removeJobsByBranchAndType(
-    repoId: string,
+    repoPublicId: string,
     branch: string,
     type: JobType
   ): Promise<void>
+  createInvitation(organizationId: string, email: string): Promise<Invitation>
+  getInvitationByToken(token: string): Promise<Invitation | null>
+  acceptInvitation(token: string): Promise<void>
 }
 
 export class DatabaseStorage implements IStorage {
@@ -179,93 +207,142 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPrds(organizationId: number): Promise<Prd[]> {
+  async getPrds(organizationId: string): Promise<Prd[]> {
     return this.handleDatabaseOperation(async () => {
       const repos = await db
-        .select({ repoId: githubRepos.repoId })
+        .select({ publicId: githubRepos.publicId })
         .from(githubRepos)
         .where(eq(githubRepos.organizationId, organizationId))
 
-      const repoIds = repos.map((r) => r.repoId)
-      if (repoIds.length === 0) return []
+      const repoPublicIds = repos.map((r) => r.publicId)
+      if (repoPublicIds.length === 0) return []
 
       return db
         .select()
         .from(prds)
-        .where(inArray(prds.repoId, repoIds))
-        .orderBy(prds.id)
+        .where(inArray(prds.repoPublicId, repoPublicIds))
+        .orderBy(prds.publicId)
     })
   }
 
-  async getPrd(id: number): Promise<Prd | undefined> {
+  async getPrd(publicId: string): Promise<Prd | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [prd] = await db.select().from(prds).where(eq(prds.id, id))
+      const [prd] = await db
+        .select()
+        .from(prds)
+        .where(eq(prds.publicId, publicId))
+      return prd
+    })
+  }
+
+  async getPrdByPublicId(publicId: string): Promise<Prd | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [prd] = await db
+        .select()
+        .from(prds)
+        .where(eq(prds.publicId, publicId))
       return prd
     })
   }
 
   async getPrdForBranch(
-    repoId: string,
+    repoPublicId: string,
     branchName: string
   ): Promise<Prd | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [prd] = await db
         .select()
         .from(prds)
-        .where(and(eq(prds.repoId, repoId), eq(prds.branch, branchName)))
+        .where(
+          and(eq(prds.repoPublicId, repoPublicId), eq(prds.branch, branchName))
+        )
       return prd
     })
   }
 
   async createPrd(insertPrd: InsertPrd): Promise<Prd> {
     return this.handleDatabaseOperation(async () => {
-      const [prd] = await db.insert(prds).values(insertPrd).returning()
+      const publicId = publicIdGenerators.prd()
+      const [prd] = await db
+        .insert(prds)
+        .values({ ...insertPrd, publicId })
+        .returning()
       return prd
     })
   }
 
-  async updatePrd(id: number, insertPrd: InsertPrd): Promise<Prd> {
+  async updatePrd(publicId: string, prd: InsertPrd): Promise<Prd> {
+    return this.handleDatabaseOperation(async () => {
+      const updateData = { ...prd, updatedAt: new Date() }
+      const [updatedPrd] = await db
+        .update(prds)
+        .set(updateData)
+        .where(eq(prds.publicId, publicId))
+        .returning()
+      if (!updatedPrd) throw new Error("PRD not found")
+      return updatedPrd
+    })
+  }
+
+  async updatePrdByPublicId(
+    publicId: string,
+    updateData: InsertPrd
+  ): Promise<Prd> {
     return this.handleDatabaseOperation(async () => {
       const [prd] = await db
         .update(prds)
-        .set(insertPrd)
-        .where(eq(prds.id, id))
+        .set(updateData)
+        .where(eq(prds.publicId, publicId))
         .returning()
       if (!prd) throw new Error("PRD not found")
       return prd
     })
   }
 
-  async deletePrd(id: number): Promise<void> {
+  async deletePrd(publicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
-      const [prd] = await db.delete(prds).where(eq(prds.id, id)).returning()
+      const [prd] = await db
+        .delete(prds)
+        .where(eq(prds.publicId, publicId))
+        .returning()
       if (!prd) throw new Error("PRD not found")
     })
   }
 
-  async searchPrds(organizationId: number, query: string): Promise<Prd[]> {
+  async deletePrdByPublicId(publicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
-      if (!query) return this.getPrds(organizationId)
+      const [prd] = await db
+        .delete(prds)
+        .where(eq(prds.publicId, publicId))
+        .returning()
+      if (!prd) throw new Error("PRD not found")
+    })
+  }
 
+  async searchPrds(organizationId: string, query: string): Promise<Prd[]> {
+    return this.handleDatabaseOperation(async () => {
       const repos = await db
-        .select({ repoId: githubRepos.repoId })
+        .select({ publicId: githubRepos.publicId })
         .from(githubRepos)
         .where(eq(githubRepos.organizationId, organizationId))
 
-      const repoIds = repos.map((r) => r.repoId)
-      if (repoIds.length === 0) return []
+      const repoPublicIds = repos.map((r) => r.publicId)
+      if (repoPublicIds.length === 0) return []
 
       return db
         .select()
         .from(prds)
         .where(
-          and(inArray(prds.repoId, repoIds), like(prds.title, `%${query}%`))
+          and(
+            inArray(prds.repoPublicId, repoPublicIds),
+            like(prds.title, `%${query}%`)
+          )
         )
-        .orderBy(prds.id)
+        .orderBy(prds.publicId)
     })
   }
 
-  async getRepos(organizationId: number): Promise<GithubRepo[]> {
+  async getRepos(organizationId: string): Promise<GithubRepo[]> {
     return this.handleDatabaseOperation(() =>
       db
         .select()
@@ -274,6 +351,7 @@ export class DatabaseStorage implements IStorage {
     )
   }
 
+  // Legacy method - looks up by GitHub's external repoId
   async getRepo(id: string): Promise<GithubRepo | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [repo] = await db
@@ -284,9 +362,30 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  async getRepoByPublicId(publicId: string): Promise<GithubRepo | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [repo] = await db
+        .select()
+        .from(githubRepos)
+        .where(eq(githubRepos.publicId, publicId))
+      return repo
+    })
+  }
+
+  // Alias for getRepo - explicitly named for clarity
+  async getRepoByGithubId(
+    githubRepoId: string
+  ): Promise<GithubRepo | undefined> {
+    return this.getRepo(githubRepoId)
+  }
+
   async createRepo(insertRepo: InsertGithubRepo): Promise<GithubRepo> {
     return this.handleDatabaseOperation(async () => {
-      const [repo] = await db.insert(githubRepos).values(insertRepo).returning()
+      const publicId = publicIdGenerators.repo()
+      const [repo] = await db
+        .insert(githubRepos)
+        .values({ ...insertRepo, publicId })
+        .returning()
       return repo
     })
   }
@@ -306,6 +405,21 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  async updateRepoByPublicId(
+    publicId: string,
+    updateRepo: Partial<InsertGithubRepo>
+  ): Promise<GithubRepo> {
+    return this.handleDatabaseOperation(async () => {
+      const [repo] = await db
+        .update(githubRepos)
+        .set(updateRepo)
+        .where(eq(githubRepos.publicId, publicId))
+        .returning()
+      if (!repo) throw new Error("Repository not found")
+      return repo
+    })
+  }
+
   async deleteRepo(id: string): Promise<void[]> {
     const deleteRepo = this.handleDatabaseOperation(async () => {
       const [repo] = await db
@@ -317,18 +431,35 @@ export class DatabaseStorage implements IStorage {
     const deleteRepoDocs = this.handleDatabaseOperation(async () => {
       const [repo] = await db
         .delete(repoDocs)
-        .where(eq(repoDocs.repoId, id))
+        .where(eq(repoDocs.repoPublicId, id))
         .returning()
       if (!repo) throw new Error("Repository not found")
     })
     const deleteRepoFiles = this.handleDatabaseOperation(async () => {
       const [repo] = await db
         .delete(repoFiles)
-        .where(eq(repoFiles.repoId, id))
+        .where(eq(repoFiles.repoPublicId, id))
         .returning()
       if (!repo) throw new Error("Repository not found")
     })
     return Promise.all([deleteRepo, deleteRepoDocs, deleteRepoFiles])
+  }
+
+  async deleteRepoByPublicId(publicId: string): Promise<void[]> {
+    const deleteRepoRecord = this.handleDatabaseOperation(async () => {
+      await db.delete(githubRepos).where(eq(githubRepos.publicId, publicId))
+    })
+    const deleteRepoDocsRecord = this.handleDatabaseOperation(async () => {
+      await db.delete(repoDocs).where(eq(repoDocs.repoPublicId, publicId))
+    })
+    const deleteRepoFilesRecord = this.handleDatabaseOperation(async () => {
+      await db.delete(repoFiles).where(eq(repoFiles.repoPublicId, publicId))
+    })
+    return Promise.all([
+      deleteRepoRecord,
+      deleteRepoDocsRecord,
+      deleteRepoFilesRecord,
+    ])
   }
 
   async getUser(user_sub: string): Promise<User | undefined> {
@@ -341,9 +472,33 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  async getUserById(publicId: string): Promise<User | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.publicId, publicId))
+      return user
+    })
+  }
+
+  async getUserByPublicId(publicId: string): Promise<User | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.publicId, publicId))
+      return user
+    })
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     return this.handleDatabaseOperation(async () => {
-      const [user] = await db.insert(users).values(insertUser).returning()
+      const publicId = publicIdGenerators.user()
+      const [user] = await db
+        .insert(users)
+        .values({ ...insertUser, publicId })
+        .returning()
       return user
     })
   }
@@ -363,10 +518,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository file analysis operations
-  async getRepoFiles(repoId: string, branchName?: string): Promise<RepoFile[]> {
+  async getRepoFiles(
+    repoPublicId: string,
+    branchName?: string
+  ): Promise<RepoFile[]> {
     const whereClause = branchName
-      ? and(eq(repoFiles.repoId, repoId), eq(repoFiles.branch, branchName))
-      : eq(repoFiles.repoId, repoId)
+      ? and(
+          eq(repoFiles.repoPublicId, repoPublicId),
+          eq(repoFiles.branch, branchName)
+        )
+      : eq(repoFiles.repoPublicId, repoPublicId)
     return this.handleDatabaseOperation(() =>
       db.select().from(repoFiles).where(whereClause)
     )
@@ -380,7 +541,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRepoFile(
-    repoId: string,
+    repoPublicId: string,
     filePath: string,
     branchName: string
   ): Promise<RepoFile | undefined> {
@@ -390,7 +551,7 @@ export class DatabaseStorage implements IStorage {
         .from(repoFiles)
         .where(
           and(
-            eq(repoFiles.repoId, repoId),
+            eq(repoFiles.repoPublicId, repoPublicId),
             eq(repoFiles.filePath, filePath),
             eq(repoFiles.branch, branchName)
           )
@@ -426,29 +587,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository documentation operations
-  async getOrganizationDocs(orgId: number): Promise<RepoDoc[]> {
+  async getOrganizationDocs(orgId: string): Promise<RepoDoc[]> {
     const repos = await this.getRepos(orgId)
     const docs = await Promise.all(
-      repos.map((repo) => this.getRepoDocs(repo.repoId))
+      repos.map((repo) => this.getRepoDocs(repo.publicId))
     )
     return docs.flat()
   }
 
-  async getRepoDocs(repoId: string): Promise<RepoDoc[]> {
+  async getRepoDocs(repoPublicId: string): Promise<RepoDoc[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(repoDocs).where(eq(repoDocs.repoId, repoId))
+      db.select().from(repoDocs).where(eq(repoDocs.repoPublicId, repoPublicId))
     )
   }
 
   async getRepoDocsByBranch(
-    repoId: string,
+    repoPublicId: string,
     branch: string
   ): Promise<RepoDoc[]> {
     return this.handleDatabaseOperation(() =>
       db
         .select()
         .from(repoDocs)
-        .where(and(eq(repoDocs.repoId, repoId), eq(repoDocs.branch, branch)))
+        .where(
+          and(
+            eq(repoDocs.repoPublicId, repoPublicId),
+            eq(repoDocs.branch, branch)
+          )
+        )
     )
   }
 
@@ -460,7 +626,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRepoDoc(
-    repoId: string,
+    repoPublicId: string,
     branch: string,
     docType: DocType
   ): Promise<RepoDoc | undefined> {
@@ -470,7 +636,7 @@ export class DatabaseStorage implements IStorage {
         .from(repoDocs)
         .where(
           and(
-            eq(repoDocs.repoId, repoId),
+            eq(repoDocs.repoPublicId, repoPublicId),
             eq(repoDocs.branch, branch),
             eq(repoDocs.docType, docType)
           )
@@ -505,92 +671,111 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async getOrganizationReleases(orgId: number): Promise<Release[]> {
+  async getOrganizationReleases(orgId: string): Promise<Release[]> {
     const repos = await this.getRepos(orgId)
     const docs = await Promise.all(
-      repos.map((repo) => this.getReleases(repo.repoId))
+      repos.map((repo) => this.getReleases(repo.publicId))
     )
     return docs.flat()
   }
 
-  async getReleases(repoId: string): Promise<Release[]> {
+  async getReleases(repoPublicId: string): Promise<Release[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(releases).where(eq(releases.repoId, repoId))
+      db.select().from(releases).where(eq(releases.repoPublicId, repoPublicId))
     )
   }
 
-  async createRelease(insertRelease: InsertRelease): Promise<Release> {
+  async createRelease(
+    insertRelease: Omit<InsertRelease, "publicId">
+  ): Promise<Release> {
     return this.handleDatabaseOperation(async () => {
-      const [doc] = await db.insert(releases).values(insertRelease).returning()
+      const publicId = publicIdGenerators.release()
+      const [doc] = await db
+        .insert(releases)
+        .values({ ...insertRelease, publicId })
+        .returning()
       return doc
     })
   }
 
-  async getRelease(releaseId: string): Promise<Release | undefined> {
+  async getRelease(publicId: string): Promise<Release | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .select()
         .from(releases)
-        .where(eq(releases.releaseId, releaseId))
+        .where(eq(releases.publicId, publicId))
       return doc
     })
   }
 
-  async getReleaseByBranch(repoId: string, branch: string): Promise<Release> {
+  async getReleaseByBranch(
+    repoPublicId: string,
+    branch: string
+  ): Promise<Release | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [docs] = await db
+      const [release] = await db
         .select()
         .from(releases)
-        .where(and(eq(releases.repoId, repoId), eq(releases.branch, branch)))
-      return docs
+        .where(
+          and(
+            eq(releases.repoPublicId, repoPublicId),
+            eq(releases.branch, branch)
+          )
+        )
+      return release
     })
   }
 
   async updateRelease(
-    releaseId: string,
+    publicId: string,
     updateDoc: Partial<InsertRelease>
   ): Promise<Release> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .update(releases)
         .set(updateDoc)
-        .where(eq(releases.releaseId, releaseId))
-
+        .where(eq(releases.publicId, publicId))
         .returning()
       if (!doc) throw new Error("Release documentation not found")
       return doc
     })
   }
 
-  async deleteRelease(releaseId: string): Promise<void> {
+  async deleteRelease(publicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .delete(releases)
-        .where(eq(releases.releaseId, releaseId))
-
+        .where(eq(releases.publicId, publicId))
         .returning()
       if (!doc) throw new Error("Repository documentation not found")
     })
   }
 
   // Role management operations
-  async createRole(role: InsertRole): Promise<RoleRecord> {
+  async createRole(role: Omit<InsertRole, "publicId">): Promise<RoleRecord> {
     return this.handleDatabaseOperation(async () => {
-      const [newRole] = await db.insert(roles).values(role).returning()
+      const publicId = publicIdGenerators.role()
+      const [newRole] = await db
+        .insert(roles)
+        .values({ ...role, publicId })
+        .returning()
       if (!newRole) throw new Error("Failed to create role")
       return newRole
     })
   }
 
-  async getRole(id: string): Promise<RoleRecord | undefined> {
+  async getRole(publicId: string): Promise<RoleRecord | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [role] = await db.select().from(roles).where(eq(roles.id, id))
+      const [role] = await db
+        .select()
+        .from(roles)
+        .where(eq(roles.publicId, publicId))
       return role
     })
   }
 
   async getRoleByOrgAndType(
-    organizationId: number,
+    organizationId: string,
     roleType: Role
   ): Promise<RoleRecord | undefined> {
     return this.handleDatabaseOperation(async () => {
@@ -607,7 +792,7 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async getRolesByOrganization(organizationId: number): Promise<RoleRecord[]> {
+  async getRolesByOrganization(organizationId: string): Promise<RoleRecord[]> {
     return this.handleDatabaseOperation(async () => {
       const orgRoles = await db
         .select()
@@ -617,21 +802,24 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async updateRole(id: string, role: Partial<InsertRole>): Promise<RoleRecord> {
+  async updateRole(
+    publicId: string,
+    role: Partial<InsertRole>
+  ): Promise<RoleRecord> {
     return this.handleDatabaseOperation(async () => {
       const [updatedRole] = await db
         .update(roles)
         .set({ ...role, updatedAt: new Date() })
-        .where(eq(roles.id, id))
+        .where(eq(roles.publicId, publicId))
         .returning()
       if (!updatedRole) throw new Error("Role not found")
       return updatedRole
     })
   }
 
-  async deleteRole(id: string): Promise<void> {
+  async deleteRole(publicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
-      await db.delete(roles).where(eq(roles.id, id))
+      await db.delete(roles).where(eq(roles.publicId, publicId))
     })
   }
 
@@ -651,9 +839,9 @@ export class DatabaseStorage implements IStorage {
         .set(role)
         .where(
           and(
-            eq(roleDocs.releaseId, role.releaseId),
-            eq(roleDocs.repoId, role.repoId),
-            eq(roleDocs.roleId, role.roleId)
+            eq(roleDocs.releasePublicId, role.releasePublicId),
+            eq(roleDocs.repoPublicId, role.repoPublicId),
+            eq(roleDocs.rolePublicId, role.rolePublicId)
           )
         )
         .returning()
@@ -662,27 +850,32 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async getRoleDocsForRelease(releaseId: string): Promise<RoleDocument[]> {
+  async getRoleDocsForRelease(
+    releasePublicId: string
+  ): Promise<RoleDocument[]> {
     return this.handleDatabaseOperation(async () => {
       const docs = await db
         .select()
         .from(roleDocs)
-        .where(eq(roleDocs.releaseId, releaseId))
+        .where(eq(roleDocs.releasePublicId, releasePublicId))
       return docs
     })
   }
 
-  async deleteRoleDocsForRelease(releaseId: string): Promise<void> {
+  async deleteRoleDocsForRelease(releasePublicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
-      await db.delete(roleDocs).where(eq(roleDocs.releaseId, releaseId))
+      await db
+        .delete(roleDocs)
+        .where(eq(roleDocs.releasePublicId, releasePublicId))
     })
   }
 
-  async getOrganizationsByUserId(userId: number): Promise<Organization[]> {
-    return this.handleDatabaseOperation(() =>
-      db
+  async getOrganizationsByUserId(userId: string): Promise<Organization[]> {
+    return this.handleDatabaseOperation(async () => {
+      const results = await db
         .select({
           id: organizations.id,
+          publicId: organizations.publicId,
           name: organizations.name,
           slug: organizations.slug,
           description: organizations.description,
@@ -696,18 +889,31 @@ export class DatabaseStorage implements IStorage {
         .from(organizations)
         .innerJoin(
           userOrganizations,
-          eq(organizations.id, userOrganizations.organizationId)
+          eq(organizations.publicId, userOrganizations.organizationId)
         )
         .where(eq(userOrganizations.userId, userId))
-    )
+      return results
+    })
   }
 
-  async getOrganization(id: number): Promise<Organization | undefined> {
+  async getOrganization(publicId: string): Promise<Organization | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [org] = await db
         .select()
         .from(organizations)
-        .where(eq(organizations.id, id))
+        .where(eq(organizations.publicId, publicId))
+      return org
+    })
+  }
+
+  async getOrganizationByPublicId(
+    publicId: string
+  ): Promise<Organization | undefined> {
+    return this.handleDatabaseOperation(async () => {
+      const [org] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.publicId, publicId))
       return org
     })
   }
@@ -724,9 +930,10 @@ export class DatabaseStorage implements IStorage {
 
   async createOrganization(org: InsertOrganization): Promise<Organization> {
     return this.handleDatabaseOperation(async () => {
+      const publicId = publicIdGenerators.organization()
       const [organization] = await db
         .insert(organizations)
-        .values(org)
+        .values({ ...org, publicId })
         .returning()
       return organization
     })
@@ -747,31 +954,38 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async deleteOrganization(id: number): Promise<void> {
+  async deleteOrganization(publicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       const [org] = await db
         .delete(organizations)
-        .where(eq(organizations.id, id))
+        .where(eq(organizations.publicId, publicId))
         .returning()
       if (!org) throw new Error("Organization not found")
     })
   }
 
-  async getUsersInOrganization(id: number): Promise<OrganizationMember[]> {
+  async getUsersInOrganization(
+    publicId: string
+  ): Promise<OrganizationMember[]> {
     return this.handleDatabaseOperation(async () => {
       const members = await db
         .select({
           id: users.id,
+          publicId: users.publicId,
           email: users.email,
           name: users.name,
           role: userOrganizations.role,
           userSub: users.userSub,
         })
         .from(users)
-        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
-        .where(eq(userOrganizations.organizationId, id))
+        .innerJoin(
+          userOrganizations,
+          eq(users.publicId, userOrganizations.userId)
+        )
+        .where(eq(userOrganizations.organizationId, publicId))
       return members.map((member) => ({
         id: member.id,
+        publicId: member.publicId,
         email: member.email,
         name: member.name,
         role: member.role as UserRole,
@@ -792,7 +1006,7 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async removeAllUsersFromOrganization(organizationId: number): Promise<void> {
+  async removeAllUsersFromOrganization(organizationId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       await db
         .delete(userOrganizations)
@@ -801,8 +1015,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeUserFromOrganization(
-    userId: number,
-    organizationId: number
+    userId: string,
+    organizationId: string
   ): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       const [userOrg] = await db
@@ -819,8 +1033,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserOrganizationRole(
-    userId: number,
-    organizationId: number,
+    userId: string,
+    organizationId: string,
     role: string
   ): Promise<UserOrganization> {
     return this.handleDatabaseOperation(async () => {
@@ -865,8 +1079,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserOrganizationRole(
-    userId: number,
-    organizationId: number
+    userId: string,
+    organizationId: string
   ): Promise<UserOrganization | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [userOrg] = await db
@@ -883,7 +1097,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJobs(
-    organizationId: number,
+    organizationId: string,
     jobTypes: JobType[]
   ): Promise<EnqueuedTask[]> {
     return this.handleDatabaseOperation(async () => {
@@ -941,7 +1155,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJobsByBranch(
-    repoId: string,
+    repoPublicId: string,
     branch: string
   ): Promise<EnqueuedTask[]> {
     return this.handleDatabaseOperation(async () => {
@@ -950,7 +1164,7 @@ export class DatabaseStorage implements IStorage {
         .from(enqueuedTasks)
         .where(
           and(
-            eq(enqueuedTasks.repoId, repoId),
+            eq(enqueuedTasks.repoPublicId, repoPublicId),
             eq(enqueuedTasks.branch, branch)
           )
         )
@@ -959,7 +1173,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeJobsByBranchAndType(
-    repoId: string,
+    repoPublicId: string,
     branch: string,
     type: JobType,
     status?: JobStatusType
@@ -969,7 +1183,7 @@ export class DatabaseStorage implements IStorage {
         .delete(enqueuedTasks)
         .where(
           and(
-            eq(enqueuedTasks.repoId, repoId),
+            eq(enqueuedTasks.repoPublicId, repoPublicId),
             eq(enqueuedTasks.branch, branch),
             eq(enqueuedTasks.type, type),
             status ? eq(enqueuedTasks.status, status) : undefined
@@ -979,7 +1193,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInvitation(
-    organizationId: number,
+    organizationId: string,
     email: string
   ): Promise<Invitation> {
     return this.handleDatabaseOperation(async () => {

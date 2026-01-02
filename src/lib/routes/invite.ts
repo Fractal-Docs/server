@@ -124,8 +124,8 @@ export function inviteProtectedRoutes(app: Express) {
 
       await storage.acceptInvitation(invitation.token)
       await storage.addUserToOrganization({
-        userId: user.id,
-        organizationId: organization.id,
+        userId: user.publicId,
+        organizationId: organization.publicId,
         role: "member",
       })
 

@@ -8,7 +8,6 @@ import {
   boolean,
   integer,
   uuid,
-  index,
 } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod"
 import { z } from "zod"
@@ -44,29 +43,36 @@ export type RepoDocMetadata = {
 }
 
 export const prds = pgTable("prds", {
-  id: serial("id").primaryKey(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey().unique(),
   title: text("title").notNull(),
   content: text("content").notNull(),
   businessContext: text("business_context").notNull(),
-  repoId: text("repo_id").notNull(),
+  repoPublicId: text("repo_public_id")
+    .notNull()
+    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
   branch: text("branch"),
 })
 
 export const githubRepos = pgTable("github_repos", {
-  id: serial("id").primaryKey(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey().unique(),
   name: text("name").notNull(),
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
-  repoId: text("repo_id").notNull(),
-  organizationId: integer("organization_id")
+  repoId: text("repo_id").notNull().unique(), // External GitHub repo ID - keep for GitHub API integration
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
+    .references(() => organizations.publicId, { onDelete: "cascade" }),
   fileFilterRegex: text("file_filter_regex"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 })
 
 export const organizations = pgTable("organizations", {
-  id: serial("id").primaryKey(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey().unique(),
   name: text("name").notNull(),
   description: text("description"),
   isPersonal: boolean("is_personal").notNull().default(true),
@@ -74,147 +80,179 @@ export const organizations = pgTable("organizations", {
   profileImageUrl: text("profile_image_url"),
   installationId: integer("installation_id"),
   accessToken: text("access_token"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 })
 
 export const userOrganizations = pgTable(
   "user_organizations",
   {
-    userId: integer("user_id")
+    userId: text("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    organizationId: integer("organization_id")
+      .references(() => users.publicId, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+      .references(() => organizations.publicId, { onDelete: "cascade" }),
     role: text("role").notNull().default("member"), // owner, admin, member
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.organizationId] })]
 )
 
 export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey().unique(),
   userSub: text("user_sub").notNull().unique(),
   name: text("name").notNull(),
   email: text("email"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
   themePreferences: jsonb("theme_preferences"),
 })
 
 // New tables for repository analysis
-export const repoFiles = pgTable(
-  "repo_files",
-  {
-    id: serial("id"),
-    repoId: text("repo_id").notNull(),
-    filePath: text("file_path").notNull(),
-    branch: text("branch").notNull(),
-    content: text("content"), // Store the actual file content
-    metadata: jsonb("metadata").notNull(), // Store file metadata like size, etc.
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.repoId, table.filePath, table.branch] }),
-  ]
-)
+export const repoFiles = pgTable("repo_files", {
+  id: serial("id").primaryKey().unique(),
+  repoPublicId: text("repo_public_id")
+    .notNull()
+    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+  filePath: text("file_path").notNull(),
+  branch: text("branch").notNull(),
+  content: text("content"), // Store the actual file content
+  metadata: jsonb("metadata").notNull(), // Store file metadata like size, etc.
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+})
 
 export const repoDocs = pgTable(
   "repo_docs",
   {
-    id: serial("id").primaryKey(),
-    repoId: text("repo_id").notNull(),
+    id: serial("id"),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
     title: text("title").notNull(),
     content: text("content").notNull(),
     docType: text("doc_type").$type<DocType>().notNull(),
     branch: text("branch").notNull(),
     metadata: jsonb("metadata").$type<RepoDocMetadata>().notNull(), // Typed metadata
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.repoId, table.docType, table.branch] }),
+    primaryKey({ columns: [table.repoPublicId, table.docType, table.branch] }),
   ]
 )
 
 export const releases = pgTable("releases", {
-  id: serial("id").notNull(),
-  releaseId: text("release_id").primaryKey(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey().unique(),
   title: text("title").notNull(),
-  repoId: text("repo_id").notNull(),
+  repoPublicId: text("repo_public_id")
+    .notNull()
+    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
   branch: text("branch").notNull(),
   content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 })
 
 export const roles = pgTable("roles", {
-  id: text("id").primaryKey(),
-  organizationId: integer("organization_id")
+  id: serial("id"),
+  publicId: text("public_id").primaryKey().unique(),
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
+    .references(() => organizations.publicId, { onDelete: "cascade" }),
   roleType: text("role_type").$type<Role>().notNull(),
   context: text("context").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 })
 
 export const roleDocs = pgTable(
   "role_docs",
   {
-    releaseId: text("release_id").notNull(),
-    repoId: text("repo_id").notNull(),
-    roleId: text("role_id")
+    releasePublicId: text("release_public_id")
       .notNull()
-      .references(() => roles.id, { onDelete: "cascade" }),
+      .references(() => releases.publicId, { onDelete: "cascade" }),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+    rolePublicId: text("role_public_id")
+      .notNull()
+      .references(() => roles.publicId, { onDelete: "cascade" }),
     document: text("doc").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
-    primaryKey: primaryKey(table.releaseId, table.repoId, table.roleId),
-    foreignKeys: [
-      { from: table.releaseId, to: releases.releaseId },
-      { from: table.repoId, to: releases.repoId },
-    ],
+    primaryKey: primaryKey(table.releasePublicId, table.rolePublicId),
   })
 )
 
 // New table for tracking enqueued tasks
-export const enqueuedTasks = pgTable(
-  "enqueued_tasks",
-  {
-    jobId: text("job_id").notNull().primaryKey(),
-    branch: text("branch").notNull(),
-    repoId: text("repo_id").notNull(),
-    organizationId: integer("organization_id").notNull(),
-    type: text("type").$type<JobType>().notNull(),
-    status: text("status").$type<JobStatusType>().notNull(),
-    message: text("message").notNull(),
-    details: jsonb("details"),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    foreignKeys: [{ from: table.organizationId, to: organizations.id }],
-  })
-)
+export const enqueuedTasks = pgTable("enqueued_tasks", {
+  jobId: text("job_id").notNull().primaryKey().unique(),
+  branch: text("branch").notNull(),
+  repoPublicId: text("repo_public_id")
+    .notNull()
+    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.publicId),
+  type: text("type").$type<JobType>().notNull(),
+  status: text("status").$type<JobStatusType>().notNull(),
+  message: text("message"),
+  details: jsonb("details"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+})
 
-export const invitations = pgTable(
-  "invitations",
-  {
-    organizationId: serial("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    email: text("email").notNull(),
-    token: uuid("token").primaryKey().defaultRandom(),
-    status: text("status").$type<InvitationStatusType>().notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    emailIdx: index("invitations_email_idx").on(table.email),
-  })
-)
+export const invitations = pgTable("invitations", {
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.publicId, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  token: uuid("token").primaryKey().defaultRandom().unique(),
+  status: text("status").$type<InvitationStatusType>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+})
 
 // Existing schemas
 export const insertPrdSchema = createInsertSchema(prds)
@@ -229,7 +267,7 @@ export const insertPrdSchema = createInsertSchema(prds)
     content: z.string().min(1, "Content is required"),
     businessContext: z.string().min(1, "Business context is required"),
     title: z.string().min(1, "Title is required"),
-    repoId: z.string().min(1, "Please select a GitHub repository"),
+    repoPublicId: z.string().min(1, "Please select a GitHub repository"),
   })
 
 export const insertOrganizationSchema = createInsertSchema(organizations).pick({
@@ -255,6 +293,7 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   fullName: true,
   owner: true,
   repoId: true,
+  publicId: true,
   organizationId: true,
   fileFilterRegex: true,
 })
@@ -279,7 +318,7 @@ export const insertUserSchema = createInsertSchema(users)
 // New schemas for repository analysis
 export const insertRepoFileSchema = createInsertSchema(repoFiles)
   .pick({
-    repoId: true,
+    repoPublicId: true,
     filePath: true,
     branch: true,
     content: true,
@@ -295,7 +334,7 @@ export const insertRepoFileSchema = createInsertSchema(repoFiles)
 
 export const insertRepoDocSchema = createInsertSchema(repoDocs)
   .pick({
-    repoId: true,
+    repoPublicId: true,
     title: true,
     branch: true,
     content: true,
@@ -315,44 +354,44 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
 
 export const insertReleaseSchema = createInsertSchema(releases)
   .pick({
-    releaseId: true,
+    publicId: true,
     title: true,
-    repoId: true,
+    repoPublicId: true,
     branch: true,
     content: true,
     updatedAt: true,
   })
   .extend({
     title: z.string().min(1, "Title is required"),
-    repoId: z.string().min(1, "Repository is required"),
+    repoPublicId: z.string().min(1, "Repository is required"),
     branch: z.string().min(1, "Branch is required"),
   })
 
 export const insertRoleSchema = createInsertSchema(roles)
   .pick({
-    id: true,
+    publicId: true,
     organizationId: true,
     roleType: true,
     context: true,
   })
   .extend({
-    id: z.string().min(1, "Role ID is required"),
-    organizationId: z.number().int().positive("Organization ID is required"),
+    publicId: z.string().min(1, "Role public ID is required"),
+    organizationId: z.string().min(1, "Organization ID is required"),
     roleType: z.enum(ROLES),
     context: z.string().min(1, "Context is required"),
   })
 
 export const insertRoleDocSchema = createInsertSchema(roleDocs)
   .pick({
-    repoId: true,
-    releaseId: true,
-    roleId: true,
+    repoPublicId: true,
+    releasePublicId: true,
+    rolePublicId: true,
     document: true,
   })
   .extend({
-    repoId: z.string().min(1, "Repository is required"),
-    releaseId: z.string().min(1, "Release is required"),
-    roleId: z.string().min(1, "Role ID is required"),
+    repoPublicId: z.string().min(1, "Repository is required"),
+    releasePublicId: z.string().min(1, "Release public ID is required"),
+    rolePublicId: z.string().min(1, "Role public ID is required"),
     document: z.string().min(1, "Document content is required"),
   })
 
@@ -360,7 +399,7 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
   .pick({
     jobId: true,
     branch: true,
-    repoId: true,
+    repoPublicId: true,
     organizationId: true,
     type: true,
     status: true,
@@ -373,7 +412,7 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
     type: z.enum(JOB_TYPES),
     status: z.enum(JOB_STATUS_TYPES),
     branch: z.string().min(1, "Branch is required"),
-    repoId: z.string().min(1, "Repository is required"),
+    repoPublicId: z.string().min(1, "Repository is required"),
   })
 
 export const insertInvitationSchema = createInsertSchema(invitations)
