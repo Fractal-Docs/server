@@ -114,6 +114,13 @@ export function organizationRoutes(app: Express) {
       }
 
       const users = await storage.getUsersInOrganization(orgId)
+      // sort users by name, putting empty at the end
+      users.sort((a, b) => {
+        if (!a.name && !b.name) return 0
+        if (!a.name) return 1
+        if (!b.name) return -1
+        return a.name.localeCompare(b.name)
+      })
       res.json(users)
     }, "Failed to get users in organization")
   )
@@ -161,8 +168,8 @@ export function organizationRoutes(app: Express) {
   )
 
   // Update user role in organization
-  app.put(
-    "/api/organization/:id/users/:userId/role",
+  app.patch(
+    "/api/organization/:id/users/:userId",
     asyncHandler(async (req, res) => {
       const orgId = parseInt(req.params.id)
       const userId = parseInt(req.params.userId)

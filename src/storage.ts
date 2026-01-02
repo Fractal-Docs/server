@@ -824,6 +824,31 @@ export class DatabaseStorage implements IStorage {
     role: string
   ): Promise<UserOrganization> {
     return this.handleDatabaseOperation(async () => {
+      // If promoting to owner, demote the current owner to admin first
+      if (role === "owner") {
+        const currentOwner = await db
+          .select()
+          .from(userOrganizations)
+          .where(
+            and(
+              eq(userOrganizations.organizationId, organizationId),
+              eq(userOrganizations.role, "owner")
+            )
+          )
+
+        if (currentOwner.length > 0 && currentOwner[0].userId !== userId) {
+          await db
+            .update(userOrganizations)
+            .set({ role: "admin" })
+            .where(
+              and(
+                eq(userOrganizations.userId, currentOwner[0].userId),
+                eq(userOrganizations.organizationId, organizationId)
+              )
+            )
+        }
+      }
+
       const [userOrg] = await db
         .update(userOrganizations)
         .set({ role })
