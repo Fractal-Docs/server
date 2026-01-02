@@ -45,7 +45,8 @@ import { publicIdGenerators } from "./lib/public-ids"
 
 type UserRole = "owner" | "admin" | "member"
 
-export interface OrganizationMember extends Omit<User, "themePreferences"> {
+export interface OrganizationMember
+  extends Omit<User, "themePreferences" | "createdAt" | "updatedAt"> {
   role: UserRole
 }
 

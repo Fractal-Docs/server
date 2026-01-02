@@ -8,7 +8,6 @@ import {
   boolean,
   integer,
   uuid,
-  index,
 } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod"
 import { z } from "zod"
@@ -112,32 +111,32 @@ export const users = pgTable("users", {
   userSub: text("user_sub").notNull().unique(),
   name: text("name").notNull(),
   email: text("email"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
   themePreferences: jsonb("theme_preferences"),
 })
 
 // New tables for repository analysis
-export const repoFiles = pgTable(
-  "repo_files",
-  {
-    id: serial("id"),
-    repoPublicId: text("repo_public_id")
-      .notNull()
-      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
-    filePath: text("file_path").notNull(),
-    branch: text("branch").notNull(),
-    content: text("content"), // Store the actual file content
-    metadata: jsonb("metadata").notNull(), // Store file metadata like size, etc.
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.repoPublicId, table.filePath, table.branch] }),
-  ]
-)
+export const repoFiles = pgTable("repo_files", {
+  id: serial("id").primaryKey().unique(),
+  repoPublicId: text("repo_public_id")
+    .notNull()
+    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+  filePath: text("file_path").notNull(),
+  branch: text("branch").notNull(),
+  content: text("content"), // Store the actual file content
+  metadata: jsonb("metadata").notNull(), // Store file metadata like size, etc.
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+})
 
 export const repoDocs = pgTable(
   "repo_docs",
@@ -214,17 +213,13 @@ export const roleDocs = pgTable(
       .notNull(),
   },
   (table) => ({
-    primaryKey: primaryKey(
-      table.releasePublicId,
-      table.repoPublicId,
-      table.rolePublicId
-    ),
+    primaryKey: primaryKey(table.releasePublicId, table.rolePublicId),
   })
 )
 
 // New table for tracking enqueued tasks
 export const enqueuedTasks = pgTable("enqueued_tasks", {
-  jobId: text("job_id").notNull().primaryKey(),
+  jobId: text("job_id").notNull().primaryKey().unique(),
   branch: text("branch").notNull(),
   repoPublicId: text("repo_public_id")
     .notNull()
@@ -244,26 +239,20 @@ export const enqueuedTasks = pgTable("enqueued_tasks", {
     .notNull(),
 })
 
-export const invitations = pgTable(
-  "invitations",
-  {
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organizations.publicId, { onDelete: "cascade" }),
-    email: text("email").notNull(),
-    token: uuid("token").primaryKey().defaultRandom(),
-    status: text("status").$type<InvitationStatusType>().notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => ({
-    emailIdx: index("invitations_email_idx").on(table.email),
-  })
-)
+export const invitations = pgTable("invitations", {
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.publicId, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  token: uuid("token").primaryKey().defaultRandom().unique(),
+  status: text("status").$type<InvitationStatusType>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+})
 
 // Existing schemas
 export const insertPrdSchema = createInsertSchema(prds)
