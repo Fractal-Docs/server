@@ -114,30 +114,34 @@ export interface IStorage {
   // Release operations
   getOrganizationReleases(orgId: number): Promise<Release[]>
   getReleases(repoId: string): Promise<Release[]>
-  getRelease(releaseId: string): Promise<Release | undefined>
-  createRelease(release: InsertRelease): Promise<Release>
+  getRelease(publicId: string): Promise<Release | undefined>
+  getReleaseByBranch(
+    repoId: string,
+    branch: string
+  ): Promise<Release | undefined>
+  createRelease(release: Omit<InsertRelease, "publicId">): Promise<Release>
   updateRelease(
-    releaseId: string,
+    publicId: string,
     release: Partial<InsertRelease>
   ): Promise<Release>
-  deleteRelease(releaseId: string): Promise<void>
+  deleteRelease(publicId: string): Promise<void>
 
   // Role management operations
-  createRole(role: InsertRole): Promise<RoleRecord>
-  getRole(id: string): Promise<RoleRecord | undefined>
+  createRole(role: Omit<InsertRole, "publicId">): Promise<RoleRecord>
+  getRole(publicId: string): Promise<RoleRecord | undefined>
   getRoleByOrgAndType(
     organizationId: number,
     roleType: Role
   ): Promise<RoleRecord | undefined>
   getRolesByOrganization(organizationId: number): Promise<RoleRecord[]>
-  updateRole(id: string, role: Partial<InsertRole>): Promise<RoleRecord>
-  deleteRole(id: string): Promise<void>
+  updateRole(publicId: string, role: Partial<InsertRole>): Promise<RoleRecord>
+  deleteRole(publicId: string): Promise<void>
 
   // Role document operations
   createRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
   updateRoleDoc(role: InsertRoleDocument): Promise<RoleDocument>
-  getRoleDocsForRelease(releaseId: string): Promise<RoleDocument[]>
-  deleteRoleDocsForRelease(releaseId: string): Promise<void>
+  getRoleDocsForRelease(releasePublicId: string): Promise<RoleDocument[]>
+  deleteRoleDocsForRelease(releasePublicId: string): Promise<void>
 
   getOrganization(id: number): Promise<Organization | undefined>
   getOrganizationByPublicId(publicId: string): Promise<Organization | undefined>
@@ -653,24 +657,33 @@ export class DatabaseStorage implements IStorage {
     )
   }
 
-  async createRelease(insertRelease: InsertRelease): Promise<Release> {
+  async createRelease(
+    insertRelease: Omit<InsertRelease, "publicId">
+  ): Promise<Release> {
     return this.handleDatabaseOperation(async () => {
-      const [doc] = await db.insert(releases).values(insertRelease).returning()
+      const publicId = publicIdGenerators.release()
+      const [doc] = await db
+        .insert(releases)
+        .values({ ...insertRelease, publicId })
+        .returning()
       return doc
     })
   }
 
-  async getRelease(releaseId: string): Promise<Release | undefined> {
+  async getRelease(publicId: string): Promise<Release | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .select()
         .from(releases)
-        .where(eq(releases.releaseId, releaseId))
+        .where(eq(releases.publicId, publicId))
       return doc
     })
   }
 
-  async getReleaseByBranch(repoId: string, branch: string): Promise<Release> {
+  async getReleaseByBranch(
+    repoId: string,
+    branch: string
+  ): Promise<Release | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [docs] = await db
         .select()
@@ -681,44 +694,49 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateRelease(
-    releaseId: string,
+    publicId: string,
     updateDoc: Partial<InsertRelease>
   ): Promise<Release> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .update(releases)
         .set(updateDoc)
-        .where(eq(releases.releaseId, releaseId))
-
+        .where(eq(releases.publicId, publicId))
         .returning()
       if (!doc) throw new Error("Release documentation not found")
       return doc
     })
   }
 
-  async deleteRelease(releaseId: string): Promise<void> {
+  async deleteRelease(publicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
       const [doc] = await db
         .delete(releases)
-        .where(eq(releases.releaseId, releaseId))
-
+        .where(eq(releases.publicId, publicId))
         .returning()
       if (!doc) throw new Error("Repository documentation not found")
     })
   }
 
   // Role management operations
-  async createRole(role: InsertRole): Promise<RoleRecord> {
+  async createRole(role: Omit<InsertRole, "publicId">): Promise<RoleRecord> {
     return this.handleDatabaseOperation(async () => {
-      const [newRole] = await db.insert(roles).values(role).returning()
+      const publicId = publicIdGenerators.role()
+      const [newRole] = await db
+        .insert(roles)
+        .values({ ...role, publicId })
+        .returning()
       if (!newRole) throw new Error("Failed to create role")
       return newRole
     })
   }
 
-  async getRole(id: string): Promise<RoleRecord | undefined> {
+  async getRole(publicId: string): Promise<RoleRecord | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [role] = await db.select().from(roles).where(eq(roles.id, id))
+      const [role] = await db
+        .select()
+        .from(roles)
+        .where(eq(roles.publicId, publicId))
       return role
     })
   }
@@ -751,21 +769,24 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async updateRole(id: string, role: Partial<InsertRole>): Promise<RoleRecord> {
+  async updateRole(
+    publicId: string,
+    role: Partial<InsertRole>
+  ): Promise<RoleRecord> {
     return this.handleDatabaseOperation(async () => {
       const [updatedRole] = await db
         .update(roles)
         .set({ ...role, updatedAt: new Date() })
-        .where(eq(roles.id, id))
+        .where(eq(roles.publicId, publicId))
         .returning()
       if (!updatedRole) throw new Error("Role not found")
       return updatedRole
     })
   }
 
-  async deleteRole(id: string): Promise<void> {
+  async deleteRole(publicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
-      await db.delete(roles).where(eq(roles.id, id))
+      await db.delete(roles).where(eq(roles.publicId, publicId))
     })
   }
 
@@ -785,9 +806,9 @@ export class DatabaseStorage implements IStorage {
         .set(role)
         .where(
           and(
-            eq(roleDocs.releaseId, role.releaseId),
+            eq(roleDocs.releasePublicId, role.releasePublicId),
             eq(roleDocs.repoId, role.repoId),
-            eq(roleDocs.roleId, role.roleId)
+            eq(roleDocs.rolePublicId, role.rolePublicId)
           )
         )
         .returning()
@@ -796,19 +817,23 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async getRoleDocsForRelease(releaseId: string): Promise<RoleDocument[]> {
+  async getRoleDocsForRelease(
+    releasePublicId: string
+  ): Promise<RoleDocument[]> {
     return this.handleDatabaseOperation(async () => {
       const docs = await db
         .select()
         .from(roleDocs)
-        .where(eq(roleDocs.releaseId, releaseId))
+        .where(eq(roleDocs.releasePublicId, releasePublicId))
       return docs
     })
   }
 
-  async deleteRoleDocsForRelease(releaseId: string): Promise<void> {
+  async deleteRoleDocsForRelease(releasePublicId: string): Promise<void> {
     return this.handleDatabaseOperation(async () => {
-      await db.delete(roleDocs).where(eq(roleDocs.releaseId, releaseId))
+      await db
+        .delete(roleDocs)
+        .where(eq(roleDocs.releasePublicId, releasePublicId))
     })
   }
 

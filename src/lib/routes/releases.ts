@@ -1,5 +1,4 @@
 import type { Express } from "express"
-import { nanoid } from "nanoid"
 import { storage } from "src/storage"
 import {
   createReleaseDiffAnalysis,
@@ -36,23 +35,23 @@ const registerRoleWorker = (repoId: string, branch: string) => {
   registerGenerateWorker(
     ROLE_DOC_GENERATION,
     async ({ content, extra, jobId: id }) => {
-      const { role, releaseId } = extra
+      const { role, releasePublicId } = extra
       console.log(
-        `Generated role documentation for role ${role?.roleType}, releaseId ${releaseId}`
+        `Generated role documentation for role ${role?.roleType}, releasePublicId ${releasePublicId}`
       )
       await storage.updateJob(id, {
         status: "completed",
         details: {
-          releaseId,
-          roleId: role.id,
+          releasePublicId,
+          rolePublicId: role.publicId,
         },
       })
       await storage.removeJobsByBranchAndType(repoId, branch, "role", "error")
 
       await storage.createRoleDoc({
-        releaseId,
+        releasePublicId,
         repoId,
-        roleId: role.id,
+        rolePublicId: role.publicId,
         document: content,
       })
     },
@@ -65,7 +64,7 @@ async function generateRoleDocuments(
   orgId: number,
   repoId: string,
   branch: string,
-  releaseId: string,
+  releasePublicId: string,
   releaseContent: string,
   roles: string[]
 ) {
@@ -76,9 +75,7 @@ async function generateRoleDocuments(
       let role = orgRoles.find((r) => r.roleType === roleType)
 
       if (!role) {
-        const id = nanoid()
         role = await storage.createRole({
-          id,
           organizationId: orgId,
           roleType: roleType as Role,
           context: "",
@@ -99,7 +96,7 @@ async function generateRoleDocuments(
         userPrompt,
         model,
         extra: {
-          releaseId,
+          releasePublicId,
           role,
         },
       })
@@ -114,8 +111,8 @@ async function generateRoleDocuments(
           type: "role",
           branch,
           details: {
-            releaseId,
-            roleId: role.id,
+            releasePublicId,
+            rolePublicId: role.publicId,
             roleType,
           },
           status: "pending",
@@ -166,7 +163,7 @@ export function releaseRoutes(app: Express) {
         branch
       )
       if (existingRelease) {
-        await storage.deleteRelease(existingRelease.releaseId)
+        await storage.deleteRelease(existingRelease.publicId)
       }
 
       const prd = (await storage.getPrdForBranch(githubRepoId, branch)) || {
@@ -197,9 +194,7 @@ export function releaseRoutes(app: Express) {
             "release",
             "error"
           )
-          const releaseId = nanoid()
-          await storage.createRelease({
-            releaseId,
+          const release = await storage.createRelease({
             title,
             repoId: githubRepoId,
             branch,
@@ -208,7 +203,7 @@ export function releaseRoutes(app: Express) {
           await storage.updateJob(id, {
             status: "completed",
             details: {
-              releaseId,
+              releasePublicId: release.publicId,
             },
           })
 
@@ -219,7 +214,7 @@ export function releaseRoutes(app: Express) {
             orgId,
             githubRepoId,
             branch,
-            releaseId,
+            release.publicId,
             content,
             roles
           )
@@ -252,13 +247,20 @@ export function releaseRoutes(app: Express) {
 
   // Generate role documents for existing release - requires membership
   app.post(
-    "/api/organization/:org_public_id/releases/:release_id/role-docs",
+    "/api/organization/:org_public_id/releases/:release_public_id/role-docs",
     ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
-      const { release_id } = req.params
+      const { release_public_id } = req.params
       const { orgId } = req
 
-      const release = await storage.getRelease(release_id)
+      if (!hasValidPrefix(release_public_id, "rel")) {
+        res.status(400).json({
+          error: "Invalid release ID format. Expected format: rel_xxxxxxxxxxxx",
+        })
+        return
+      }
+
+      const release = await storage.getRelease(release_public_id)
       if (!release) {
         res.status(404).json({ error: "Release not found" })
         return
@@ -284,7 +286,7 @@ export function releaseRoutes(app: Express) {
         orgId,
         release.repoId,
         release.branch,
-        release_id,
+        release.publicId,
         release.content,
         roles
       )
@@ -358,11 +360,19 @@ export function releaseRoutes(app: Express) {
 
   // Get a specific release - requires membership
   app.get(
-    "/api/organization/:org_public_id/releases/:id",
+    "/api/organization/:org_public_id/releases/:release_public_id",
     ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
-      const { id } = req.params
-      const release = await storage.getRelease(id)
+      const { release_public_id } = req.params
+
+      if (!hasValidPrefix(release_public_id, "rel")) {
+        res.status(400).json({
+          error: "Invalid release ID format. Expected format: rel_xxxxxxxxxxxx",
+        })
+        return
+      }
+
+      const release = await storage.getRelease(release_public_id)
 
       if (!release) {
         res.status(404).json({ error: "Release not found" })
@@ -381,13 +391,20 @@ export function releaseRoutes(app: Express) {
 
   // Get role docs for a release - requires membership
   app.get(
-    "/api/organization/:org_public_id/releases/:id/role-docs",
+    "/api/organization/:org_public_id/releases/:release_public_id/role-docs",
     ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
-      const { id } = req.params
+      const { release_public_id } = req.params
+
+      if (!hasValidPrefix(release_public_id, "rel")) {
+        res.status(400).json({
+          error: "Invalid release ID format. Expected format: rel_xxxxxxxxxxxx",
+        })
+        return
+      }
 
       // Verify release exists and belongs to org
-      const release = await storage.getRelease(id)
+      const release = await storage.getRelease(release_public_id)
       if (!release) {
         res.status(404).json({ error: "Release not found" })
         return
@@ -398,18 +415,26 @@ export function releaseRoutes(app: Express) {
         return
       }
 
-      const roleDocs = await storage.getRoleDocsForRelease(id)
+      const roleDocs = await storage.getRoleDocsForRelease(release_public_id)
       res.json(roleDocs)
     }, "Failed to fetch role documents")
   )
 
   // Delete a release - requires admin role
   app.delete(
-    "/api/organization/:org_public_id/releases/:id",
+    "/api/organization/:org_public_id/releases/:release_public_id",
     ...requireOrgAdmin("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
-      const { id } = req.params
-      const release = await storage.getRelease(id)
+      const { release_public_id } = req.params
+
+      if (!hasValidPrefix(release_public_id, "rel")) {
+        res.status(400).json({
+          error: "Invalid release ID format. Expected format: rel_xxxxxxxxxxxx",
+        })
+        return
+      }
+
+      const release = await storage.getRelease(release_public_id)
 
       if (!release) {
         res.status(404).json({ error: "Release not found" })
@@ -423,10 +448,10 @@ export function releaseRoutes(app: Express) {
       }
 
       // Delete role documents first
-      await storage.deleteRoleDocsForRelease(id)
+      await storage.deleteRoleDocsForRelease(release_public_id)
 
       // Then delete the release
-      await storage.deleteRelease(id)
+      await storage.deleteRelease(release_public_id)
 
       res.json({ success: true, message: "Release deleted successfully" })
     }, "Failed to delete release")

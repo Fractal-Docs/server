@@ -86,6 +86,8 @@ export const publicIdGenerators = {
   user: () => `usr_${generateShortPublicId()}`,
   prd: () => `prd_${generateShortPublicId()}`,
   repo: () => `repo_${generateShortPublicId()}`,
+  release: () => `rel_${generateShortPublicId()}`,
+  role: () => `role_${generateShortPublicId()}`,
 } as const
 
 /**

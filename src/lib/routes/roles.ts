@@ -1,7 +1,6 @@
 import type { Express } from "express"
 import { storage } from "src/storage"
 import { ROLES, Role } from "src/shared/schema"
-import { nanoid } from "nanoid"
 import {
   requireOrgMember,
   requireOrgAdmin,
@@ -73,16 +72,14 @@ export function roleRoutes(app: Express) {
 
       if (!role) {
         // Create the role if it doesn't exist
-        const roleId = nanoid()
         role = await storage.createRole({
-          id: roleId,
           organizationId: req.orgId,
           roleType: role_type as Role,
           context,
         })
       } else {
         // Update existing role
-        role = await storage.updateRole(role.id, { context })
+        role = await storage.updateRole(role.publicId, { context })
       }
 
       res.json(role)

@@ -21,6 +21,8 @@ Added non-enumerable `publicId` columns to entities exposed via the API:
 - **users**: `usr_xxxxxxxxxxxx`
 - **prds**: `prd_xxxxxxxxxxxx`
 - **repositories**: `repo_xxxxxxxxxxxx`
+- **releases**: `rel_xxxxxxxxxxxx`
+- **roles**: `role_xxxxxxxxxxxx`
 
 #### Schema Changes
 
@@ -38,6 +40,12 @@ publicId: text("public_id").notNull().unique()
 
 // github_repos table
 publicId: text("public_id").notNull().unique()
+
+// releases table
+publicId: text("public_id").notNull().unique()
+
+// roles table
+publicId: text("public_id").notNull().unique()
 ```
 
 #### New Utility Module
@@ -48,7 +56,7 @@ publicId: text("public_id").notNull().unique()
 - `generateShortPublicId()` - Generate a shorter public ID
 - `isValidPublicId()` - Validate a public ID format
 - `hasValidPrefix()` - Check if ID has expected prefix (e.g., "org", "usr", "prd")
-- `publicIdGenerators` - Prefixed ID generators for each entity type
+- `publicIdGenerators` - Prefixed ID generators for each entity type (org, usr, prd, repo, rel, role)
 
 ### 2. Authorization Middleware
 
@@ -147,10 +155,17 @@ Note: `repo_public_id` must be in format `repo_xxxxxxxxxxxx`. The old GitHub `re
 | `GET /api/github/repos/:repo_id/branches` | `GET /api/github/repos/:repo_public_id/branches` |
 
 #### Release Routes
-All release routes use `org_public_id` and releases are created with `repoPublicId` in the request body (not `repoId`).
+| Old Route | New Route |
+|-----------|-----------|
+| `GET /api/organization/:org_public_id/releases/:id` | `GET /api/organization/:org_public_id/releases/:release_public_id` |
+| `DELETE /api/organization/:org_public_id/releases/:id` | `DELETE /api/organization/:org_public_id/releases/:release_public_id` |
+| `GET /api/organization/:org_public_id/releases/:id/role-docs` | `GET /api/organization/:org_public_id/releases/:release_public_id/role-docs` |
+| `POST /api/organization/:org_public_id/releases/:release_id/role-docs` | `POST /api/organization/:org_public_id/releases/:release_public_id/role-docs` |
+
+Note: `release_public_id` must be in format `rel_xxxxxxxxxxxx`. All release routes use `org_public_id` and releases are created with `repoPublicId` in the request body (not `repoId`).
 
 #### Role Routes
-All role routes use `org_public_id`.
+All role routes use `org_public_id`. Roles are identified by `role_type` in routes (not by publicId), but role records contain a `publicId` field (format: `role_xxxxxxxxxxxx`) that is used internally and in role documents.
 
 ### 4. Authorization Requirements
 
@@ -200,6 +215,23 @@ getRepoByPublicId(publicId: string): Promise<GithubRepo | undefined>
 getRepoByGithubId(githubRepoId: string): Promise<GithubRepo | undefined>
 updateRepoByPublicId(publicId: string, repo: Partial<InsertGithubRepo>): Promise<GithubRepo>
 deleteRepoByPublicId(publicId: string): Promise<void[]>
+
+// Release operations
+getRelease(publicId: string): Promise<Release | undefined>
+getReleaseByBranch(repoId: string, branch: string): Promise<Release | undefined>
+createRelease(release: Omit<InsertRelease, "publicId">): Promise<Release>
+updateRelease(publicId: string, release: Partial<InsertRelease>): Promise<Release>
+deleteRelease(publicId: string): Promise<void>
+
+// Role operations
+getRole(publicId: string): Promise<RoleRecord | undefined>
+createRole(role: Omit<InsertRole, "publicId">): Promise<RoleRecord>
+updateRole(publicId: string, role: Partial<InsertRole>): Promise<RoleRecord>
+deleteRole(publicId: string): Promise<void>
+
+// Role document operations
+getRoleDocsForRelease(releasePublicId: string): Promise<RoleDocument[]>
+deleteRoleDocsForRelease(releasePublicId: string): Promise<void>
 ```
 
 Public IDs are automatically generated when creating new records.
@@ -229,6 +261,7 @@ Apply the migration to add public_id columns:
 ```bash
 # Using psql directly
 psql $DATABASE_URL -f migrations/0001_add_public_ids.sql
+psql $DATABASE_URL -f migrations/0002_add_release_and_role_public_ids.sql
 
 # Or using drizzle-kit
 npx drizzle-kit push
@@ -236,12 +269,22 @@ npx drizzle-kit push
 
 ### Migration Details
 
-The migration (`migrations/0001_add_public_ids.sql`):
+The first migration (`migrations/0001_add_public_ids.sql`):
 
 1. Adds `public_id` columns to organizations, users, prds, and github_repos tables
 2. Generates public IDs for existing records using UUID-based values
 3. Adds NOT NULL constraints
 4. Creates unique indexes
+
+The second migration (`migrations/0002_add_release_and_role_public_ids.sql`):
+
+1. Renames `release_id` to `public_id` in releases table, adds `rel_` prefix to existing values
+2. Changes releases primary key from `release_id` to `id` (serial)
+3. Renames `id` to `public_id` in roles table, adds `role_` prefix to existing values
+4. Adds serial `id` column to roles table as new primary key
+5. Renames `release_id` and `role_id` to `release_public_id` and `role_public_id` in role_docs table
+6. Updates role_docs foreign key references
+7. Creates indexes for new public_id columns
 
 ## Error Responses
 
@@ -342,14 +385,15 @@ Test that:
 | `src/storage.ts` | Added publicId methods for all entities |
 | `src/lib/routes/organizations.ts` | Updated routes to use publicId |
 | `src/lib/routes/prd.ts` | Updated routes to use publicId |
-| `src/lib/routes/releases.ts` | Updated routes to use publicId, request body uses repoPublicId |
+| `src/lib/routes/releases.ts` | Updated routes to use release_public_id param, request body uses repoPublicId |
 | `src/lib/routes/documents.ts` | Updated routes to use publicId |
 | `src/lib/routes/code.ts` | Updated routes to use repo_public_id |
-| `src/lib/routes/roles.ts` | Updated routes to use publicId |
+| `src/lib/routes/roles.ts` | Updated to use role.publicId for storage operations |
 | `src/lib/routes/auth.ts` | Updated to return publicId |
 | `src/lib/routes/github.ts` | Updated routes to use repo_public_id |
 | `src/lib/routes/middleware.ts` | Updated withRepo to use publicId, type updates |
-| `migrations/0001_add_public_ids.sql` | Database migration for all tables |
+| `migrations/0001_add_public_ids.sql` | Database migration for orgs, users, prds, repos |
+| `migrations/0002_add_release_and_role_public_ids.sql` | Database migration for releases, roles, role_docs |
 
 ## Future Improvements
 

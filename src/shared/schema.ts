@@ -142,8 +142,8 @@ export const repoDocs = pgTable(
 )
 
 export const releases = pgTable("releases", {
-  id: serial("id").notNull(),
-  releaseId: text("release_id").primaryKey(),
+  id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().unique(),
   title: text("title").notNull(),
   repoId: text("repo_id").notNull(),
   branch: text("branch").notNull(),
@@ -153,7 +153,8 @@ export const releases = pgTable("releases", {
 })
 
 export const roles = pgTable("roles", {
-  id: text("id").primaryKey(),
+  id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().unique(),
   organizationId: integer("organization_id")
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
@@ -166,20 +167,18 @@ export const roles = pgTable("roles", {
 export const roleDocs = pgTable(
   "role_docs",
   {
-    releaseId: text("release_id").notNull(),
+    releasePublicId: text("release_public_id").notNull(),
     repoId: text("repo_id").notNull(),
-    roleId: text("role_id")
-      .notNull()
-      .references(() => roles.id, { onDelete: "cascade" }),
+    rolePublicId: text("role_public_id").notNull(),
     document: text("doc").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
-    primaryKey: primaryKey(table.releaseId, table.repoId, table.roleId),
-    foreignKeys: [
-      { from: table.releaseId, to: releases.releaseId },
-      { from: table.repoId, to: releases.repoId },
-    ],
+    primaryKey: primaryKey(
+      table.releasePublicId,
+      table.repoId,
+      table.rolePublicId
+    ),
   })
 )
 
@@ -320,7 +319,7 @@ export const insertRepoDocSchema = createInsertSchema(repoDocs)
 
 export const insertReleaseSchema = createInsertSchema(releases)
   .pick({
-    releaseId: true,
+    publicId: true,
     title: true,
     repoId: true,
     branch: true,
@@ -335,13 +334,13 @@ export const insertReleaseSchema = createInsertSchema(releases)
 
 export const insertRoleSchema = createInsertSchema(roles)
   .pick({
-    id: true,
+    publicId: true,
     organizationId: true,
     roleType: true,
     context: true,
   })
   .extend({
-    id: z.string().min(1, "Role ID is required"),
+    publicId: z.string().min(1, "Role public ID is required"),
     organizationId: z.number().int().positive("Organization ID is required"),
     roleType: z.enum(ROLES),
     context: z.string().min(1, "Context is required"),
@@ -350,14 +349,14 @@ export const insertRoleSchema = createInsertSchema(roles)
 export const insertRoleDocSchema = createInsertSchema(roleDocs)
   .pick({
     repoId: true,
-    releaseId: true,
-    roleId: true,
+    releasePublicId: true,
+    rolePublicId: true,
     document: true,
   })
   .extend({
     repoId: z.string().min(1, "Repository is required"),
-    releaseId: z.string().min(1, "Release is required"),
-    roleId: z.string().min(1, "Role ID is required"),
+    releasePublicId: z.string().min(1, "Release public ID is required"),
+    rolePublicId: z.string().min(1, "Role public ID is required"),
     document: z.string().min(1, "Document content is required"),
   })
 
