@@ -13,7 +13,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "NODE_ENV=production node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "schema:compare": "tsx schema-compare.ts"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +25,7 @@
     "@octokit/app": "^16.1.0",
     "@octokit/rest": "^22.0.0",
     "@pinecone-database/pinecone": "^6.1.2",
+    "@types/pg": "^8.16.0",
     "bullmq": "^5.61.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
@@ -43,6 +45,7 @@
     "openai": "^5.20.3",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
+    "pg": "^8.16.3",
     "postmark": "^4.0.5",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

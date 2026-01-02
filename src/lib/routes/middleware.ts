@@ -8,7 +8,7 @@ import { hasValidPrefix } from "../public-ids"
 // Extended request types with validated resources
 export interface OrganizationRequest extends Request {
   organization: Organization
-  orgId: number
+  orgId: string
 }
 
 // RepoRequest extends AuthorizedOrgRequest to include repo-specific fields
@@ -58,14 +58,14 @@ export function withOrganization(): RequestHandler {
         return
       }
 
-      const organization = await storage.getOrganization(parseInt(org_id, 10))
+      const organization = await storage.getOrganization(org_id)
       if (!organization) {
         res.status(404).json({ error: "Organization not found" })
         return
       }
 
       ;(req as OrganizationRequest).organization = organization
-      ;(req as OrganizationRequest).orgId = parseInt(org_id)
+      ;(req as OrganizationRequest).orgId = org_id
       next()
     } catch (error) {
       const message = getErrorMessage(error, "Failed to validate organization")
@@ -113,7 +113,7 @@ export function withRepo(): RequestHandler {
         return
       }
 
-      if (repo.organizationId !== organization.id) {
+      if (repo.organizationId !== organization.publicId) {
         // Return 404 instead of 403 to prevent enumeration
         res.status(404).json({ error: "Repository not found" })
         return
@@ -215,7 +215,7 @@ export function validateRepoOrganization(
   organization: Organization,
   res: Response
 ): boolean {
-  if (repo.organizationId !== organization.id) {
+  if (repo.organizationId !== organization.publicId) {
     // Return 404 instead of 403 to prevent enumeration
     res.status(404).json({ error: "Repository not found" })
     return false

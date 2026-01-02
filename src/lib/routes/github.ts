@@ -152,7 +152,7 @@ export function githubRoutes(app: Express) {
           : []
 
       // Filter out already imported repos
-      const existingRepos = await storage.getRepos(organization.id)
+      const existingRepos = await storage.getRepos(organization.publicId)
       const existingRepoIds = new Set(existingRepos.map((r) => r.repoId))
 
       const filteredRepos = availableRepos.filter(
@@ -186,7 +186,7 @@ export function githubRoutes(app: Express) {
         return
       }
 
-      const existingRepos = await storage.getRepos(organization.id)
+      const existingRepos = await storage.getRepos(organization.publicId)
       const existingRepoIds = new Set(existingRepos.map((r) => r.repoId))
 
       const filteredRepos = repositories.filter(
@@ -195,7 +195,7 @@ export function githubRoutes(app: Express) {
 
       const createdRepos = await Promise.all(
         filteredRepos.map((repo) =>
-          storage.createRepo({ ...repo, organizationId: organization.id })
+          storage.createRepo({ ...repo, organizationId: organization.publicId })
         )
       )
 
@@ -238,7 +238,7 @@ export function githubRoutes(app: Express) {
       }
 
       // Verify repo belongs to this organization
-      if (repo.organizationId !== organization.id) {
+      if (repo.organizationId !== organization.publicId) {
         res.status(404).json({ error: "Repository not found" })
         return
       }
@@ -272,7 +272,7 @@ export function githubRoutes(app: Express) {
       }
 
       // Verify repo belongs to this organization
-      if (repo.organizationId !== organization.id) {
+      if (repo.organizationId !== organization.publicId) {
         res.status(404).json({ error: "Repository not found" })
         return
       }

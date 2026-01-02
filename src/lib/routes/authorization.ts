@@ -21,7 +21,7 @@ export interface AuthorizedRequest extends Request {
 
 export interface AuthorizedOrgRequest extends AuthorizedRequest {
   organization: Organization
-  orgId: number
+  orgId: string
   orgPublicId: string
   userRole: "owner" | "admin" | "member"
 }
@@ -141,8 +141,8 @@ export function requireOrgMembership(options?: {
 
       // Check user's membership and role in this organization
       const userOrgRole = await storage.getUserOrganizationRole(
-        authReq.currentUser.id,
-        organization.id
+        authReq.currentUser.publicId,
+        organization.publicId
       )
 
       if (!userOrgRole) {
@@ -161,7 +161,7 @@ export function requireOrgMembership(options?: {
       }
 
       ;(req as AuthorizedOrgRequest).organization = organization
-      ;(req as AuthorizedOrgRequest).orgId = organization.id
+      ;(req as AuthorizedOrgRequest).orgId = organization.publicId
       ;(req as AuthorizedOrgRequest).orgPublicId = organization.publicId
       ;(req as AuthorizedOrgRequest).userRole = userOrgRole.role as
         | "owner"
@@ -212,7 +212,7 @@ export function requireOrgMember(paramName?: string): RequestHandler[] {
  * Helper to verify a resource belongs to the organization in the request
  * Use this in route handlers after applying org membership middleware
  */
-export function verifyResourceOwnership<T extends { organizationId: number }>(
+export function verifyResourceOwnership<T extends { organizationId: string }>(
   resource: T | undefined | null,
   req: AuthorizedOrgRequest,
   res: Response,
@@ -226,7 +226,7 @@ export function verifyResourceOwnership<T extends { organizationId: number }>(
   if (resource.organizationId !== req.orgId) {
     // Log potential security issue but return generic 404 to prevent enumeration
     console.warn(
-      `Authorization violation: User ${req.currentUser.id} attempted to access ${resourceName} belonging to org ${resource.organizationId} via org ${req.orgId}`
+      `Authorization violation: User ${req.currentUser.publicId} attempted to access ${resourceName} belonging to org ${resource.organizationId} via org ${req.orgId}`
     )
     res.status(404).json({ error: `${resourceName} not found` })
     return false
@@ -241,10 +241,10 @@ export function verifyResourceOwnership<T extends { organizationId: number }>(
  */
 export function canModifyUser(
   req: AuthorizedOrgRequest,
-  targetUserId: number
+  targetUserId: string
 ): boolean {
   // Users can always modify themselves
-  if (req.currentUser.id === targetUserId) {
+  if (req.currentUser.publicId === targetUserId) {
     return true
   }
 

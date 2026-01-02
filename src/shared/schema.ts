@@ -44,8 +44,8 @@ export type RepoDocMetadata = {
 }
 
 export const prds = pgTable("prds", {
-  id: serial("id").primaryKey(),
-  publicId: text("public_id").notNull().unique(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey(),
   title: text("title").notNull(),
   content: text("content").notNull(),
   businessContext: text("business_context").notNull(),
@@ -56,22 +56,24 @@ export const prds = pgTable("prds", {
 })
 
 export const githubRepos = pgTable("github_repos", {
-  id: serial("id").primaryKey(),
-  publicId: text("public_id").notNull().unique(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey(),
   name: text("name").notNull(),
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
   repoId: text("repo_id").notNull(), // External GitHub repo ID - keep for GitHub API integration
-  organizationId: integer("organization_id")
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
+    .references(() => organizations.publicId, { onDelete: "cascade" }),
   fileFilterRegex: text("file_filter_regex"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 })
 
 export const organizations = pgTable("organizations", {
-  id: serial("id").primaryKey(),
-  publicId: text("public_id").notNull().unique(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
   isPersonal: boolean("is_personal").notNull().default(true),
@@ -79,28 +81,34 @@ export const organizations = pgTable("organizations", {
   profileImageUrl: text("profile_image_url"),
   installationId: integer("installation_id"),
   accessToken: text("access_token"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 })
 
 export const userOrganizations = pgTable(
   "user_organizations",
   {
-    userId: integer("user_id")
+    userId: text("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    organizationId: integer("organization_id")
+      .references(() => users.publicId, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+      .references(() => organizations.publicId, { onDelete: "cascade" }),
     role: text("role").notNull().default("member"), // owner, admin, member
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.organizationId] })]
 )
 
 export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  publicId: text("public_id").notNull().unique(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey(),
   userSub: text("user_sub").notNull().unique(),
   name: text("name").notNull(),
   email: text("email"),
@@ -119,8 +127,12 @@ export const repoFiles = pgTable(
     branch: text("branch").notNull(),
     content: text("content"), // Store the actual file content
     metadata: jsonb("metadata").notNull(), // Store file metadata like size, etc.
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.repoPublicId, table.filePath, table.branch] }),
@@ -130,7 +142,7 @@ export const repoFiles = pgTable(
 export const repoDocs = pgTable(
   "repo_docs",
   {
-    id: serial("id").primaryKey(),
+    id: serial("id"),
     repoPublicId: text("repo_public_id")
       .notNull()
       .references(() => githubRepos.publicId, { onDelete: "cascade" }),
@@ -139,8 +151,12 @@ export const repoDocs = pgTable(
     docType: text("doc_type").$type<DocType>().notNull(),
     branch: text("branch").notNull(),
     metadata: jsonb("metadata").$type<RepoDocMetadata>().notNull(), // Typed metadata
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.repoPublicId, table.docType, table.branch] }),
@@ -148,40 +164,54 @@ export const repoDocs = pgTable(
 )
 
 export const releases = pgTable("releases", {
-  id: serial("id").primaryKey(),
-  publicId: text("public_id").notNull().unique(),
+  id: serial("id"),
+  publicId: text("public_id").primaryKey(),
   title: text("title").notNull(),
   repoPublicId: text("repo_public_id")
     .notNull()
     .references(() => githubRepos.publicId, { onDelete: "cascade" }),
   branch: text("branch").notNull(),
   content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 })
 
 export const roles = pgTable("roles", {
-  id: serial("id").primaryKey(),
-  publicId: text("public_id").notNull().unique(),
-  organizationId: integer("organization_id")
+  id: serial("id"),
+  publicId: text("public_id").primaryKey(),
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
+    .references(() => organizations.publicId, { onDelete: "cascade" }),
   roleType: text("role_type").$type<Role>().notNull(),
   context: text("context").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 })
 
 export const roleDocs = pgTable(
   "role_docs",
   {
-    releasePublicId: text("release_public_id").notNull(),
+    releasePublicId: text("release_public_id")
+      .notNull()
+      .references(() => releases.publicId, { onDelete: "cascade" }),
     repoPublicId: text("repo_public_id")
       .notNull()
       .references(() => githubRepos.publicId, { onDelete: "cascade" }),
-    rolePublicId: text("role_public_id").notNull(),
+    rolePublicId: text("role_public_id")
+      .notNull()
+      .references(() => roles.publicId, { onDelete: "cascade" }),
     document: text("doc").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     primaryKey: primaryKey(
@@ -193,38 +223,42 @@ export const roleDocs = pgTable(
 )
 
 // New table for tracking enqueued tasks
-export const enqueuedTasks = pgTable(
-  "enqueued_tasks",
-  {
-    jobId: text("job_id").notNull().primaryKey(),
-    branch: text("branch").notNull(),
-    repoPublicId: text("repo_public_id")
-      .notNull()
-      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
-    organizationId: integer("organization_id").notNull(),
-    type: text("type").$type<JobType>().notNull(),
-    status: text("status").$type<JobStatusType>().notNull(),
-    message: text("message").notNull(),
-    details: jsonb("details"),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => ({
-    foreignKeys: [{ from: table.organizationId, to: organizations.id }],
-  })
-)
+export const enqueuedTasks = pgTable("enqueued_tasks", {
+  jobId: text("job_id").notNull().primaryKey(),
+  branch: text("branch").notNull(),
+  repoPublicId: text("repo_public_id")
+    .notNull()
+    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.publicId),
+  type: text("type").$type<JobType>().notNull(),
+  status: text("status").$type<JobStatusType>().notNull(),
+  message: text("message").notNull(),
+  details: jsonb("details"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+})
 
 export const invitations = pgTable(
   "invitations",
   {
-    organizationId: serial("organization_id")
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+      .references(() => organizations.publicId, { onDelete: "cascade" }),
     email: text("email").notNull(),
     token: uuid("token").primaryKey().defaultRandom(),
     status: text("status").$type<InvitationStatusType>().notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     emailIdx: index("invitations_email_idx").on(table.email),
@@ -353,7 +387,7 @@ export const insertRoleSchema = createInsertSchema(roles)
   })
   .extend({
     publicId: z.string().min(1, "Role public ID is required"),
-    organizationId: z.number().int().positive("Organization ID is required"),
+    organizationId: z.string().min(1, "Organization ID is required"),
     roleType: z.enum(ROLES),
     context: z.string().min(1, "Context is required"),
   })

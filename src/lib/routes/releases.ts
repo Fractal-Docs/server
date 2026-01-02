@@ -66,7 +66,7 @@ const registerRoleWorker = (repoPublicId: string, branch: string) => {
 
 // Helper to generate role documents for a release
 async function generateRoleDocuments(
-  orgId: number,
+  orgId: string,
   repoPublicId: string,
   branch: string,
   releasePublicId: string,

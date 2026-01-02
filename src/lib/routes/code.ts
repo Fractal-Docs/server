@@ -33,7 +33,7 @@ export function codeRoutes(app: Express) {
     "/api/organization/:org_public_id/repos",
     ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
-      const repos = await storage.getRepos(req.organization.id)
+      const repos = await storage.getRepos(req.organization.publicId)
 
       // Return repos with publicId, not internal id
       const sanitizedRepos = repos.map((repo) => ({

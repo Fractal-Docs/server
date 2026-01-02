@@ -25,7 +25,7 @@ export function organizationRoutes(app: Express) {
     requireAuth(),
     authorizedHandler<AuthorizedRequest>(async (req, res) => {
       const userOrganizations = await storage.getOrganizationsByUserId(
-        req.currentUser.id
+        req.currentUser.publicId
       )
       // Return organizations with publicId
       const sanitizedOrgs = userOrganizations.map((org) => ({
@@ -79,8 +79,8 @@ export function organizationRoutes(app: Express) {
 
       // Add the creator as owner of the organization
       await storage.addUserToOrganization({
-        userId: req.currentUser.id,
-        organizationId: organization.id,
+        userId: req.currentUser.publicId,
+        organizationId: organization.publicId,
         role: "owner",
       })
 
@@ -188,7 +188,7 @@ export function organizationRoutes(app: Express) {
       }
 
       const result = insertUserOrganizationSchema.safeParse({
-        userId: userToAdd.id,
+        userId: userToAdd.publicId,
         organizationId: req.orgId,
         role: role || "member",
       })
@@ -226,8 +226,8 @@ export function organizationRoutes(app: Express) {
       }
 
       // Check permissions - users can remove themselves, admins/owners can remove others
-      const isSelfRemoval = userToRemove.id === req.currentUser.id
-      if (!isSelfRemoval && !canModifyUser(req, userToRemove.id)) {
+      const isSelfRemoval = userToRemove.publicId === req.currentUser.publicId
+      if (!isSelfRemoval && !canModifyUser(req, userToRemove.publicId)) {
         res
           .status(403)
           .json({ error: "You do not have permission to remove this user" })
@@ -237,7 +237,7 @@ export function organizationRoutes(app: Express) {
       // Prevent removing the last owner
       if (!isSelfRemoval) {
         const userRole = await storage.getUserOrganizationRole(
-          userToRemove.id,
+          userToRemove.publicId,
           req.orgId
         )
         if (userRole?.role === "owner") {
@@ -253,7 +253,7 @@ export function organizationRoutes(app: Express) {
         }
       }
 
-      await storage.removeUserFromOrganization(userToRemove.id, req.orgId)
+      await storage.removeUserFromOrganization(userToRemove.publicId, req.orgId)
       res.json({ success: true })
     }, "Failed to remove user from organization")
   )
@@ -292,7 +292,7 @@ export function organizationRoutes(app: Express) {
       }
 
       const userOrganization = await storage.updateUserOrganizationRole(
-        userToUpdate.id,
+        userToUpdate.publicId,
         req.orgId,
         role
       )
