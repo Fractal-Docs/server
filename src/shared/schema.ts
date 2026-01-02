@@ -45,7 +45,7 @@ export type RepoDocMetadata = {
 
 export const prds = pgTable("prds", {
   id: serial("id"),
-  publicId: text("public_id").primaryKey(),
+  publicId: text("public_id").primaryKey().unique(),
   title: text("title").notNull(),
   content: text("content").notNull(),
   businessContext: text("business_context").notNull(),
@@ -57,11 +57,11 @@ export const prds = pgTable("prds", {
 
 export const githubRepos = pgTable("github_repos", {
   id: serial("id"),
-  publicId: text("public_id").primaryKey(),
+  publicId: text("public_id").primaryKey().unique(),
   name: text("name").notNull(),
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
-  repoId: text("repo_id").notNull(), // External GitHub repo ID - keep for GitHub API integration
+  repoId: text("repo_id").notNull().unique(), // External GitHub repo ID - keep for GitHub API integration
   organizationId: text("organization_id")
     .notNull()
     .references(() => organizations.publicId, { onDelete: "cascade" }),
@@ -73,7 +73,7 @@ export const githubRepos = pgTable("github_repos", {
 
 export const organizations = pgTable("organizations", {
   id: serial("id"),
-  publicId: text("public_id").primaryKey(),
+  publicId: text("public_id").primaryKey().unique(),
   name: text("name").notNull(),
   description: text("description"),
   isPersonal: boolean("is_personal").notNull().default(true),
@@ -108,7 +108,7 @@ export const userOrganizations = pgTable(
 
 export const users = pgTable("users", {
   id: serial("id"),
-  publicId: text("public_id").primaryKey(),
+  publicId: text("public_id").primaryKey().unique(),
   userSub: text("user_sub").notNull().unique(),
   name: text("name").notNull(),
   email: text("email"),
@@ -165,7 +165,7 @@ export const repoDocs = pgTable(
 
 export const releases = pgTable("releases", {
   id: serial("id"),
-  publicId: text("public_id").primaryKey(),
+  publicId: text("public_id").primaryKey().unique(),
   title: text("title").notNull(),
   repoPublicId: text("repo_public_id")
     .notNull()
@@ -182,7 +182,7 @@ export const releases = pgTable("releases", {
 
 export const roles = pgTable("roles", {
   id: serial("id"),
-  publicId: text("public_id").primaryKey(),
+  publicId: text("public_id").primaryKey().unique(),
   organizationId: text("organization_id")
     .notNull()
     .references(() => organizations.publicId, { onDelete: "cascade" }),
@@ -234,7 +234,7 @@ export const enqueuedTasks = pgTable("enqueued_tasks", {
     .references(() => organizations.publicId),
   type: text("type").$type<JobType>().notNull(),
   status: text("status").$type<JobStatusType>().notNull(),
-  message: text("message").notNull(),
+  message: text("message"),
   details: jsonb("details"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()

@@ -1,10 +1,8 @@
-import pg from "pg"
+import pg, { Pool } from "pg"
+import { getTableConfig } from "drizzle-orm/pg-core"
+import * as schema from "./src/shared/schema"
 
-const { Pool } = pg
-
-const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  "postgresql://postgres.aiwklhzehnzyuvbyezvq:Kss343sZYurZUzjR6RZc@aws-0-ca-central-1.pooler.supabase.com:6543/postgres"
+const DATABASE_URL = process.env.DATABASE_URL
 
 interface Column {
   name: string
@@ -44,11 +42,10 @@ async function getDatabaseSchema(pool: Pool): Promise<Map<string, TableSchema>> 
     FROM information_schema.tables
     WHERE table_schema = 'public'
     AND table_type = 'BASE TABLE'
-    ORDER BY table_name
   `)
 
   for (const row of tablesResult.rows) {
-    const tableName = row.table_name as string
+    const tableName = row.table_name
 
     const columnsResult = await pool.query(
       `
@@ -58,27 +55,35 @@ async function getDatabaseSchema(pool: Pool): Promise<Map<string, TableSchema>> 
         c.udt_name,
         c.is_nullable,
         c.column_default,
-        CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as is_primary_key,
-        CASE WHEN u.column_name IS NOT NULL THEN true ELSE false END as is_unique
+        CASE
+          WHEN pk.column_name IS NOT NULL THEN true
+          ELSE false
+        END as is_primary_key,
+        CASE
+          WHEN u.column_name IS NOT NULL THEN true
+          ELSE false
+        END as is_unique
       FROM information_schema.columns c
       LEFT JOIN (
-        SELECT ku.column_name, ku.table_name
+        SELECT ku.column_name
         FROM information_schema.table_constraints tc
         JOIN information_schema.key_column_usage ku
           ON tc.constraint_name = ku.constraint_name
           AND tc.table_schema = ku.table_schema
         WHERE tc.constraint_type = 'PRIMARY KEY'
+          AND tc.table_name = $1
           AND tc.table_schema = 'public'
-      ) pk ON c.column_name = pk.column_name AND c.table_name = pk.table_name
+      ) pk ON c.column_name = pk.column_name
       LEFT JOIN (
-        SELECT ku.column_name, ku.table_name
+        SELECT ku.column_name
         FROM information_schema.table_constraints tc
         JOIN information_schema.key_column_usage ku
           ON tc.constraint_name = ku.constraint_name
           AND tc.table_schema = ku.table_schema
         WHERE tc.constraint_type = 'UNIQUE'
+          AND tc.table_name = $1
           AND tc.table_schema = 'public'
-      ) u ON c.column_name = u.column_name AND c.table_name = u.table_name
+      ) u ON c.column_name = u.column_name
       WHERE c.table_name = $1
         AND c.table_schema = 'public'
       ORDER BY c.ordinal_position
@@ -88,7 +93,7 @@ async function getDatabaseSchema(pool: Pool): Promise<Map<string, TableSchema>> 
 
     const columns: Column[] = columnsResult.rows.map((col) => ({
       name: col.column_name,
-      type: col.udt_name || col.data_type,
+      type: col.udt_name,
       nullable: col.is_nullable === "YES",
       default: col.column_default,
       isPrimaryKey: col.is_primary_key,
@@ -102,16 +107,16 @@ async function getDatabaseSchema(pool: Pool): Promise<Map<string, TableSchema>> 
         ccu.table_name AS referenced_table,
         ccu.column_name AS referenced_column,
         rc.delete_rule
-      FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage kcu
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
         ON tc.constraint_name = kcu.constraint_name
         AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage ccu
+      JOIN information_schema.constraint_column_usage AS ccu
         ON ccu.constraint_name = tc.constraint_name
         AND ccu.table_schema = tc.table_schema
-      JOIN information_schema.referential_constraints rc
-        ON rc.constraint_name = tc.constraint_name
-        AND rc.constraint_schema = tc.table_schema
+      JOIN information_schema.referential_constraints AS rc
+        ON tc.constraint_name = rc.constraint_name
+        AND tc.table_schema = rc.constraint_schema
       WHERE tc.constraint_type = 'FOREIGN KEY'
         AND tc.table_name = $1
         AND tc.table_schema = 'public'
@@ -130,42 +135,49 @@ async function getDatabaseSchema(pool: Pool): Promise<Map<string, TableSchema>> 
       `
       SELECT
         i.relname as index_name,
-        array_agg(a.attname ORDER BY a.attnum) as columns,
+        a.attname as column_name,
         ix.indisunique as is_unique
       FROM pg_class t
       JOIN pg_index ix ON t.oid = ix.indrelid
       JOIN pg_class i ON i.oid = ix.indexrelid
       JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
-      WHERE t.relname = $1
-        AND t.relkind = 'r'
-        AND i.relname NOT LIKE '%_pkey'
-      GROUP BY i.relname, ix.indisunique
+      WHERE t.relkind = 'r'
+        AND t.relname = $1
+        AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+        AND NOT ix.indisprimary
+      ORDER BY i.relname, a.attnum
     `,
       [tableName]
     )
 
-    const indexes: Index[] = indexResult.rows.map((idx) => ({
-      name: idx.index_name,
-      columns: idx.columns,
-      isUnique: idx.is_unique,
-    }))
+    const indexes: Index[] = []
+    const indexMap = new Map<string, { columns: string[]; isUnique: boolean }>()
+    for (const row of indexResult.rows) {
+      if (!indexMap.has(row.index_name)) {
+        indexMap.set(row.index_name, { columns: [], isUnique: row.is_unique })
+      }
+      indexMap.get(row.index_name)!.columns.push(row.column_name)
+    }
+    for (const [name, { columns, isUnique }] of indexMap) {
+      indexes.push({ name, columns, isUnique })
+    }
 
     const pkResult = await pool.query(
       `
-      SELECT ku.column_name
+      SELECT kcu.column_name
       FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage ku
-        ON tc.constraint_name = ku.constraint_name
-        AND tc.table_schema = ku.table_schema
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
       WHERE tc.constraint_type = 'PRIMARY KEY'
         AND tc.table_name = $1
         AND tc.table_schema = 'public'
-      ORDER BY ku.ordinal_position
+      ORDER BY kcu.ordinal_position
     `,
       [tableName]
     )
 
-    const primaryKeys = pkResult.rows.map((pk) => pk.column_name)
+    const primaryKeys = pkResult.rows.map((row) => row.column_name)
 
     schemas.set(tableName, {
       name: tableName,
@@ -182,359 +194,327 @@ async function getDatabaseSchema(pool: Pool): Promise<Map<string, TableSchema>> 
 function getExpectedSchema(): Map<string, TableSchema> {
   const schemas = new Map<string, TableSchema>()
 
-  // Based on src/shared/schema.ts Drizzle definitions
-  schemas.set("prds", {
-    name: "prds",
-    columns: [
-      { name: "id", type: "int4", nullable: false, default: "nextval", isPrimaryKey: true, isUnique: false },
-      { name: "public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: true },
-      { name: "title", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "content", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "business_context", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "repo_public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "branch", type: "text", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "repo_public_id", referencedTable: "github_repos", referencedColumn: "public_id", onDelete: "CASCADE" },
-    ],
-    indexes: [],
-    primaryKeys: ["id"],
-  })
+  // Get all exported table definitions from schema.ts
+  const tables = [
+    { table: schema.prds, name: "prds" },
+    { table: schema.githubRepos, name: "github_repos" },
+    { table: schema.organizations, name: "organizations" },
+    { table: schema.userOrganizations, name: "user_organizations" },
+    { table: schema.users, name: "users" },
+    { table: schema.repoFiles, name: "repo_files" },
+    { table: schema.repoDocs, name: "repo_docs" },
+    { table: schema.releases, name: "releases" },
+    { table: schema.roles, name: "roles" },
+    { table: schema.roleDocs, name: "role_docs" },
+    { table: schema.enqueuedTasks, name: "enqueued_tasks" },
+    { table: schema.invitations, name: "invitations" },
+  ]
 
-  schemas.set("github_repos", {
-    name: "github_repos",
-    columns: [
-      { name: "id", type: "int4", nullable: false, default: "nextval", isPrimaryKey: true, isUnique: false },
-      { name: "public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: true },
-      { name: "name", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "full_name", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "owner", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "repo_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "organization_id", type: "int4", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "file_filter_regex", type: "text", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "organization_id", referencedTable: "organizations", referencedColumn: "id", onDelete: "CASCADE" },
-    ],
-    indexes: [],
-    primaryKeys: ["id"],
-  })
+  for (const { table, name } of tables) {
+    const config = getTableConfig(table)
 
-  schemas.set("organizations", {
-    name: "organizations",
-    columns: [
-      { name: "id", type: "int4", nullable: false, default: "nextval", isPrimaryKey: true, isUnique: false },
-      { name: "public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: true },
-      { name: "name", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "description", type: "text", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "is_personal", type: "bool", nullable: false, default: "true", isPrimaryKey: false, isUnique: false },
-      { name: "slug", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: true },
-      { name: "profile_image_url", type: "text", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "installation_id", type: "int4", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "access_token", type: "text", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-      { name: "updated_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [],
-    indexes: [],
-    primaryKeys: ["id"],
-  })
+    const tableSchema: TableSchema = {
+      name: config.name,
+      columns: [],
+      foreignKeys: [],
+      indexes: [],
+      primaryKeys: [],
+    }
 
-  schemas.set("user_organizations", {
-    name: "user_organizations",
-    columns: [
-      { name: "user_id", type: "int4", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "organization_id", type: "int4", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "role", type: "text", nullable: false, default: "'member'", isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "user_id", referencedTable: "users", referencedColumn: "id", onDelete: "CASCADE" },
-      { columnName: "organization_id", referencedTable: "organizations", referencedColumn: "id", onDelete: "CASCADE" },
-    ],
-    indexes: [],
-    primaryKeys: ["user_id", "organization_id"],
-  })
+    // Extract columns from the table object
+    for (const [colName, colDef] of Object.entries(table)) {
+      // Skip non-column properties
+      if (typeof colDef !== "object" || !colDef || !("name" in colDef)) {
+        continue
+      }
 
-  schemas.set("users", {
-    name: "users",
-    columns: [
-      { name: "id", type: "int4", nullable: false, default: "nextval", isPrimaryKey: true, isUnique: false },
-      { name: "public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: true },
-      { name: "user_sub", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: true },
-      { name: "name", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "email", type: "text", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "theme_preferences", type: "jsonb", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [],
-    indexes: [],
-    primaryKeys: ["id"],
-  })
+      const col = colDef as any
 
-  schemas.set("repo_files", {
-    name: "repo_files",
-    columns: [
-      { name: "id", type: "int4", nullable: false, default: "nextval", isPrimaryKey: false, isUnique: false },
-      { name: "repo_public_id", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "file_path", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "branch", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "content", type: "text", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "metadata", type: "jsonb", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-      { name: "updated_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "repo_public_id", referencedTable: "github_repos", referencedColumn: "public_id", onDelete: "CASCADE" },
-    ],
-    indexes: [],
-    primaryKeys: ["repo_public_id", "file_path", "branch"],
-  })
+      // Determine PostgreSQL type
+      let pgType = "text"
+      const columnType = col.columnType || ""
 
-  schemas.set("repo_docs", {
-    name: "repo_docs",
-    columns: [
-      { name: "id", type: "int4", nullable: false, default: "nextval", isPrimaryKey: false, isUnique: false },
-      { name: "repo_public_id", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "title", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "content", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "doc_type", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "branch", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "metadata", type: "jsonb", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-      { name: "updated_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "repo_public_id", referencedTable: "github_repos", referencedColumn: "public_id", onDelete: "CASCADE" },
-    ],
-    indexes: [],
-    primaryKeys: ["repo_public_id", "doc_type", "branch"],
-  })
+      // Serial columns are not nullable in the database
+      const isSerialColumn = columnType === "PgSerial"
 
-  schemas.set("releases", {
-    name: "releases",
-    columns: [
-      { name: "id", type: "int4", nullable: false, default: "nextval", isPrimaryKey: true, isUnique: false },
-      { name: "public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: true },
-      { name: "title", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "repo_public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "branch", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "content", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-      { name: "updated_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "repo_public_id", referencedTable: "github_repos", referencedColumn: "public_id", onDelete: "CASCADE" },
-    ],
-    indexes: [],
-    primaryKeys: ["id"],
-  })
+      if (isSerialColumn) {
+        pgType = "int4"
+      } else if (columnType === "PgInteger") {
+        pgType = "int4"
+      } else if (columnType === "PgText") {
+        pgType = "text"
+      } else if (columnType === "PgBoolean") {
+        pgType = "bool"
+      } else if (columnType === "PgTimestamp") {
+        // Drizzle timestamp with timezone becomes timestamptz in postgres
+        pgType = "timestamptz"
+      } else if (columnType === "PgJsonb") {
+        pgType = "jsonb"
+      } else if (columnType === "PgUUID") {
+        pgType = "uuid"
+      }
 
-  schemas.set("roles", {
-    name: "roles",
-    columns: [
-      { name: "id", type: "int4", nullable: false, default: "nextval", isPrimaryKey: true, isUnique: false },
-      { name: "public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: true },
-      { name: "organization_id", type: "int4", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "role_type", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "context", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-      { name: "updated_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "organization_id", referencedTable: "organizations", referencedColumn: "id", onDelete: "CASCADE" },
-    ],
-    indexes: [],
-    primaryKeys: ["id"],
-  })
+      // Determine default value
+      let defaultVal: string | null = null
+      if (columnType === "PgSerial") {
+        defaultVal = "nextval"
+      } else if (col.hasDefault) {
+        if (col.default !== undefined && col.default !== null) {
+          const defaultValue = col.default
+          if (typeof defaultValue === "function") {
+            const fnStr = defaultValue.toString()
+            if (fnStr.includes("now()") || fnStr.includes("CURRENT_TIMESTAMP")) {
+              defaultVal = "now()"
+            } else if (fnStr.includes("gen_random_uuid") || fnStr.includes("crypto.randomUUID")) {
+              defaultVal = "gen_random_uuid()"
+            }
+          } else if (typeof defaultValue === "boolean") {
+            defaultVal = defaultValue.toString()
+          } else if (typeof defaultValue === "string") {
+            defaultVal = `'${defaultValue}'`
+          } else if (typeof defaultValue === "number") {
+            defaultVal = defaultValue.toString()
+          }
+        }
+      }
 
-  schemas.set("role_docs", {
-    name: "role_docs",
-    columns: [
-      { name: "release_public_id", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "repo_public_id", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "role_public_id", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "doc", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "repo_public_id", referencedTable: "github_repos", referencedColumn: "public_id", onDelete: "CASCADE" },
-    ],
-    indexes: [],
-    primaryKeys: ["release_public_id", "repo_public_id", "role_public_id"],
-  })
+      // Check if column is marked as primary key inline
+      const isPrimaryKey = col.primary === true
 
-  schemas.set("enqueued_tasks", {
-    name: "enqueued_tasks",
-    columns: [
-      { name: "job_id", type: "text", nullable: false, default: null, isPrimaryKey: true, isUnique: false },
-      { name: "branch", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "repo_public_id", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "organization_id", type: "int4", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "type", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "status", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "message", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "details", type: "jsonb", nullable: true, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "updated_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "repo_public_id", referencedTable: "github_repos", referencedColumn: "public_id", onDelete: "CASCADE" },
-      { columnName: "organization_id", referencedTable: "organizations", referencedColumn: "id", onDelete: "NO ACTION" },
-    ],
-    indexes: [],
-    primaryKeys: ["job_id"],
-  })
+      // Check if column is unique (from unique constraints or column definition)
+      let isUnique = false
+      if (config.uniqueConstraints && config.uniqueConstraints.length > 0) {
+        isUnique = config.uniqueConstraints.some((uc: any) =>
+          uc.columns.length === 1 && uc.columns[0].name === col.name
+        )
+      }
+      if (col.isUnique === true) {
+        isUnique = true
+      }
 
-  schemas.set("invitations", {
-    name: "invitations",
-    columns: [
-      { name: "organization_id", type: "int4", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "email", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "token", type: "uuid", nullable: false, default: "gen_random_uuid()", isPrimaryKey: true, isUnique: false },
-      { name: "status", type: "text", nullable: false, default: null, isPrimaryKey: false, isUnique: false },
-      { name: "created_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-      { name: "updated_at", type: "timestamp", nullable: false, default: "now()", isPrimaryKey: false, isUnique: false },
-    ],
-    foreignKeys: [
-      { columnName: "organization_id", referencedTable: "organizations", referencedColumn: "id", onDelete: "CASCADE" },
-    ],
-    indexes: [
-      { name: "invitations_email_idx", columns: ["email"], isUnique: false },
-    ],
-    primaryKeys: ["token"],
-  })
+      tableSchema.columns.push({
+        name: col.name,
+        type: pgType,
+        nullable: isSerialColumn ? false : !col.notNull,
+        default: defaultVal,
+        isPrimaryKey,
+        isUnique,
+      })
+    }
+
+    // Extract primary keys from config
+    if (config.primaryKeys && config.primaryKeys.length > 0) {
+      // Primary keys are stored as an array of PrimaryKey objects
+      // Each PrimaryKey object has a columns array
+      const pkColumns: string[] = []
+      for (const pk of config.primaryKeys) {
+        if (pk.columns && Array.isArray(pk.columns)) {
+          for (const col of pk.columns) {
+            if (col.name) {
+              pkColumns.push(col.name)
+            }
+          }
+        }
+      }
+      tableSchema.primaryKeys = pkColumns
+
+      // Update isPrimaryKey flag for columns that are in the primary key
+      for (const col of tableSchema.columns) {
+        if (tableSchema.primaryKeys.includes(col.name)) {
+          col.isPrimaryKey = true
+        }
+      }
+    }
+
+    // Extract foreign keys
+    if (config.foreignKeys && config.foreignKeys.length > 0) {
+      for (const fk of config.foreignKeys) {
+        const fkConfig = fk as any
+        try {
+          // Get the reference function result
+          const referencedTableFn = fkConfig.reference
+          if (typeof referencedTableFn === "function") {
+            const refResult = referencedTableFn()
+
+            // The reference returns an object with columns, foreignTable, and foreignColumns
+            if (refResult && typeof refResult === "object") {
+              const localColumns = refResult.columns || []
+              const foreignColumns = refResult.foreignColumns || []
+              const foreignTable = refResult.foreignTable
+
+              if (localColumns.length > 0 && foreignColumns.length > 0 && foreignTable) {
+                const refTableConfig = getTableConfig(foreignTable)
+
+                tableSchema.foreignKeys.push({
+                  columnName: localColumns[0].name,
+                  referencedTable: refTableConfig.name,
+                  referencedColumn: foreignColumns[0].name,
+                  onDelete: fkConfig.onDelete?.toUpperCase() || null,
+                })
+              }
+            }
+          }
+        } catch (e) {
+          // If we can't parse the foreign key, skip it silently
+        }
+      }
+    }
+
+    // Extract indexes
+    if (config.indexes && config.indexes.length > 0) {
+      for (const idx of config.indexes) {
+        const idxConfig = idx.config as any
+        if (idxConfig && idxConfig.name && idxConfig.columns) {
+          tableSchema.indexes.push({
+            name: idxConfig.name,
+            columns: idxConfig.columns.map((c: any) => c.name),
+            isUnique: idxConfig.unique || false,
+          })
+        }
+      }
+    }
+
+    schemas.set(config.name, tableSchema)
+  }
 
   return schemas
 }
 
-function compareSchemas(actual: Map<string, TableSchema>, expected: Map<string, TableSchema>) {
+function compareSchemas(
+  actualSchema: Map<string, TableSchema>,
+  expectedSchema: Map<string, TableSchema>
+) {
   const comparison = {
     missingTables: [] as string[],
     extraTables: [] as string[],
-    tableDifferences: [] as any[],
+    tableDifferences: new Map<string, any>(),
   }
 
-  const actualTables = new Set(actual.keys())
-  const expectedTables = new Set(expected.keys())
+  const actualTables = new Set(actualSchema.keys())
+  const expectedTables = new Set(expectedSchema.keys())
 
-  for (const table of expectedTables) {
-    if (!actualTables.has(table)) {
-      comparison.missingTables.push(table)
+  // Find missing tables
+  for (const expectedTable of expectedTables) {
+    if (!actualTables.has(expectedTable)) {
+      comparison.missingTables.push(expectedTable)
     }
   }
 
-  for (const table of actualTables) {
-    if (!expectedTables.has(table)) {
-      comparison.extraTables.push(table)
+  // Find extra tables
+  for (const actualTable of actualTables) {
+    if (!expectedTables.has(actualTable)) {
+      comparison.extraTables.push(actualTable)
     }
   }
 
+  // Compare tables that exist in both
   for (const tableName of expectedTables) {
     if (!actualTables.has(tableName)) continue
 
-    const actualTable = actual.get(tableName)!
-    const expectedTable = expected.get(tableName)!
+    const actualTable = actualSchema.get(tableName)!
+    const expectedTable = expectedSchema.get(tableName)!
 
-    const tableDiff: any = {
-      tableName,
-      missingColumns: [],
-      extraColumns: [],
-      columnDifferences: [],
-      missingForeignKeys: [],
-      extraForeignKeys: [],
-      missingIndexes: [],
-      extraIndexes: [],
+    const tableDiff = {
+      name: tableName,
+      missingColumns: [] as any[],
+      extraColumns: [] as string[],
+      columnDifferences: [] as any[],
+      missingForeignKeys: [] as any[],
+      extraForeignKeys: [] as any[],
+      missingIndexes: [] as any[],
+      extraIndexes: [] as any[],
     }
 
     const actualColumns = new Map(actualTable.columns.map((c) => [c.name, c]))
     const expectedColumns = new Map(expectedTable.columns.map((c) => [c.name, c]))
 
+    // Check for missing columns
     for (const [colName, expectedCol] of expectedColumns) {
       if (!actualColumns.has(colName)) {
-        tableDiff.missingColumns.push(colName)
-        continue
-      }
-
-      const actualCol = actualColumns.get(colName)!
-
-      if (actualCol.type !== expectedCol.type) {
-        tableDiff.columnDifferences.push({
-          column: colName,
-          issue: "Type mismatch",
-          expected: expectedCol.type,
-          actual: actualCol.type,
-        })
-      }
-
-      if (actualCol.nullable !== expectedCol.nullable) {
-        tableDiff.columnDifferences.push({
-          column: colName,
-          issue: "Nullable mismatch",
-          expected: expectedCol.nullable ? "nullable" : "not null",
-          actual: actualCol.nullable ? "nullable" : "not null",
-        })
-      }
-
-      if (actualCol.isPrimaryKey !== expectedCol.isPrimaryKey) {
-        tableDiff.columnDifferences.push({
-          column: colName,
-          issue: "Primary key mismatch",
-          expected: expectedCol.isPrimaryKey ? "is primary key" : "not primary key",
-          actual: actualCol.isPrimaryKey ? "is primary key" : "not primary key",
-        })
-      }
-
-      if (actualCol.isUnique !== expectedCol.isUnique) {
-        tableDiff.columnDifferences.push({
-          column: colName,
-          issue: "Unique constraint mismatch",
-          expected: expectedCol.isUnique ? "unique" : "not unique",
-          actual: actualCol.isUnique ? "unique" : "not unique",
-        })
+        tableDiff.missingColumns.push(expectedCol)
       }
     }
 
-    for (const colName of actualColumns.keys()) {
+    // Check for extra columns and differences
+    for (const [colName, actualCol] of actualColumns) {
       if (!expectedColumns.has(colName)) {
         tableDiff.extraColumns.push(colName)
+      } else {
+        const expectedCol = expectedColumns.get(colName)!
+        if (actualCol.type !== expectedCol.type) {
+          tableDiff.columnDifferences.push({
+            column: colName,
+            issue: "type mismatch",
+            expected: expectedCol.type,
+            actual: actualCol.type,
+          })
+        }
+        if (actualCol.nullable !== expectedCol.nullable) {
+          tableDiff.columnDifferences.push({
+            column: colName,
+            issue: "nullable mismatch",
+            expected: expectedCol.nullable,
+            actual: actualCol.nullable,
+          })
+        }
+        if (actualCol.isPrimaryKey !== expectedCol.isPrimaryKey) {
+          tableDiff.columnDifferences.push({
+            column: colName,
+            issue: "primary key mismatch",
+            expected: expectedCol.isPrimaryKey,
+            actual: actualCol.isPrimaryKey,
+          })
+        }
+        if (actualCol.isUnique !== expectedCol.isUnique) {
+          tableDiff.columnDifferences.push({
+            column: colName,
+            issue: "unique constraint mismatch",
+            expected: expectedCol.isUnique,
+            actual: actualCol.isUnique,
+          })
+        }
       }
     }
 
+    // Compare foreign keys
     const actualFks = actualTable.foreignKeys.map(
-      (fk) => `${fk.columnName} -> ${fk.referencedTable}(${fk.referencedColumn})`
+      (fk) => `${fk.columnName}->${fk.referencedTable}.${fk.referencedColumn}`
     )
     const expectedFks = expectedTable.foreignKeys.map(
-      (fk) => `${fk.columnName} -> ${fk.referencedTable}(${fk.referencedColumn})`
+      (fk) => `${fk.columnName}->${fk.referencedTable}.${fk.referencedColumn}`
     )
 
-    for (const fk of expectedFks) {
-      if (!actualFks.includes(fk)) {
+    for (const fk of expectedTable.foreignKeys) {
+      const fkKey = `${fk.columnName}->${fk.referencedTable}.${fk.referencedColumn}`
+      if (!actualFks.includes(fkKey)) {
         tableDiff.missingForeignKeys.push(fk)
       }
     }
 
-    for (const fk of actualFks) {
-      if (!expectedFks.includes(fk)) {
+    for (const fk of actualTable.foreignKeys) {
+      const fkKey = `${fk.columnName}->${fk.referencedTable}.${fk.referencedColumn}`
+      if (!expectedFks.includes(fkKey)) {
         tableDiff.extraForeignKeys.push(fk)
       }
     }
 
-    const actualIndexNames = actualTable.indexes.map((idx) => idx.name)
-    const expectedIndexNames = expectedTable.indexes.map((idx) => idx.name)
+    // Compare indexes
+    const actualIndexNames = new Set(actualTable.indexes.map((i) => i.name))
+    const expectedIndexNames = new Set(expectedTable.indexes.map((i) => i.name))
 
-    for (const idx of expectedIndexNames) {
-      if (!actualIndexNames.includes(idx)) {
+    for (const idx of expectedTable.indexes) {
+      if (!actualIndexNames.has(idx.name)) {
         tableDiff.missingIndexes.push(idx)
       }
     }
 
-    for (const idx of actualIndexNames) {
-      if (!expectedIndexNames.includes(idx)) {
+    for (const idx of actualTable.indexes) {
+      if (!expectedIndexNames.has(idx.name)) {
         tableDiff.extraIndexes.push(idx)
       }
     }
 
+    // Only add to differences if there are actual differences
     if (
       tableDiff.missingColumns.length > 0 ||
       tableDiff.extraColumns.length > 0 ||
@@ -544,150 +524,140 @@ function compareSchemas(actual: Map<string, TableSchema>, expected: Map<string, 
       tableDiff.missingIndexes.length > 0 ||
       tableDiff.extraIndexes.length > 0
     ) {
-      comparison.tableDifferences.push(tableDiff)
+      comparison.tableDifferences.set(tableName, tableDiff)
     }
   }
 
   return comparison
 }
 
-function printComparison(comparison: any) {
-  console.log("\n" + "=".repeat(80))
-  console.log("DATABASE SCHEMA COMPARISON REPORT")
-  console.log("=".repeat(80) + "\n")
-
-  let hasIssues = false
+function printComparison(comparison: ReturnType<typeof compareSchemas>) {
+  console.log("\n=== Database Schema Comparison ===\n")
 
   if (comparison.missingTables.length > 0) {
-    hasIssues = true
-    console.log("❌ MISSING TABLES (defined in schema but not in database):")
-    for (const table of comparison.missingTables) {
-      console.log(`   - ${table}`)
-    }
+    console.log("❌ Missing tables (in schema.ts but not in database):")
+    comparison.missingTables.forEach((table) => console.log(`  - ${table}`))
     console.log()
   }
 
   if (comparison.extraTables.length > 0) {
-    hasIssues = true
-    console.log("⚠️  EXTRA TABLES (in database but not in schema):")
-    for (const table of comparison.extraTables) {
-      console.log(`   - ${table}`)
-    }
+    console.log("⚠️  Extra tables (in database but not in schema.ts):")
+    comparison.extraTables.forEach((table) => console.log(`  - ${table}`))
     console.log()
   }
 
-  if (comparison.tableDifferences.length > 0) {
-    hasIssues = true
-    console.log("🔍 TABLE DIFFERENCES:\n")
-
-    for (const diff of comparison.tableDifferences) {
-      console.log(`Table: ${diff.tableName}`)
-      console.log("-".repeat(80))
+  if (comparison.tableDifferences.size > 0) {
+    console.log("📊 Table differences:\n")
+    for (const [tableName, diff] of comparison.tableDifferences) {
+      console.log(`Table: ${tableName}`)
 
       if (diff.missingColumns.length > 0) {
         console.log("  ❌ Missing columns:")
-        for (const col of diff.missingColumns) {
-          console.log(`     - ${col}`)
-        }
+        diff.missingColumns.forEach((col: Column) =>
+          console.log(`    - ${col.name} (${col.type})`)
+        )
       }
 
       if (diff.extraColumns.length > 0) {
         console.log("  ⚠️  Extra columns:")
-        for (const col of diff.extraColumns) {
-          console.log(`     - ${col}`)
-        }
+        diff.extraColumns.forEach((col: string) => console.log(`    - ${col}`))
       }
 
       if (diff.columnDifferences.length > 0) {
-        console.log("  ⚠️  Column differences:")
-        for (const colDiff of diff.columnDifferences) {
-          console.log(`     - ${colDiff.column}: ${colDiff.issue}`)
-          console.log(`       Expected: ${colDiff.expected}`)
-          console.log(`       Actual: ${colDiff.actual}`)
-        }
+        console.log("  🔄 Column differences:")
+        diff.columnDifferences.forEach((d: any) =>
+          console.log(
+            `    - ${d.column}: ${d.issue} (expected: ${d.expected}, actual: ${d.actual})`
+          )
+        )
       }
 
       if (diff.missingForeignKeys.length > 0) {
         console.log("  ❌ Missing foreign keys:")
-        for (const fk of diff.missingForeignKeys) {
-          console.log(`     - ${fk}`)
-        }
+        diff.missingForeignKeys.forEach((fk: ForeignKey) =>
+          console.log(
+            `    - ${fk.columnName} -> ${fk.referencedTable}.${fk.referencedColumn}`
+          )
+        )
       }
 
       if (diff.extraForeignKeys.length > 0) {
         console.log("  ⚠️  Extra foreign keys:")
-        for (const fk of diff.extraForeignKeys) {
-          console.log(`     - ${fk}`)
-        }
+        diff.extraForeignKeys.forEach((fk: ForeignKey) =>
+          console.log(
+            `    - ${fk.columnName} -> ${fk.referencedTable}.${fk.referencedColumn}`
+          )
+        )
       }
 
       if (diff.missingIndexes.length > 0) {
         console.log("  ❌ Missing indexes:")
-        for (const idx of diff.missingIndexes) {
-          console.log(`     - ${idx}`)
-        }
+        diff.missingIndexes.forEach((idx: Index) =>
+          console.log(`    - ${idx.name} on [${idx.columns.join(", ")}]`)
+        )
       }
 
       if (diff.extraIndexes.length > 0) {
         console.log("  ⚠️  Extra indexes:")
-        for (const idx of diff.extraIndexes) {
-          console.log(`     - ${idx}`)
-        }
+        diff.extraIndexes.forEach((idx: Index) =>
+          console.log(`    - ${idx.name} on [${idx.columns.join(", ")}]`)
+        )
       }
 
       console.log()
     }
   }
 
+  const hasIssues =
+    comparison.missingTables.length > 0 ||
+    comparison.extraTables.length > 0 ||
+    comparison.tableDifferences.size > 0
+
   if (!hasIssues) {
-    console.log("✅ NO INCONSISTENCIES FOUND!")
-    console.log("   Database schema matches the Drizzle schema definition.")
+    console.log("✅ Database schema matches expected schema perfectly!\n")
   }
 
-  console.log("=".repeat(80))
-  console.log()
+  return hasIssues
 }
 
 async function main() {
+  if (!DATABASE_URL) {
+    console.error("❌ DATABASE_URL environment variable is not set")
+    process.exit(1)
+  }
+
   console.log("Connecting to database...")
-  console.log(`Database URL: ${DATABASE_URL.replace(/:[^:@]+@/, ':****@')}`)
-  console.log()
 
   const pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: DATABASE_URL.includes('localhost') ? false : {
+    ssl: {
       rejectUnauthorized: false,
     },
   })
 
   try {
+    // Test connection
     await pool.query("SELECT NOW()")
-    console.log("✅ Connected successfully!\n")
+    console.log("✅ Connected to database\n")
 
-    console.log("Extracting database schema...")
+    console.log("Fetching actual database schema...")
     const actualSchema = await getDatabaseSchema(pool)
     console.log(`✅ Found ${actualSchema.size} tables in database\n`)
 
-    console.log("Loading expected schema from Drizzle definition...")
+    console.log("Generating expected schema from schema.ts...")
     const expectedSchema = getExpectedSchema()
-    console.log(`✅ Loaded ${expectedSchema.size} tables from schema definition\n`)
+    console.log(`✅ Found ${expectedSchema.size} tables in schema.ts\n`)
 
-    console.log("Comparing schemas...")
     const comparison = compareSchemas(actualSchema, expectedSchema)
 
-    printComparison(comparison)
+    const hasIssues = printComparison(comparison)
 
-    const hasIssues =
-      comparison.missingTables.length > 0 ||
-      comparison.extraTables.length > 0 ||
-      comparison.tableDifferences.length > 0
-
+    await pool.end()
     process.exit(hasIssues ? 1 : 0)
   } catch (error) {
     console.error("❌ Error:", error)
-    process.exit(1)
-  } finally {
     await pool.end()
+    process.exit(1)
   }
 }
 
