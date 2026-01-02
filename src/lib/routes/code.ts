@@ -56,7 +56,19 @@ export function codeRoutes(app: Express) {
           req.branch
         )
       } catch {
-        // Branch may have been deleted, log and continue with null
+        // Branch may have been deleted, clean up related data
+        const repoFiles = await storage.getRepoFiles(req.repoId, req.branch)
+        for (const repoFile of repoFiles) {
+          await storage.deleteRepoFile(repoFile.id)
+        }
+        const repoDocs = await storage.getRepoDocsByBranch(
+          req.repoId,
+          req.branch
+        )
+        for (const repoDoc of repoDocs) {
+          await storage.deleteRepoDoc(repoDoc.id)
+        }
+        await vectorStorage.deleteByRepoId(req.repoId, req.branch)
       }
       res.json({
         ...req.repo,
