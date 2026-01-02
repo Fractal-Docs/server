@@ -977,7 +977,10 @@ export class DatabaseStorage implements IStorage {
           userSub: users.userSub,
         })
         .from(users)
-        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .innerJoin(
+          userOrganizations,
+          eq(users.publicId, userOrganizations.userId)
+        )
         .where(eq(userOrganizations.organizationId, publicId))
       return members.map((member) => ({
         id: member.id,
