@@ -1,7 +1,12 @@
 import type { Express } from "express"
 
 import { storage } from "../../storage"
-import { getGithubRepo, getLatestCommit, getRepoContent } from "../github"
+import {
+  getGithubRepo,
+  getLatestCommit,
+  getRepoContent,
+  CommitDetails,
+} from "../github"
 import { processFileContent } from "../embeddings"
 import { vectorStorage } from "../vector-storage"
 import { extname } from "path"
@@ -43,15 +48,20 @@ export function codeRoutes(app: Express) {
     ...repoMiddleware,
     asyncHandler<RepoRequest>(async (req, res) => {
       const ghRepo = await getGithubRepo(req.organization, req.repo)
-      const latestCommitDate = await getLatestCommit(
-        req.organization,
-        req.repo,
-        req.branch
-      )
+      let latestCommit: CommitDetails | null = null
+      try {
+        latestCommit = await getLatestCommit(
+          req.organization,
+          req.repo,
+          req.branch
+        )
+      } catch {
+        // Branch may have been deleted, log and continue with null
+      }
       res.json({
         ...req.repo,
         defaultBranch: ghRepo?.default_branch || "",
-        latestCommitDate,
+        latestCommit,
       })
     }, "Failed to find repository")
   )
