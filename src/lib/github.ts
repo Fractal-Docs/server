@@ -282,11 +282,22 @@ export async function getGithubRepo(
   return data
 }
 
+export interface CommitDetails {
+  sha: string
+  message: string
+  author: {
+    name: string | null
+    email: string | null
+    date: string | null
+  }
+  url: string
+}
+
 export async function getLatestCommit(
   organization: Organization,
   repository: GithubRepo,
   branch: string
-) {
+): Promise<CommitDetails> {
   const { owner, repo } = parseRepoFullName(repository.fullName)
   const octokit = await getOctokit(organization)
 
@@ -294,7 +305,13 @@ export async function getLatestCommit(
     method: "GET",
     url: `/repos/${owner}/${repo}/commits/${branch}`,
   })
-  return data.commit.author?.date
+
+  return {
+    sha: data.sha,
+    message: data.commit.message,
+    author: data.commit.author ?? null,
+    url: data.html_url,
+  }
 }
 
 export async function compareBranches(
