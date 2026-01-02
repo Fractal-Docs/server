@@ -14,6 +14,7 @@ import {
   requireGitHubAuth,
   OrgSlugRequest,
 } from "./middleware"
+import { hasValidPrefix } from "../public-ids"
 
 interface GithubTokenResponse {
   access_token?: string
@@ -198,21 +199,46 @@ export function githubRoutes(app: Express) {
         )
       )
 
-      res.json(createdRepos)
+      // Return repos with publicId, not internal details
+      const sanitizedRepos = createdRepos.map((repo) => ({
+        publicId: repo.publicId,
+        name: repo.name,
+        fullName: repo.fullName,
+        owner: repo.owner,
+        fileFilterRegex: repo.fileFilterRegex,
+        createdAt: repo.createdAt,
+      }))
+
+      res.json(sanitizedRepos)
     }, "Failed to import repositories")
   )
 
-  // Get repo files
+  // Get repo files - uses repo publicId
   app.get(
-    "/api/github/repos/:repo_id/files",
+    "/api/github/repos/:repo_public_id/files",
     orgSlugMiddleware,
     asyncHandler<OrgSlugRequest>(async (req, res) => {
       const { organization } = req
-      const { repo_id } = req.params
+      const { repo_public_id } = req.params
       const branch = (req.query.branch as string) || "main"
 
-      const repo = await storage.getRepo(repo_id)
+      // Validate publicId format
+      if (!hasValidPrefix(repo_public_id, "repo")) {
+        res.status(400).json({
+          error:
+            "Invalid repository ID format. Expected format: repo_xxxxxxxxxxxx",
+        })
+        return
+      }
+
+      const repo = await storage.getRepoByPublicId(repo_public_id)
       if (!repo) {
+        res.status(404).json({ error: "Repository not found" })
+        return
+      }
+
+      // Verify repo belongs to this organization
+      if (repo.organizationId !== organization.id) {
         res.status(404).json({ error: "Repository not found" })
         return
       }
@@ -222,16 +248,31 @@ export function githubRoutes(app: Express) {
     }, "Failed to list repository files")
   )
 
-  // Get repo branches
+  // Get repo branches - uses repo publicId
   app.get(
-    "/api/github/repos/:repo_id/branches",
+    "/api/github/repos/:repo_public_id/branches",
     orgSlugMiddleware,
     asyncHandler<OrgSlugRequest>(async (req, res) => {
       const { organization } = req
-      const { repo_id } = req.params
+      const { repo_public_id } = req.params
 
-      const repo = await storage.getRepo(repo_id)
+      // Validate publicId format
+      if (!hasValidPrefix(repo_public_id, "repo")) {
+        res.status(400).json({
+          error:
+            "Invalid repository ID format. Expected format: repo_xxxxxxxxxxxx",
+        })
+        return
+      }
+
+      const repo = await storage.getRepoByPublicId(repo_public_id)
       if (!repo) {
+        res.status(404).json({ error: "Repository not found" })
+        return
+      }
+
+      // Verify repo belongs to this organization
+      if (repo.organizationId !== organization.id) {
         res.status(404).json({ error: "Repository not found" })
         return
       }

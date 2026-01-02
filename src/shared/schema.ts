@@ -45,6 +45,7 @@ export type RepoDocMetadata = {
 
 export const prds = pgTable("prds", {
   id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().unique(),
   title: text("title").notNull(),
   content: text("content").notNull(),
   businessContext: text("business_context").notNull(),
@@ -54,10 +55,11 @@ export const prds = pgTable("prds", {
 
 export const githubRepos = pgTable("github_repos", {
   id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().unique(),
   name: text("name").notNull(),
   fullName: text("full_name").notNull(),
   owner: text("owner").notNull(),
-  repoId: text("repo_id").notNull(),
+  repoId: text("repo_id").notNull(), // External GitHub repo ID - keep for GitHub API integration
   organizationId: integer("organization_id")
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
@@ -67,6 +69,7 @@ export const githubRepos = pgTable("github_repos", {
 
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().unique(),
   name: text("name").notNull(),
   description: text("description"),
   isPersonal: boolean("is_personal").notNull().default(true),
@@ -95,6 +98,7 @@ export const userOrganizations = pgTable(
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().unique(),
   userSub: text("user_sub").notNull().unique(),
   name: text("name").notNull(),
   email: text("email"),
@@ -255,6 +259,7 @@ export const insertGithubRepoSchema = createInsertSchema(githubRepos).pick({
   fullName: true,
   owner: true,
   repoId: true,
+  publicId: true,
   organizationId: true,
   fileFilterRegex: true,
 })

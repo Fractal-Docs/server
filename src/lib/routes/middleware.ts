@@ -1,7 +1,9 @@
 import type { Request, Response, NextFunction, RequestHandler } from "express"
 import { storage } from "../../storage"
-import { getParams, getUserSub } from "../helpers"
+import { getUserSub } from "../helpers"
 import type { Organization, GithubRepo } from "../../shared/schema"
+import type { AuthorizedOrgRequest } from "./authorization"
+import { hasValidPrefix } from "../public-ids"
 
 // Extended request types with validated resources
 export interface OrganizationRequest extends Request {
@@ -9,9 +11,11 @@ export interface OrganizationRequest extends Request {
   orgId: number
 }
 
-export interface RepoRequest extends OrganizationRequest {
+// RepoRequest extends AuthorizedOrgRequest to include repo-specific fields
+export interface RepoRequest extends AuthorizedOrgRequest {
   repo: GithubRepo
-  repoId: string
+  repoPublicId: string
+  repoId: string // GitHub's external repo ID (for GitHub API calls)
   branch: string
 }
 
@@ -44,13 +48,17 @@ export function asyncHandler<T extends Request = Request>(
 }
 
 // Middleware to validate organization by ID and attach to request
+// Legacy middleware - prefer using authorization.ts middleware
 export function withOrganization(): RequestHandler {
   return async (req, res, next) => {
     try {
-      const { org_id } = getParams(req, res, ["org_id"])
-      if (!org_id) return
+      const { org_id } = req.params
+      if (!org_id) {
+        res.status(400).json({ error: "Organization ID is required" })
+        return
+      }
 
-      const organization = await storage.getOrganization(org_id)
+      const organization = await storage.getOrganization(parseInt(org_id, 10))
       if (!organization) {
         res.status(404).json({ error: "Organization not found" })
         return
@@ -67,13 +75,31 @@ export function withOrganization(): RequestHandler {
 }
 
 // Middleware to validate repo belongs to organization and attach to request
+// Uses repo publicId (repo_xxxxxxxxxxxx) instead of GitHub's repoId
 export function withRepo(): RequestHandler {
   return async (req, res, next) => {
     try {
-      const { repo_id, branch } = getParams(req, res, ["repo_id", "branch"])
-      if (!repo_id) return
+      const { repo_public_id } = req.params
+      const branch = (req.query.branch as string) || "main"
 
-      const organization = (req as OrganizationRequest).organization
+      if (!repo_public_id) {
+        res.status(400).json({ error: "Repository ID is required" })
+        return
+      }
+
+      // Validate publicId format
+      if (!hasValidPrefix(repo_public_id, "repo")) {
+        res.status(400).json({
+          error:
+            "Invalid repository ID format. Expected format: repo_xxxxxxxxxxxx",
+        })
+        return
+      }
+
+      // Support both legacy OrganizationRequest and new AuthorizedOrgRequest
+      const organization =
+        (req as OrganizationRequest).organization ||
+        (req as AuthorizedOrgRequest).organization
       if (!organization) {
         res
           .status(500)
@@ -81,20 +107,22 @@ export function withRepo(): RequestHandler {
         return
       }
 
-      const repo = await storage.getRepo(repo_id)
+      const repo = await storage.getRepoByPublicId(repo_public_id)
       if (!repo) {
         res.status(404).json({ error: "Repository not found" })
         return
       }
 
       if (repo.organizationId !== organization.id) {
-        res.status(403).json({ error: "Repository not part of organization" })
+        // Return 404 instead of 403 to prevent enumeration
+        res.status(404).json({ error: "Repository not found" })
         return
       }
 
       ;(req as RepoRequest).repo = repo
-      ;(req as RepoRequest).repoId = repo_id
-      ;(req as RepoRequest).branch = branch || "main"
+      ;(req as RepoRequest).repoPublicId = repo_public_id
+      ;(req as RepoRequest).repoId = repo.repoId // GitHub's external ID for API calls
+      ;(req as RepoRequest).branch = branch
       next()
     } catch (error) {
       const message = getErrorMessage(error, "Failed to validate repository")
@@ -161,14 +189,21 @@ export function requireGitHubAuth(): RequestHandler {
   }
 }
 
-// Helper to get repo by ID (for cases where middleware isn't applicable)
-export async function getRepoById(
-  id: string,
+// Helper to get repo by publicId (for cases where middleware isn't applicable)
+export async function getRepoByPublicId(
+  publicId: string,
   res: Response
 ): Promise<GithubRepo | undefined> {
-  const data = await storage.getRepo(id)
+  if (!hasValidPrefix(publicId, "repo")) {
+    res.status(400).json({
+      error: "Invalid repository ID format. Expected format: repo_xxxxxxxxxxxx",
+    })
+    return undefined
+  }
+
+  const data = await storage.getRepoByPublicId(publicId)
   if (!data) {
-    res.status(404).json({ error: "No repository found" })
+    res.status(404).json({ error: "Repository not found" })
     return undefined
   }
   return data
@@ -181,7 +216,8 @@ export function validateRepoOrganization(
   res: Response
 ): boolean {
   if (repo.organizationId !== organization.id) {
-    res.status(403).json({ error: "Repository not part of organization" })
+    // Return 404 instead of 403 to prevent enumeration
+    res.status(404).json({ error: "Repository not found" })
     return false
   }
   return true

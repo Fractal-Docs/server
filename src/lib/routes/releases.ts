@@ -9,14 +9,14 @@ import {
 import { registerGenerateWorker } from "../documents"
 import { enqueueTask } from "../task-manager"
 import {
-  asyncHandler,
-  withOrganization,
-  withRepo,
-  RepoRequest,
-  OrganizationRequest,
-  getRepoById,
-  validateRepoOrganization,
-} from "./middleware"
+  requireOrgMember,
+  requireOrgAdmin,
+  authorizedHandler,
+  verifyResourceOwnership,
+  AuthorizedOrgRequest,
+} from "./authorization"
+import { withRepo, RepoRequest } from "./middleware"
+import { hasValidPrefix } from "../public-ids"
 import type { Role } from "src/shared/schema"
 
 const RELEASE_GENERATION = "generateReleaseDocumentation"
@@ -132,33 +132,44 @@ async function generateRoleDocuments(
 }
 
 export function releaseRoutes(app: Express) {
-  const orgMiddleware = withOrganization()
-  const repoMiddleware = [orgMiddleware, withRepo()]
-
-  // Create a new release
+  // Create a new release - requires membership
   app.post(
-    "/api/organization/:org_id/releases",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/releases",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { organization, orgId } = req
-      const { title, repoId, branch, roles } = req.body
+      const { title, repoPublicId, branch, roles } = req.body
 
-      const repo = await storage.getRepo(repoId)
-      if (!repo) {
-        res.status(404).json({ error: "No repository found" })
+      // Validate repo publicId format
+      if (!repoPublicId || !hasValidPrefix(repoPublicId, "repo")) {
+        res.status(400).json({
+          error:
+            "Invalid repository ID format. Expected format: repo_xxxxxxxxxxxx",
+        })
         return
       }
 
-      // delete old jobs for release and role documentation
-      await storage.removeJobsByBranchAndType(repoId, branch, "release")
-      await storage.removeJobsByBranchAndType(repoId, branch, "role")
+      const repo = await storage.getRepoByPublicId(repoPublicId)
+      if (!verifyResourceOwnership(repo, req, res, "Repository")) {
+        return
+      }
 
-      const existingRelease = await storage.getReleaseByBranch(repoId, branch)
+      // Use GitHub's repoId for internal operations
+      const githubRepoId = repo.repoId
+
+      // delete old jobs for release and role documentation
+      await storage.removeJobsByBranchAndType(githubRepoId, branch, "release")
+      await storage.removeJobsByBranchAndType(githubRepoId, branch, "role")
+
+      const existingRelease = await storage.getReleaseByBranch(
+        githubRepoId,
+        branch
+      )
       if (existingRelease) {
         await storage.deleteRelease(existingRelease.releaseId)
       }
 
-      const prd = (await storage.getPrdForBranch(repoId, branch)) || {
+      const prd = (await storage.getPrdForBranch(githubRepoId, branch)) || {
         content: "",
       }
 
@@ -173,7 +184,7 @@ export function releaseRoutes(app: Express) {
 
       // Register the workers for generating role documentation
       for (let i = 0; i < roles.length; i++) {
-        registerRoleWorker(repoId, branch)
+        registerRoleWorker(githubRepoId, branch)
       }
 
       // Register the worker for generating release documentation
@@ -181,7 +192,7 @@ export function releaseRoutes(app: Express) {
         RELEASE_GENERATION,
         async ({ content, jobId: id }) => {
           await storage.removeJobsByBranchAndType(
-            repoId,
+            githubRepoId,
             branch,
             "release",
             "error"
@@ -190,7 +201,7 @@ export function releaseRoutes(app: Express) {
           await storage.createRelease({
             releaseId,
             title,
-            repoId,
+            repoId: githubRepoId,
             branch,
             content,
           })
@@ -206,7 +217,7 @@ export function releaseRoutes(app: Express) {
 
           await generateRoleDocuments(
             orgId,
-            repoId,
+            githubRepoId,
             branch,
             releaseId,
             content,
@@ -226,7 +237,7 @@ export function releaseRoutes(app: Express) {
       if (jobId) {
         await storage.addJob({
           jobId,
-          repoId,
+          repoId: githubRepoId,
           organizationId: orgId,
           type: "release",
           branch,
@@ -239,13 +250,13 @@ export function releaseRoutes(app: Express) {
     }, "Failed to create release")
   )
 
-  // Generate role documents for existing release
+  // Generate role documents for existing release - requires membership
   app.post(
-    "/api/organization/:org_id/releases/:release_id/role-docs",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/releases/:release_id/role-docs",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { release_id } = req.params
-      const { organization, orgId } = req
+      const { orgId } = req
 
       const release = await storage.getRelease(release_id)
       if (!release) {
@@ -253,10 +264,10 @@ export function releaseRoutes(app: Express) {
         return
       }
 
-      const repo = await getRepoById(release.repoId, res)
-      if (!repo) return
-
-      if (!validateRepoOrganization(repo, organization, res)) return
+      const repo = await storage.getRepoByGithubId(release.repoId)
+      if (!verifyResourceOwnership(repo, req, res, "Release")) {
+        return
+      }
 
       const { roles } = req.body
       if (!Array.isArray(roles)) {
@@ -282,11 +293,11 @@ export function releaseRoutes(app: Express) {
     }, "Failed to create role documents")
   )
 
-  // Get recent releases for organization
+  // Get recent releases for organization - requires membership
   app.get(
-    "/api/organization/:org_id/recent-releases",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/recent-releases",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const docs = await storage.getOrganizationReleases(req.orgId)
 
       const recentDocs = docs
@@ -300,21 +311,21 @@ export function releaseRoutes(app: Express) {
     }, "Failed to fetch recent releases")
   )
 
-  // Get pending releases for organization
+  // Get pending releases for organization - requires membership
   app.get(
-    "/api/organization/:org_id/pending-releases",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/pending-releases",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const jobs = await storage.getJobs(req.orgId, ["role", "release"])
       res.json(jobs)
     }, "Failed to fetch pending releases")
   )
 
-  // Get all releases for organization
+  // Get all releases for organization - requires membership
   app.get(
-    "/api/organization/:org_id/releases",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/releases",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const allReleases = await storage.getOrganizationReleases(req.orgId)
 
       // Filter by repoId if provided in query params
@@ -327,11 +338,13 @@ export function releaseRoutes(app: Express) {
     }, "Failed to fetch releases")
   )
 
-  // Check if release exists for repo/branch
+  // Check if release exists for repo/branch - requires membership
   app.get(
-    "/api/organization/:org_id/repos/:repo_id/releases/check",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos/:repo_public_id/releases/check",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
+      // req.repoId is the GitHub external ID
       const release = await storage.getReleaseByBranch(req.repoId, req.branch)
 
       if (!release) {
@@ -343,11 +356,11 @@ export function releaseRoutes(app: Express) {
     }, "Failed to check release")
   )
 
-  // Get a specific release
+  // Get a specific release - requires membership
   app.get(
-    "/api/organization/:org_id/releases/:id",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/releases/:id",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { id } = req.params
       const release = await storage.getRelease(id)
 
@@ -356,31 +369,56 @@ export function releaseRoutes(app: Express) {
         return
       }
 
+      // Verify release belongs to a repo in this organization
+      const repo = await storage.getRepoByGithubId(release.repoId)
+      if (!verifyResourceOwnership(repo, req, res, "Release")) {
+        return
+      }
+
       res.json(release)
     }, "Failed to fetch release")
   )
 
-  // Get role docs for a release
+  // Get role docs for a release - requires membership
   app.get(
-    "/api/organization/:org_id/releases/:id/role-docs",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/releases/:id/role-docs",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { id } = req.params
+
+      // Verify release exists and belongs to org
+      const release = await storage.getRelease(id)
+      if (!release) {
+        res.status(404).json({ error: "Release not found" })
+        return
+      }
+
+      const repo = await storage.getRepoByGithubId(release.repoId)
+      if (!verifyResourceOwnership(repo, req, res, "Release")) {
+        return
+      }
+
       const roleDocs = await storage.getRoleDocsForRelease(id)
       res.json(roleDocs)
     }, "Failed to fetch role documents")
   )
 
-  // Delete a release
+  // Delete a release - requires admin role
   app.delete(
-    "/api/organization/:org_id/releases/:id",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/releases/:id",
+    ...requireOrgAdmin("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { id } = req.params
       const release = await storage.getRelease(id)
 
       if (!release) {
         res.status(404).json({ error: "Release not found" })
+        return
+      }
+
+      // Verify release belongs to a repo in this organization
+      const repo = await storage.getRepoByGithubId(release.repoId)
+      if (!verifyResourceOwnership(repo, req, res, "Release")) {
         return
       }
 

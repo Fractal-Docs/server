@@ -17,36 +17,44 @@ import {
 } from "../cfg-analyzer"
 import { enqueueTask, registerWorker } from "../task-manager"
 import {
-  asyncHandler,
-  withOrganization,
-  withRepo,
-  RepoRequest,
-  OrganizationRequest,
-  getRepoById,
-} from "./middleware"
+  requireOrgMember,
+  requireOrgAdmin,
+  authorizedHandler,
+  AuthorizedOrgRequest,
+} from "./authorization"
+import { withRepo, RepoRequest, getRepoByPublicId } from "./middleware"
 
 // Re-export for backwards compatibility
-export { getRepoById }
+export { getRepoByPublicId }
 
 export function codeRoutes(app: Express) {
-  const orgMiddleware = withOrganization()
-  const repoMiddleware = [orgMiddleware, withRepo()]
-
-  // Get all repos for an organization
+  // Get all repos for an organization - requires membership
   app.get(
-    "/api/organization/:org_id/repos",
-    orgMiddleware,
-    asyncHandler<OrganizationRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos",
+    ...requireOrgMember("org_public_id"),
+    authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const repos = await storage.getRepos(req.organization.id)
-      res.json(repos)
+
+      // Return repos with publicId, not internal id
+      const sanitizedRepos = repos.map((repo) => ({
+        publicId: repo.publicId,
+        name: repo.name,
+        fullName: repo.fullName,
+        owner: repo.owner,
+        fileFilterRegex: repo.fileFilterRegex,
+        createdAt: repo.createdAt,
+      }))
+
+      res.json(sanitizedRepos)
     }, "Failed to fetch repositories")
   )
 
-  // Get a specific repo
+  // Get a specific repo - requires membership
   app.get(
-    "/api/organization/:org_id/repos/:repo_id",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos/:repo_public_id",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
       const ghRepo = await getGithubRepo(req.organization, req.repo)
       let latestCommit: CommitDetails | null = null
       try {
@@ -70,31 +78,40 @@ export function codeRoutes(app: Express) {
         )
         await vectorStorage.deleteByRepoId(req.repoId, req.branch)
       }
+
+      // Return repo with publicId
       res.json({
-        ...req.repo,
+        publicId: req.repo.publicId,
+        name: req.repo.name,
+        fullName: req.repo.fullName,
+        owner: req.repo.owner,
+        fileFilterRegex: req.repo.fileFilterRegex,
+        createdAt: req.repo.createdAt,
         defaultBranch: ghRepo?.default_branch || "",
         latestCommit,
       })
     }, "Failed to find repository")
   )
 
-  // Delete a repo
+  // Delete a repo - requires admin role
   app.delete(
-    "/api/organization/:org_id/repos/:repo_id",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
-      await storage.deleteRepo(req.repoId)
+    "/api/organization/:org_public_id/repos/:repo_public_id",
+    ...requireOrgAdmin("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
+      await storage.deleteRepoByPublicId(req.repoPublicId)
       // clear out old storage
       await vectorStorage.deleteByRepoId(req.repoId)
       res.status(204).end()
     }, "Failed to delete repository")
   )
 
-  // Update a repo
+  // Update a repo - requires admin role
   app.patch(
-    "/api/organization/:org_id/repos/:repo_id",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos/:repo_public_id",
+    ...requireOrgAdmin("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
       const { fileFilterRegex } = req.body
       if (!fileFilterRegex) {
         res
@@ -103,26 +120,28 @@ export function codeRoutes(app: Express) {
         return
       }
 
-      await storage.updateRepo(req.repoId, { fileFilterRegex })
+      await storage.updateRepoByPublicId(req.repoPublicId, { fileFilterRegex })
       res.status(204).end()
     }, "Failed to update repository")
   )
 
-  // Get embeddings for a repo
+  // Get embeddings for a repo - requires membership
   app.get(
-    "/api/organization/:org_id/repos/:repo_id/embeddings",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos/:repo_public_id/embeddings",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
       const data = await storage.getRepoFiles(req.repoId, req.branch)
       res.json(data)
     }, "Failed to get repository embeddings")
   )
 
-  // Analyze repository files
+  // Analyze repository files - requires membership
   app.post(
-    "/api/organization/:org_id/repos/:repo_id/analyze",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos/:repo_public_id/analyze",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
       const { organization, repo, repoId, branch, orgId } = req
 
       const repoContent = await getRepoContent(
@@ -251,11 +270,12 @@ export function codeRoutes(app: Express) {
     }, "Failed to analyze repository")
   )
 
-  // Generate Call Graph and Control Flow Graph (CFG)
+  // Generate Call Graph and Control Flow Graph (CFG) - requires membership
   app.post(
-    "/api/organization/:org_id/repos/:repo_id/generate-cfg",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos/:repo_public_id/generate-cfg",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
       const { repoId, branch } = req
 
       // Get all files in the repository
@@ -324,11 +344,12 @@ export function codeRoutes(app: Express) {
     }, "Failed to generate Call Graph and Control Flow Graph")
   )
 
-  // Retrieve CFG data
+  // Retrieve CFG data - requires membership
   app.get(
-    "/api/organization/:org_id/repos/:repo_id/cfg",
-    ...repoMiddleware,
-    asyncHandler<RepoRequest>(async (req, res) => {
+    "/api/organization/:org_public_id/repos/:repo_public_id/cfg",
+    ...requireOrgMember("org_public_id"),
+    withRepo(),
+    authorizedHandler<RepoRequest>(async (req, res) => {
       const docs = await storage.getRepoDocsByBranch(req.repoId, req.branch)
 
       // Find the most recent CFG document
