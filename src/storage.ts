@@ -84,10 +84,10 @@ export interface IStorage {
   updateUser(user: InsertUser): Promise<User>
 
   // Repository file analysis operations
-  getRepoFiles(repoId: string, branchName: string): Promise<RepoFile[]>
+  getRepoFiles(repoPublicId: string, branchName: string): Promise<RepoFile[]>
   createRepoFile(file: InsertRepoFile): Promise<RepoFile>
   getRepoFile(
-    repoId: string,
+    repoPublicId: string,
     filePath: string,
     branchName: string
   ): Promise<RepoFile | undefined>
@@ -100,11 +100,14 @@ export interface IStorage {
 
   // Repository documentation operations
   getOrganizationDocs(orgId: number): Promise<RepoDoc[]>
-  getRepoDocs(repoId: string): Promise<RepoDoc[]>
-  getRepoDocsByBranch(repoId: string, branchName: string): Promise<RepoDoc[]>
+  getRepoDocs(repoPublicId: string): Promise<RepoDoc[]>
+  getRepoDocsByBranch(
+    repoPublicId: string,
+    branchName: string
+  ): Promise<RepoDoc[]>
   createRepoDoc(doc: InsertRepoDoc): Promise<RepoDoc>
   getRepoDoc(
-    repoId: string,
+    repoPublicId: string,
     branchName: string,
     docType: DocType
   ): Promise<RepoDoc | undefined>
@@ -113,10 +116,10 @@ export interface IStorage {
 
   // Release operations
   getOrganizationReleases(orgId: number): Promise<Release[]>
-  getReleases(repoId: string): Promise<Release[]>
+  getReleases(repoPublicId: string): Promise<Release[]>
   getRelease(publicId: string): Promise<Release | undefined>
   getReleaseByBranch(
-    repoId: string,
+    repoPublicId: string,
     branch: string
   ): Promise<Release | undefined>
   createRelease(release: Omit<InsertRelease, "publicId">): Promise<Release>
@@ -177,9 +180,9 @@ export interface IStorage {
     job: Partial<InsertEnqueuedTask>
   ): Promise<EnqueuedTask>
   removeJob(jobId: string): Promise<void>
-  getJobsByBranch(repoId: string, branch: string): Promise<EnqueuedTask[]>
+  getJobsByBranch(repoPublicId: string, branch: string): Promise<EnqueuedTask[]>
   removeJobsByBranchAndType(
-    repoId: string,
+    repoPublicId: string,
     branch: string,
     type: JobType
   ): Promise<void>
@@ -202,17 +205,17 @@ export class DatabaseStorage implements IStorage {
   async getPrds(organizationId: number): Promise<Prd[]> {
     return this.handleDatabaseOperation(async () => {
       const repos = await db
-        .select({ repoId: githubRepos.repoId })
+        .select({ publicId: githubRepos.publicId })
         .from(githubRepos)
         .where(eq(githubRepos.organizationId, organizationId))
 
-      const repoIds = repos.map((r) => r.repoId)
-      if (repoIds.length === 0) return []
+      const repoPublicIds = repos.map((r) => r.publicId)
+      if (repoPublicIds.length === 0) return []
 
       return db
         .select()
         .from(prds)
-        .where(inArray(prds.repoId, repoIds))
+        .where(inArray(prds.repoPublicId, repoPublicIds))
         .orderBy(prds.id)
     })
   }
@@ -235,14 +238,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPrdForBranch(
-    repoId: string,
+    repoPublicId: string,
     branchName: string
   ): Promise<Prd | undefined> {
     return this.handleDatabaseOperation(async () => {
       const [prd] = await db
         .select()
         .from(prds)
-        .where(and(eq(prds.repoId, repoId), eq(prds.branch, branchName)))
+        .where(
+          and(eq(prds.repoPublicId, repoPublicId), eq(prds.branch, branchName))
+        )
       return prd
     })
   }
@@ -304,21 +309,22 @@ export class DatabaseStorage implements IStorage {
 
   async searchPrds(organizationId: number, query: string): Promise<Prd[]> {
     return this.handleDatabaseOperation(async () => {
-      if (!query) return this.getPrds(organizationId)
-
       const repos = await db
-        .select({ repoId: githubRepos.repoId })
+        .select({ publicId: githubRepos.publicId })
         .from(githubRepos)
         .where(eq(githubRepos.organizationId, organizationId))
 
-      const repoIds = repos.map((r) => r.repoId)
-      if (repoIds.length === 0) return []
+      const repoPublicIds = repos.map((r) => r.publicId)
+      if (repoPublicIds.length === 0) return []
 
       return db
         .select()
         .from(prds)
         .where(
-          and(inArray(prds.repoId, repoIds), like(prds.title, `%${query}%`))
+          and(
+            inArray(prds.repoPublicId, repoPublicIds),
+            like(prds.title, `%${query}%`)
+          )
         )
         .orderBy(prds.id)
     })
@@ -413,14 +419,14 @@ export class DatabaseStorage implements IStorage {
     const deleteRepoDocs = this.handleDatabaseOperation(async () => {
       const [repo] = await db
         .delete(repoDocs)
-        .where(eq(repoDocs.repoId, id))
+        .where(eq(repoDocs.repoPublicId, id))
         .returning()
       if (!repo) throw new Error("Repository not found")
     })
     const deleteRepoFiles = this.handleDatabaseOperation(async () => {
       const [repo] = await db
         .delete(repoFiles)
-        .where(eq(repoFiles.repoId, id))
+        .where(eq(repoFiles.repoPublicId, id))
         .returning()
       if (!repo) throw new Error("Repository not found")
     })
@@ -428,18 +434,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteRepoByPublicId(publicId: string): Promise<void[]> {
-    // First get the repo to find the GitHub repoId for related records
-    const repo = await this.getRepoByPublicId(publicId)
-    if (!repo) throw new Error("Repository not found")
-
     const deleteRepoRecord = this.handleDatabaseOperation(async () => {
       await db.delete(githubRepos).where(eq(githubRepos.publicId, publicId))
     })
     const deleteRepoDocsRecord = this.handleDatabaseOperation(async () => {
-      await db.delete(repoDocs).where(eq(repoDocs.repoId, repo.repoId))
+      await db.delete(repoDocs).where(eq(repoDocs.repoPublicId, publicId))
     })
     const deleteRepoFilesRecord = this.handleDatabaseOperation(async () => {
-      await db.delete(repoFiles).where(eq(repoFiles.repoId, repo.repoId))
+      await db.delete(repoFiles).where(eq(repoFiles.repoPublicId, publicId))
     })
     return Promise.all([
       deleteRepoRecord,
@@ -501,10 +503,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository file analysis operations
-  async getRepoFiles(repoId: string, branchName?: string): Promise<RepoFile[]> {
+  async getRepoFiles(
+    repoPublicId: string,
+    branchName?: string
+  ): Promise<RepoFile[]> {
     const whereClause = branchName
-      ? and(eq(repoFiles.repoId, repoId), eq(repoFiles.branch, branchName))
-      : eq(repoFiles.repoId, repoId)
+      ? and(
+          eq(repoFiles.repoPublicId, repoPublicId),
+          eq(repoFiles.branch, branchName)
+        )
+      : eq(repoFiles.repoPublicId, repoPublicId)
     return this.handleDatabaseOperation(() =>
       db.select().from(repoFiles).where(whereClause)
     )
@@ -518,7 +526,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRepoFile(
-    repoId: string,
+    repoPublicId: string,
     filePath: string,
     branchName: string
   ): Promise<RepoFile | undefined> {
@@ -528,7 +536,7 @@ export class DatabaseStorage implements IStorage {
         .from(repoFiles)
         .where(
           and(
-            eq(repoFiles.repoId, repoId),
+            eq(repoFiles.repoPublicId, repoPublicId),
             eq(repoFiles.filePath, filePath),
             eq(repoFiles.branch, branchName)
           )
@@ -567,26 +575,31 @@ export class DatabaseStorage implements IStorage {
   async getOrganizationDocs(orgId: number): Promise<RepoDoc[]> {
     const repos = await this.getRepos(orgId)
     const docs = await Promise.all(
-      repos.map((repo) => this.getRepoDocs(repo.repoId))
+      repos.map((repo) => this.getRepoDocs(repo.publicId))
     )
     return docs.flat()
   }
 
-  async getRepoDocs(repoId: string): Promise<RepoDoc[]> {
+  async getRepoDocs(repoPublicId: string): Promise<RepoDoc[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(repoDocs).where(eq(repoDocs.repoId, repoId))
+      db.select().from(repoDocs).where(eq(repoDocs.repoPublicId, repoPublicId))
     )
   }
 
   async getRepoDocsByBranch(
-    repoId: string,
+    repoPublicId: string,
     branch: string
   ): Promise<RepoDoc[]> {
     return this.handleDatabaseOperation(() =>
       db
         .select()
         .from(repoDocs)
-        .where(and(eq(repoDocs.repoId, repoId), eq(repoDocs.branch, branch)))
+        .where(
+          and(
+            eq(repoDocs.repoPublicId, repoPublicId),
+            eq(repoDocs.branch, branch)
+          )
+        )
     )
   }
 
@@ -598,7 +611,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRepoDoc(
-    repoId: string,
+    repoPublicId: string,
     branch: string,
     docType: DocType
   ): Promise<RepoDoc | undefined> {
@@ -608,7 +621,7 @@ export class DatabaseStorage implements IStorage {
         .from(repoDocs)
         .where(
           and(
-            eq(repoDocs.repoId, repoId),
+            eq(repoDocs.repoPublicId, repoPublicId),
             eq(repoDocs.branch, branch),
             eq(repoDocs.docType, docType)
           )
@@ -646,14 +659,14 @@ export class DatabaseStorage implements IStorage {
   async getOrganizationReleases(orgId: number): Promise<Release[]> {
     const repos = await this.getRepos(orgId)
     const docs = await Promise.all(
-      repos.map((repo) => this.getReleases(repo.repoId))
+      repos.map((repo) => this.getReleases(repo.publicId))
     )
     return docs.flat()
   }
 
-  async getReleases(repoId: string): Promise<Release[]> {
+  async getReleases(repoPublicId: string): Promise<Release[]> {
     return this.handleDatabaseOperation(() =>
-      db.select().from(releases).where(eq(releases.repoId, repoId))
+      db.select().from(releases).where(eq(releases.repoPublicId, repoPublicId))
     )
   }
 
@@ -681,15 +694,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReleaseByBranch(
-    repoId: string,
+    repoPublicId: string,
     branch: string
   ): Promise<Release | undefined> {
     return this.handleDatabaseOperation(async () => {
-      const [docs] = await db
+      const [release] = await db
         .select()
         .from(releases)
-        .where(and(eq(releases.repoId, repoId), eq(releases.branch, branch)))
-      return docs
+        .where(
+          and(
+            eq(releases.repoPublicId, repoPublicId),
+            eq(releases.branch, branch)
+          )
+        )
+      return release
     })
   }
 
@@ -807,7 +825,7 @@ export class DatabaseStorage implements IStorage {
         .where(
           and(
             eq(roleDocs.releasePublicId, role.releasePublicId),
-            eq(roleDocs.repoId, role.repoId),
+            eq(roleDocs.repoPublicId, role.repoPublicId),
             eq(roleDocs.rolePublicId, role.rolePublicId)
           )
         )
@@ -1116,7 +1134,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJobsByBranch(
-    repoId: string,
+    repoPublicId: string,
     branch: string
   ): Promise<EnqueuedTask[]> {
     return this.handleDatabaseOperation(async () => {
@@ -1125,7 +1143,7 @@ export class DatabaseStorage implements IStorage {
         .from(enqueuedTasks)
         .where(
           and(
-            eq(enqueuedTasks.repoId, repoId),
+            eq(enqueuedTasks.repoPublicId, repoPublicId),
             eq(enqueuedTasks.branch, branch)
           )
         )
@@ -1134,7 +1152,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeJobsByBranchAndType(
-    repoId: string,
+    repoPublicId: string,
     branch: string,
     type: JobType,
     status?: JobStatusType
@@ -1144,7 +1162,7 @@ export class DatabaseStorage implements IStorage {
         .delete(enqueuedTasks)
         .where(
           and(
-            eq(enqueuedTasks.repoId, repoId),
+            eq(enqueuedTasks.repoPublicId, repoPublicId),
             eq(enqueuedTasks.branch, branch),
             eq(enqueuedTasks.type, type),
             status ? eq(enqueuedTasks.status, status) : undefined

@@ -24,7 +24,7 @@ export function prdRoutes(app: Express) {
         title: prd.title,
         content: prd.content,
         businessContext: prd.businessContext,
-        repoId: prd.repoId,
+        repoPublicId: prd.repoPublicId,
         branch: prd.branch,
       }))
 
@@ -51,7 +51,7 @@ export function prdRoutes(app: Express) {
         title: prd.title,
         content: prd.content,
         businessContext: prd.businessContext,
-        repoId: prd.repoId,
+        repoPublicId: prd.repoPublicId,
         branch: prd.branch,
       }))
 
@@ -82,7 +82,7 @@ export function prdRoutes(app: Express) {
       }
 
       // Verify the PRD belongs to a repo in this organization
-      const repo = await storage.getRepo(prd.repoId)
+      const repo = await storage.getRepoByPublicId(prd.repoPublicId)
       if (!verifyResourceOwnership(repo, req, res, "PRD")) {
         return
       }
@@ -93,7 +93,7 @@ export function prdRoutes(app: Express) {
         title: prd.title,
         content: prd.content,
         businessContext: prd.businessContext,
-        repoId: prd.repoId,
+        repoPublicId: prd.repoPublicId,
         branch: prd.branch,
       })
     }, "Failed to fetch PRD")
@@ -114,7 +114,7 @@ export function prdRoutes(app: Express) {
       }
 
       // Verify the repo belongs to this organization
-      const repo = await storage.getRepo(result.data.repoId)
+      const repo = await storage.getRepoByPublicId(result.data.repoPublicId)
       if (!verifyResourceOwnership(repo, req, res, "Repository")) {
         return
       }
@@ -127,7 +127,7 @@ export function prdRoutes(app: Express) {
         title: prd.title,
         content: prd.content,
         businessContext: prd.businessContext,
-        repoId: prd.repoId,
+        repoPublicId: prd.repoPublicId,
         branch: prd.branch,
       })
     }, "Failed to create PRD")
@@ -165,14 +165,18 @@ export function prdRoutes(app: Express) {
       }
 
       // Verify the existing PRD belongs to a repo in this organization
-      const existingRepo = await storage.getRepo(existingPrd.repoId)
+      const existingRepo = await storage.getRepoByPublicId(
+        existingPrd.repoPublicId
+      )
       if (!verifyResourceOwnership(existingRepo, req, res, "PRD")) {
         return
       }
 
-      // If repoId is being changed, verify the new repo also belongs to this org
-      if (result.data.repoId !== existingPrd.repoId) {
-        const newRepo = await storage.getRepo(result.data.repoId)
+      // If repoPublicId is being changed, verify the new repo also belongs to this org
+      if (result.data.repoPublicId !== existingPrd.repoPublicId) {
+        const newRepo = await storage.getRepoByPublicId(
+          result.data.repoPublicId
+        )
         if (!verifyResourceOwnership(newRepo, req, res, "Repository")) {
           return
         }
@@ -186,7 +190,7 @@ export function prdRoutes(app: Express) {
         title: prd.title,
         content: prd.content,
         businessContext: prd.businessContext,
-        repoId: prd.repoId,
+        repoPublicId: prd.repoPublicId,
         branch: prd.branch,
       })
     }, "Failed to update PRD")
@@ -215,7 +219,7 @@ export function prdRoutes(app: Express) {
       }
 
       // Verify the PRD belongs to a repo in this organization
-      const repo = await storage.getRepo(existingPrd.repoId)
+      const repo = await storage.getRepoByPublicId(existingPrd.repoPublicId)
       if (!verifyResourceOwnership(repo, req, res, "PRD")) {
         return
       }

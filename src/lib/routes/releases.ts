@@ -31,7 +31,7 @@ function createWorkerErrorHandler() {
   }
 }
 
-const registerRoleWorker = (repoId: string, branch: string) => {
+const registerRoleWorker = (repoPublicId: string, branch: string) => {
   registerGenerateWorker(
     ROLE_DOC_GENERATION,
     async ({ content, extra, jobId: id }) => {
@@ -46,11 +46,16 @@ const registerRoleWorker = (repoId: string, branch: string) => {
           rolePublicId: role.publicId,
         },
       })
-      await storage.removeJobsByBranchAndType(repoId, branch, "role", "error")
+      await storage.removeJobsByBranchAndType(
+        repoPublicId,
+        branch,
+        "role",
+        "error"
+      )
 
       await storage.createRoleDoc({
         releasePublicId,
-        repoId,
+        repoPublicId,
         rolePublicId: role.publicId,
         document: content,
       })
@@ -62,7 +67,7 @@ const registerRoleWorker = (repoId: string, branch: string) => {
 // Helper to generate role documents for a release
 async function generateRoleDocuments(
   orgId: number,
-  repoId: string,
+  repoPublicId: string,
   branch: string,
   releasePublicId: string,
   releaseContent: string,
@@ -106,7 +111,7 @@ async function generateRoleDocuments(
       if (jobId) {
         await storage.addJob({
           jobId,
-          repoId,
+          repoPublicId,
           organizationId: orgId,
           type: "role",
           branch,
@@ -151,22 +156,19 @@ export function releaseRoutes(app: Express) {
         return
       }
 
-      // Use GitHub's repoId for internal operations
-      const githubRepoId = repo.repoId
-
       // delete old jobs for release and role documentation
-      await storage.removeJobsByBranchAndType(githubRepoId, branch, "release")
-      await storage.removeJobsByBranchAndType(githubRepoId, branch, "role")
+      await storage.removeJobsByBranchAndType(repoPublicId, branch, "release")
+      await storage.removeJobsByBranchAndType(repoPublicId, branch, "role")
 
       const existingRelease = await storage.getReleaseByBranch(
-        githubRepoId,
+        repoPublicId,
         branch
       )
       if (existingRelease) {
         await storage.deleteRelease(existingRelease.publicId)
       }
 
-      const prd = (await storage.getPrdForBranch(githubRepoId, branch)) || {
+      const prd = (await storage.getPrdForBranch(repoPublicId, branch)) || {
         content: "",
       }
 
@@ -181,7 +183,7 @@ export function releaseRoutes(app: Express) {
 
       // Register the workers for generating role documentation
       for (let i = 0; i < roles.length; i++) {
-        registerRoleWorker(githubRepoId, branch)
+        registerRoleWorker(repoPublicId, branch)
       }
 
       // Register the worker for generating release documentation
@@ -189,14 +191,14 @@ export function releaseRoutes(app: Express) {
         RELEASE_GENERATION,
         async ({ content, jobId: id }) => {
           await storage.removeJobsByBranchAndType(
-            githubRepoId,
+            repoPublicId,
             branch,
             "release",
             "error"
           )
           const release = await storage.createRelease({
             title,
-            repoId: githubRepoId,
+            repoPublicId,
             branch,
             content,
           })
@@ -212,7 +214,7 @@ export function releaseRoutes(app: Express) {
 
           await generateRoleDocuments(
             orgId,
-            githubRepoId,
+            repoPublicId,
             branch,
             release.publicId,
             content,
@@ -232,7 +234,7 @@ export function releaseRoutes(app: Express) {
       if (jobId) {
         await storage.addJob({
           jobId,
-          repoId: githubRepoId,
+          repoPublicId,
           organizationId: orgId,
           type: "release",
           branch,
@@ -266,7 +268,7 @@ export function releaseRoutes(app: Express) {
         return
       }
 
-      const repo = await storage.getRepoByGithubId(release.repoId)
+      const repo = await storage.getRepoByPublicId(release.repoPublicId)
       if (!verifyResourceOwnership(repo, req, res, "Release")) {
         return
       }
@@ -279,12 +281,12 @@ export function releaseRoutes(app: Express) {
 
       // Register the workers for generating role documentation
       for (let i = 0; i < roles.length; i++) {
-        registerRoleWorker(release.repoId, release.branch)
+        registerRoleWorker(release.repoPublicId, release.branch)
       }
 
       await generateRoleDocuments(
         orgId,
-        release.repoId,
+        release.repoPublicId,
         release.branch,
         release.publicId,
         release.content,
@@ -330,10 +332,10 @@ export function releaseRoutes(app: Express) {
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const allReleases = await storage.getOrganizationReleases(req.orgId)
 
-      // Filter by repoId if provided in query params
-      const { repoId } = req.query
-      const filteredReleases = repoId
-        ? allReleases.filter((release) => release.repoId === repoId)
+      // Filter by repoPublicId if provided in query params
+      const { repoPublicId } = req.query
+      const filteredReleases = repoPublicId
+        ? allReleases.filter((release) => release.repoPublicId === repoPublicId)
         : allReleases
 
       res.json(filteredReleases)
@@ -346,8 +348,11 @@ export function releaseRoutes(app: Express) {
     ...requireOrgMember("org_public_id"),
     withRepo(),
     authorizedHandler<RepoRequest>(async (req, res) => {
-      // req.repoId is the GitHub external ID
-      const release = await storage.getReleaseByBranch(req.repoId, req.branch)
+      // req.repoPublicId is the internal public ID
+      const release = await storage.getReleaseByBranch(
+        req.repoPublicId,
+        req.branch
+      )
 
       if (!release) {
         res.json({ exists: false })
@@ -380,7 +385,7 @@ export function releaseRoutes(app: Express) {
       }
 
       // Verify release belongs to a repo in this organization
-      const repo = await storage.getRepoByGithubId(release.repoId)
+      const repo = await storage.getRepoByPublicId(release.repoPublicId)
       if (!verifyResourceOwnership(repo, req, res, "Release")) {
         return
       }
@@ -410,7 +415,7 @@ export function releaseRoutes(app: Express) {
         return
       }
 
-      const repo = await storage.getRepoByGithubId(release.repoId)
+      const repo = await storage.getRepoByPublicId(release.repoPublicId)
       if (!verifyResourceOwnership(repo, req, res, "Release")) {
         return
       }
@@ -442,7 +447,7 @@ export function releaseRoutes(app: Express) {
       }
 
       // Verify release belongs to a repo in this organization
-      const repo = await storage.getRepoByGithubId(release.repoId)
+      const repo = await storage.getRepoByPublicId(release.repoPublicId)
       if (!verifyResourceOwnership(repo, req, res, "Release")) {
         return
       }

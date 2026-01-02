@@ -65,18 +65,21 @@ export function codeRoutes(app: Express) {
         )
       } catch {
         // Branch may have been deleted, clean up related data
-        const repoFiles = await storage.getRepoFiles(req.repoId, req.branch)
+        const repoFiles = await storage.getRepoFiles(
+          req.repoPublicId,
+          req.branch
+        )
         await Promise.all(
           repoFiles.map((repoFile) => storage.deleteRepoFile(repoFile.id))
         )
         const repoDocs = await storage.getRepoDocsByBranch(
-          req.repoId,
+          req.repoPublicId,
           req.branch
         )
         await Promise.all(
           repoDocs.map((repoDoc) => storage.deleteRepoDoc(repoDoc.id))
         )
-        await vectorStorage.deleteByRepoId(req.repoId, req.branch)
+        await vectorStorage.deleteByRepoId(req.repoPublicId, req.branch)
       }
 
       // Return repo with publicId
@@ -101,7 +104,7 @@ export function codeRoutes(app: Express) {
     authorizedHandler<RepoRequest>(async (req, res) => {
       await storage.deleteRepoByPublicId(req.repoPublicId)
       // clear out old storage
-      await vectorStorage.deleteByRepoId(req.repoId)
+      await vectorStorage.deleteByRepoId(req.repoPublicId)
       res.status(204).end()
     }, "Failed to delete repository")
   )
@@ -131,7 +134,7 @@ export function codeRoutes(app: Express) {
     ...requireOrgMember("org_public_id"),
     withRepo(),
     authorizedHandler<RepoRequest>(async (req, res) => {
-      const data = await storage.getRepoFiles(req.repoId, req.branch)
+      const data = await storage.getRepoFiles(req.repoPublicId, req.branch)
       res.json(data)
     }, "Failed to get repository embeddings")
   )
@@ -142,7 +145,7 @@ export function codeRoutes(app: Express) {
     ...requireOrgMember("org_public_id"),
     withRepo(),
     authorizedHandler<RepoRequest>(async (req, res) => {
-      const { organization, repo, repoId, branch, orgId } = req
+      const { organization, repo, repoPublicId, branch, orgId } = req
 
       const repoContent = await getRepoContent(
         organization,
@@ -152,8 +155,8 @@ export function codeRoutes(app: Express) {
       )
 
       // clear out old storage
-      await vectorStorage.deleteByRepoId(repoId, branch)
-      const repoFiles = await storage.getRepoFiles(repoId, branch)
+      await vectorStorage.deleteByRepoId(repoPublicId, branch)
+      const repoFiles = await storage.getRepoFiles(repoPublicId, branch)
       for (const repoFile of repoFiles) {
         if (!repoContent.find((f) => f.path === repoFile.filePath)) {
           await storage.deleteRepoFile(repoFile.id)
@@ -175,9 +178,9 @@ export function codeRoutes(app: Express) {
 
               // Store each chunk with its embedding in vector storage
               for (let i = 0; i < chunks.length; i++) {
-                const vectorId = `${repoId}-${branch}-${file.path}-${i}`
+                const vectorId = `${repoPublicId}-${branch}-${file.path}-${i}`
                 await vectorStorage.storeEmbedding(vectorId, embeddings[i], {
-                  repoId,
+                  repoId: repoPublicId,
                   filePath: file.path,
                   branch,
                   fileId: i,
@@ -190,7 +193,7 @@ export function codeRoutes(app: Express) {
               let existingRepoFile
               try {
                 existingRepoFile = await storage.getRepoFile(
-                  repoId,
+                  repoPublicId,
                   file.path,
                   branch
                 )
@@ -215,7 +218,7 @@ export function codeRoutes(app: Express) {
                 })
               } else {
                 await storage.createRepoFile({
-                  repoId,
+                  repoPublicId,
                   filePath: file.path,
                   content: file.content,
                   branch,
@@ -238,7 +241,7 @@ export function codeRoutes(app: Express) {
         async ({ id }) => {
           await storage.updateJob(id, { status: "completed" })
           await storage.removeJobsByBranchAndType(
-            repoId,
+            repoPublicId,
             branch,
             "analyze",
             "error"
@@ -257,7 +260,7 @@ export function codeRoutes(app: Express) {
       if (jobId) {
         await storage.addJob({
           jobId,
-          repoId,
+          repoPublicId,
           organizationId: orgId,
           type: "analyze",
           branch,
@@ -276,10 +279,10 @@ export function codeRoutes(app: Express) {
     ...requireOrgMember("org_public_id"),
     withRepo(),
     authorizedHandler<RepoRequest>(async (req, res) => {
-      const { repoId, branch } = req
+      const { repoPublicId, branch } = req
 
       // Get all files in the repository
-      const repoFiles = await storage.getRepoFiles(repoId, branch)
+      const repoFiles = await storage.getRepoFiles(repoPublicId, branch)
 
       if (!repoFiles.length) {
         res.status(404).json({
@@ -306,7 +309,10 @@ export function codeRoutes(app: Express) {
       const combinedContent = `# Repository Analysis: Call Graph and Control Flow Graph\n\n${callGraphText}\n\n${cfgText}`
 
       // Check for existing CFG doc
-      const existingDocs = await storage.getRepoDocsByBranch(repoId, branch)
+      const existingDocs = await storage.getRepoDocsByBranch(
+        repoPublicId,
+        branch
+      )
       const cfgDoc = existingDocs.find((doc) => doc.docType === "cfg")
 
       const docMetadata = {
@@ -319,7 +325,7 @@ export function codeRoutes(app: Express) {
       // Store the generated CFG
       const doc = cfgDoc
         ? await storage.updateRepoDoc(cfgDoc.id, {
-            repoId,
+            repoPublicId,
             branch,
             title: "Code Structure Analysis",
             content: combinedContent,
@@ -328,7 +334,7 @@ export function codeRoutes(app: Express) {
             metadata: docMetadata,
           })
         : await storage.createRepoDoc({
-            repoId,
+            repoPublicId,
             branch,
             title: "Code Structure Analysis",
             content: combinedContent,
@@ -350,7 +356,10 @@ export function codeRoutes(app: Express) {
     ...requireOrgMember("org_public_id"),
     withRepo(),
     authorizedHandler<RepoRequest>(async (req, res) => {
-      const docs = await storage.getRepoDocsByBranch(req.repoId, req.branch)
+      const docs = await storage.getRepoDocsByBranch(
+        req.repoPublicId,
+        req.branch
+      )
 
       // Find the most recent CFG document
       const cfgDocs = docs

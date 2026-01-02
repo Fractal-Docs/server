@@ -49,7 +49,9 @@ export const prds = pgTable("prds", {
   title: text("title").notNull(),
   content: text("content").notNull(),
   businessContext: text("business_context").notNull(),
-  repoId: text("repo_id").notNull(),
+  repoPublicId: text("repo_public_id")
+    .notNull()
+    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
   branch: text("branch"),
 })
 
@@ -110,7 +112,9 @@ export const repoFiles = pgTable(
   "repo_files",
   {
     id: serial("id"),
-    repoId: text("repo_id").notNull(),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
     filePath: text("file_path").notNull(),
     branch: text("branch").notNull(),
     content: text("content"), // Store the actual file content
@@ -119,7 +123,7 @@ export const repoFiles = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.repoId, table.filePath, table.branch] }),
+    primaryKey({ columns: [table.repoPublicId, table.filePath, table.branch] }),
   ]
 )
 
@@ -127,7 +131,9 @@ export const repoDocs = pgTable(
   "repo_docs",
   {
     id: serial("id").primaryKey(),
-    repoId: text("repo_id").notNull(),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
     title: text("title").notNull(),
     content: text("content").notNull(),
     docType: text("doc_type").$type<DocType>().notNull(),
@@ -137,7 +143,7 @@ export const repoDocs = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.repoId, table.docType, table.branch] }),
+    primaryKey({ columns: [table.repoPublicId, table.docType, table.branch] }),
   ]
 )
 
@@ -145,7 +151,9 @@ export const releases = pgTable("releases", {
   id: serial("id").primaryKey(),
   publicId: text("public_id").notNull().unique(),
   title: text("title").notNull(),
-  repoId: text("repo_id").notNull(),
+  repoPublicId: text("repo_public_id")
+    .notNull()
+    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
   branch: text("branch").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -168,7 +176,9 @@ export const roleDocs = pgTable(
   "role_docs",
   {
     releasePublicId: text("release_public_id").notNull(),
-    repoId: text("repo_id").notNull(),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
     rolePublicId: text("role_public_id").notNull(),
     document: text("doc").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -176,7 +186,7 @@ export const roleDocs = pgTable(
   (table) => ({
     primaryKey: primaryKey(
       table.releasePublicId,
-      table.repoId,
+      table.repoPublicId,
       table.rolePublicId
     ),
   })
@@ -188,7 +198,9 @@ export const enqueuedTasks = pgTable(
   {
     jobId: text("job_id").notNull().primaryKey(),
     branch: text("branch").notNull(),
-    repoId: text("repo_id").notNull(),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
     organizationId: integer("organization_id").notNull(),
     type: text("type").$type<JobType>().notNull(),
     status: text("status").$type<JobStatusType>().notNull(),
@@ -232,7 +244,7 @@ export const insertPrdSchema = createInsertSchema(prds)
     content: z.string().min(1, "Content is required"),
     businessContext: z.string().min(1, "Business context is required"),
     title: z.string().min(1, "Title is required"),
-    repoId: z.string().min(1, "Please select a GitHub repository"),
+    repoPublicId: z.string().min(1, "Please select a GitHub repository"),
   })
 
 export const insertOrganizationSchema = createInsertSchema(organizations).pick({
@@ -283,7 +295,7 @@ export const insertUserSchema = createInsertSchema(users)
 // New schemas for repository analysis
 export const insertRepoFileSchema = createInsertSchema(repoFiles)
   .pick({
-    repoId: true,
+    repoPublicId: true,
     filePath: true,
     branch: true,
     content: true,
@@ -299,7 +311,7 @@ export const insertRepoFileSchema = createInsertSchema(repoFiles)
 
 export const insertRepoDocSchema = createInsertSchema(repoDocs)
   .pick({
-    repoId: true,
+    repoPublicId: true,
     title: true,
     branch: true,
     content: true,
@@ -321,14 +333,14 @@ export const insertReleaseSchema = createInsertSchema(releases)
   .pick({
     publicId: true,
     title: true,
-    repoId: true,
+    repoPublicId: true,
     branch: true,
     content: true,
     updatedAt: true,
   })
   .extend({
     title: z.string().min(1, "Title is required"),
-    repoId: z.string().min(1, "Repository is required"),
+    repoPublicId: z.string().min(1, "Repository is required"),
     branch: z.string().min(1, "Branch is required"),
   })
 
@@ -348,13 +360,13 @@ export const insertRoleSchema = createInsertSchema(roles)
 
 export const insertRoleDocSchema = createInsertSchema(roleDocs)
   .pick({
-    repoId: true,
+    repoPublicId: true,
     releasePublicId: true,
     rolePublicId: true,
     document: true,
   })
   .extend({
-    repoId: z.string().min(1, "Repository is required"),
+    repoPublicId: z.string().min(1, "Repository is required"),
     releasePublicId: z.string().min(1, "Release public ID is required"),
     rolePublicId: z.string().min(1, "Role public ID is required"),
     document: z.string().min(1, "Document content is required"),
@@ -364,7 +376,7 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
   .pick({
     jobId: true,
     branch: true,
-    repoId: true,
+    repoPublicId: true,
     organizationId: true,
     type: true,
     status: true,
@@ -377,7 +389,7 @@ export const insertEnqueuedTaskSchema = createInsertSchema(enqueuedTasks)
     type: z.enum(JOB_TYPES),
     status: z.enum(JOB_STATUS_TYPES),
     branch: z.string().min(1, "Branch is required"),
-    repoId: z.string().min(1, "Repository is required"),
+    repoPublicId: z.string().min(1, "Repository is required"),
   })
 
 export const insertInvitationSchema = createInsertSchema(invitations)

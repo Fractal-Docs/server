@@ -8,30 +8,13 @@ import { nanoid } from "nanoid"
  * sequential database IDs.
  */
 
-// Default length for public IDs - 21 characters provides good uniqueness
-// while being URL-safe and reasonably short
-const DEFAULT_PUBLIC_ID_LENGTH = 21
-
-// Shorter length for user-facing IDs that might be shared
-const SHORT_PUBLIC_ID_LENGTH = 12
-
-/**
- * Generates a new public ID using nanoid
- * @param length - Optional length of the ID (default: 21)
- * @returns A URL-safe, unique identifier string
- */
-export function generatePublicId(
-  length: number = DEFAULT_PUBLIC_ID_LENGTH
-): string {
-  return nanoid(length)
-}
-
+const PUBLIC_ID_LENGTH = 12
 /**
  * Generates a shorter public ID for user-facing contexts
  * @returns A URL-safe, unique identifier string (12 characters)
  */
-export function generateShortPublicId(): string {
-  return nanoid(SHORT_PUBLIC_ID_LENGTH)
+export function generatePublicId(): string {
+  return nanoid(PUBLIC_ID_LENGTH)
 }
 
 /**
@@ -82,12 +65,12 @@ export function isNumericId(id: string | number): boolean {
  * These help with debugging and identifying ID types in logs
  */
 export const publicIdGenerators = {
-  organization: () => `org_${generateShortPublicId()}`,
-  user: () => `usr_${generateShortPublicId()}`,
-  prd: () => `prd_${generateShortPublicId()}`,
-  repo: () => `repo_${generateShortPublicId()}`,
-  release: () => `rel_${generateShortPublicId()}`,
-  role: () => `role_${generateShortPublicId()}`,
+  organization: () => `org_${generatePublicId()}`,
+  user: () => `usr_${generatePublicId()}`,
+  prd: () => `prd_${generatePublicId()}`,
+  repo: () => `repo_${generatePublicId()}`,
+  release: () => `rel_${generatePublicId()}`,
+  role: () => `role_${generatePublicId()}`,
 } as const
 
 /**

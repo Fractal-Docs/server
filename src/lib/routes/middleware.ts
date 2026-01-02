@@ -14,8 +14,8 @@ export interface OrganizationRequest extends Request {
 // RepoRequest extends AuthorizedOrgRequest to include repo-specific fields
 export interface RepoRequest extends AuthorizedOrgRequest {
   repo: GithubRepo
-  repoPublicId: string
-  repoId: string // GitHub's external repo ID (for GitHub API calls)
+  repoPublicId: string // Internal repo public ID (repo_xxxxxxxxxxxx) - use for all DB operations
+  repoId: string // GitHub's external repo ID (for GitHub API calls ONLY)
   branch: string
 }
 
@@ -120,7 +120,7 @@ export function withRepo(): RequestHandler {
       }
 
       ;(req as RepoRequest).repo = repo
-      ;(req as RepoRequest).repoPublicId = repo_public_id
+      ;(req as RepoRequest).repoPublicId = repo.publicId // Internal public ID for DB operations
       ;(req as RepoRequest).repoId = repo.repoId // GitHub's external ID for API calls
       ;(req as RepoRequest).branch = branch
       next()
