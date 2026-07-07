@@ -199,14 +199,17 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  private async getOrgRepoPublicIds(organizationId: string): Promise<string[]> {
+    const repos = await db
+      .select({ publicId: githubRepos.publicId })
+      .from(githubRepos)
+      .where(eq(githubRepos.organizationId, organizationId))
+    return repos.map((r) => r.publicId)
+  }
+
   async getPrds(organizationId: string): Promise<Prd[]> {
     return this.handleDatabaseOperation(async () => {
-      const repos = await db
-        .select({ publicId: githubRepos.publicId })
-        .from(githubRepos)
-        .where(eq(githubRepos.organizationId, organizationId))
-
-      const repoPublicIds = repos.map((r) => r.publicId)
+      const repoPublicIds = await this.getOrgRepoPublicIds(organizationId)
       if (repoPublicIds.length === 0) return []
 
       return db
@@ -280,12 +283,7 @@ export class DatabaseStorage implements IStorage {
 
   async searchPrds(organizationId: string, query: string): Promise<Prd[]> {
     return this.handleDatabaseOperation(async () => {
-      const repos = await db
-        .select({ publicId: githubRepos.publicId })
-        .from(githubRepos)
-        .where(eq(githubRepos.organizationId, organizationId))
-
-      const repoPublicIds = repos.map((r) => r.publicId)
+      const repoPublicIds = await this.getOrgRepoPublicIds(organizationId)
       if (repoPublicIds.length === 0) return []
 
       return db
@@ -478,12 +476,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Repository documentation operations
-  async getOrganizationDocs(orgId: string): Promise<RepoDoc[]> {
+  private async fanOutOverOrgRepos<T>(
+    orgId: string,
+    getter: (repoPublicId: string) => Promise<T[]>
+  ): Promise<T[]> {
     const repos = await this.getRepos(orgId)
-    const docs = await Promise.all(
-      repos.map((repo) => this.getRepoDocs(repo.publicId))
+    const results = await Promise.all(
+      repos.map((repo) => getter(repo.publicId))
     )
-    return docs.flat()
+    return results.flat()
+  }
+
+  async getOrganizationDocs(orgId: string): Promise<RepoDoc[]> {
+    return this.fanOutOverOrgRepos(orgId, (repoPublicId) =>
+      this.getRepoDocs(repoPublicId)
+    )
   }
 
   async getRepoDocs(repoPublicId: string): Promise<RepoDoc[]> {
@@ -563,11 +570,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrganizationReleases(orgId: string): Promise<Release[]> {
-    const repos = await this.getRepos(orgId)
-    const docs = await Promise.all(
-      repos.map((repo) => this.getReleases(repo.publicId))
+    return this.fanOutOverOrgRepos(orgId, (repoPublicId) =>
+      this.getReleases(repoPublicId)
     )
-    return docs.flat()
   }
 
   async getReleases(repoPublicId: string): Promise<Release[]> {
@@ -787,14 +792,9 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
+  // Legacy alias for getOrganizationByPublicId - kept for withOrganization() middleware
   async getOrganization(publicId: string): Promise<Organization | undefined> {
-    return this.handleDatabaseOperation(async () => {
-      const [org] = await db
-        .select()
-        .from(organizations)
-        .where(eq(organizations.publicId, publicId))
-      return org
-    })
+    return this.getOrganizationByPublicId(publicId)
   }
 
   async getOrganizationByPublicId(

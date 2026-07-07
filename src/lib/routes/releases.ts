@@ -14,22 +14,12 @@ import {
   verifyResourceOwnership,
   AuthorizedOrgRequest,
 } from "./authorization"
-import { withRepo, RepoRequest } from "./middleware"
+import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
 import { hasValidPrefix } from "../public-ids"
 import type { Role } from "src/shared/schema"
 
 const RELEASE_GENERATION = "generateReleaseDocumentation"
 const ROLE_DOC_GENERATION = "generateRoleDocumentation"
-
-// Common worker error handler
-function createWorkerErrorHandler() {
-  return async (error: unknown, { id }: { id: string }) => {
-    await storage.updateJob(id, {
-      status: "error",
-      message: error instanceof Error ? error.message : String(error),
-    })
-  }
-}
 
 const registerRoleWorker = (repoPublicId: string, branch: string) => {
   registerGenerateWorker(

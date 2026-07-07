@@ -3,6 +3,7 @@ import { storage } from "../../storage"
 import { getUserSub } from "../helpers"
 import type { Organization, User } from "../../shared/schema"
 import { hasValidPrefix } from "../public-ids"
+import { asyncHandler } from "./middleware"
 
 /**
  * Authorization middleware module
@@ -260,14 +261,7 @@ export function authorizedHandler<
   T extends AuthorizedRequest = AuthorizedRequest,
 >(
   fn: (req: T, res: Response, next: NextFunction) => Promise<void>,
-
   errorMessage = "An error occurred"
 ): RequestHandler {
-  return (req, res, next) => {
-    Promise.resolve(fn(req as T, res, next)).catch((error: unknown) => {
-      console.error(errorMessage, error)
-      const message = error instanceof Error ? error.message : errorMessage
-      res.status(500).json({ error: message })
-    })
-  }
+  return asyncHandler<T>(fn, errorMessage)
 }

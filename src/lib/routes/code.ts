@@ -22,7 +22,7 @@ import {
   authorizedHandler,
   AuthorizedOrgRequest,
 } from "./authorization"
-import { withRepo, RepoRequest } from "./middleware"
+import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
 
 export function codeRoutes(app: Express) {
   // Get all repos for an organization - requires membership
@@ -244,12 +244,7 @@ export function codeRoutes(app: Express) {
             "error"
           )
         },
-        async (error, { id }) => {
-          await storage.updateJob(id, {
-            status: "error",
-            message: error instanceof Error ? error.message : String(error),
-          })
-        }
+        createWorkerErrorHandler()
       )
 
       const jobId = await enqueueTask("analyzeRepo")

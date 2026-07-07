@@ -9,7 +9,7 @@ import {
   authorizedHandler,
   AuthorizedOrgRequest,
 } from "./authorization"
-import { withRepo, RepoRequest } from "./middleware"
+import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
 import type { DocType, JobType } from "src/shared/schema"
 
 // Helper to create/update repo documentation
@@ -68,16 +68,6 @@ function createWorkerCompletionHandler(
       jobType,
       "error"
     )
-  }
-}
-
-// Common worker error handler
-function createWorkerErrorHandler() {
-  return async (error: unknown, { id }: { id: string }) => {
-    await storage.updateJob(id, {
-      status: "error",
-      message: error instanceof Error ? error.message : String(error),
-    })
   }
 }
 

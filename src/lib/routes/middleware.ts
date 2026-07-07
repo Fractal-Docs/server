@@ -33,6 +33,16 @@ export function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
+// Shared error handler for background workers - marks the job as failed
+export function createWorkerErrorHandler() {
+  return async (error: unknown, { id }: { id: string }) => {
+    await storage.updateJob(id, {
+      status: "error",
+      message: getErrorMessage(error, String(error)),
+    })
+  }
+}
+
 // Async route handler wrapper that catches errors
 export function asyncHandler<T extends Request = Request>(
   fn: (req: T, res: Response, next: NextFunction) => Promise<void>,
