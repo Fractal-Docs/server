@@ -148,7 +148,7 @@ export class PineconeVectorStorage implements IVectorStorage {
     }))
   }
 
-  async deleteByRepoId(repoId: string, branch: string): Promise<void> {
+  async deleteByRepoId(repoId: string, branch?: string): Promise<void> {
     const index = this.client.index(this.indexName)
 
     let list = await index.listPaginated({

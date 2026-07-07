@@ -1,4 +1,4 @@
-import { Queue, Worker } from "bullmq"
+import { Job, Queue, Worker } from "bullmq"
 import IORedis from "ioredis"
 import { v4 as uuid } from "uuid"
 
@@ -51,9 +51,9 @@ export async function getTaskStatus(type: string, id: string) {
 // Worker registration
 export function registerWorker<TInput, TOutput>(
   type: string,
-  handler: (data: TInput, job: any) => Promise<TOutput>,
+  handler: (data: TInput, job: Job) => Promise<TOutput>,
   onComplete?: (output: TOutput & { id?: string }) => Promise<void>,
-  onError?: (error: unknown, job: any) => Promise<void>
+  onError?: (error: unknown, job: Job) => Promise<void>
 ) {
   let idleTimer: NodeJS.Timeout | null = null
   const queueName = `tasks-${type}`
@@ -65,7 +65,7 @@ export function registerWorker<TInput, TOutput>(
         const result = await handler(job.data, job)
 
         if (onComplete) {
-          await onComplete({ ...result, id: job.id })
+          await onComplete({ ...result, id: job.id! })
         }
 
         return result

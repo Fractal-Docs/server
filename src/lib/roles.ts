@@ -1,4 +1,4 @@
-import { Role } from "src/shared/schema"
+import { Role } from "../shared/schema"
 
 export const DEFAULT_ROLE_CONTEXTS: Record<Role, string> = {
   sales: `You are analyzing a software release from a Sales perspective. Focus on:

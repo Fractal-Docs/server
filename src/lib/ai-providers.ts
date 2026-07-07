@@ -1,7 +1,7 @@
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import { encodingForModel } from "js-tiktoken"
-import { DocType, Role } from "src/shared/schema"
+import { DocType, Role } from "../shared/schema"
 
 export type ModelType =
   | "gpt-4.1"
@@ -9,6 +9,9 @@ export type ModelType =
   | "gpt-4.1-mini"
   | "claude-sonnet-4-20250514"
   | "claude-opus-4-20250514"
+
+// Models that support the 1M context beta and must go through the beta API surface
+const MODELS_WITH_1M_CONTEXT_BETA: string[] = ["claude-sonnet-4-20250514"]
 
 export interface AIProvider {
   generateCompletion(
@@ -64,31 +67,30 @@ class AnthropicProvider implements AIProvider {
     userPrompt: string,
     model: string
   ): Promise<string> {
-    const response =
-      model === "claude-sonnet-4-20250514"
-        ? await this.client.beta.messages.create({
-            model,
-            max_tokens: 4000,
-            system: systemPrompt,
-            betas: ["context-1m-2025-08-07"],
-            messages: [
-              {
-                role: "user",
-                content: userPrompt,
-              },
-            ],
-          })
-        : await this.client.messages.create({
-            model,
-            max_tokens: 4000,
-            system: systemPrompt,
-            messages: [
-              {
-                role: "user",
-                content: userPrompt,
-              },
-            ],
-          })
+    const response = MODELS_WITH_1M_CONTEXT_BETA.includes(model)
+      ? await this.client.beta.messages.create({
+          model,
+          max_tokens: 4000,
+          system: systemPrompt,
+          betas: ["context-1m-2025-08-07"],
+          messages: [
+            {
+              role: "user",
+              content: userPrompt,
+            },
+          ],
+        })
+      : await this.client.messages.create({
+          model,
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages: [
+            {
+              role: "user",
+              content: userPrompt,
+            },
+          ],
+        })
 
     const content = response.content[0]
     if (content.type !== "text") {
@@ -200,7 +202,7 @@ export function chooseModel(
     } else {
       model = "claude-sonnet-4-20250514"
       reason =
-        "Role-based doc (sales/marketing/etc.), using Claude Sonnet 3.5 for polished language."
+        "Role-based doc (sales/marketing/etc.), using Claude Sonnet 4 for polished language."
     }
   }
 

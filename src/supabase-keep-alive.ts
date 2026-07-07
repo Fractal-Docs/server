@@ -1,4 +1,3 @@
-// keep-alive.js
 import cron from "node-cron"
 import { Pool } from "@neondatabase/serverless"
 import { drizzle } from "drizzle-orm/neon-serverless"
@@ -22,10 +21,10 @@ async function pingSupabase() {
   try {
     await client.query("SELECT NOW()")
     console.log(`[${new Date().toISOString()}] Keep-alive ping successful`)
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(
       `[${new Date().toISOString()}] Keep-alive ping failed:`,
-      err.message
+      err instanceof Error ? err.message : err
     )
   } finally {
     client.release()

@@ -1,6 +1,6 @@
 import type { Express } from "express"
 
-import { storage } from "src/storage"
+import { storage } from "../../storage"
 import { prepareDocumentation, registerGenerateWorker } from "../documents"
 import { compareBranchToDefaultBranch } from "../github"
 import { enqueueTask, getTaskStatus } from "../task-manager"
@@ -9,8 +9,8 @@ import {
   authorizedHandler,
   AuthorizedOrgRequest,
 } from "./authorization"
-import { withRepo, RepoRequest } from "./middleware"
-import type { DocType, JobType } from "src/shared/schema"
+import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
+import type { DocType, JobType } from "../../shared/schema"
 
 // Helper to create/update repo documentation
 async function saveRepoDoc(
@@ -68,16 +68,6 @@ function createWorkerCompletionHandler(
       jobType,
       "error"
     )
-  }
-}
-
-// Common worker error handler
-function createWorkerErrorHandler() {
-  return async (error: unknown, { id }: { id: string }) => {
-    await storage.updateJob(id, {
-      status: "error",
-      message: error instanceof Error ? error.message : String(error),
-    })
   }
 }
 

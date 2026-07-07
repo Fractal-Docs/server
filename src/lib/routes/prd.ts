@@ -1,6 +1,6 @@
 import type { Express } from "express"
-import { insertPrdSchema } from "src/shared/schema"
-import { storage } from "src/storage"
+import { insertPrdSchema } from "../../shared/schema"
+import { storage } from "../../storage"
 import {
   requireOrgMember,
   requireOrgAdmin,
@@ -13,8 +13,8 @@ import { hasValidPrefix } from "../public-ids"
 export function prdRoutes(app: Express) {
   // Get all PRDs for organization - requires membership
   app.get(
-    "/api/organization/:org_id/prds",
-    ...requireOrgMember("org_id"),
+    "/api/organization/:org_public_id/prds",
+    ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const prds = await storage.getPrds(req.orgId)
 
@@ -34,8 +34,8 @@ export function prdRoutes(app: Express) {
 
   // Search PRDs - requires membership
   app.get(
-    "/api/organization/:org_id/prds/search",
-    ...requireOrgMember("org_id"),
+    "/api/organization/:org_public_id/prds/search",
+    ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const query = req.query.q as string
       if (!query) {
@@ -61,8 +61,8 @@ export function prdRoutes(app: Express) {
 
   // Get specific PRD - requires membership and validates PRD belongs to org
   app.get(
-    "/api/organization/:org_id/prds/:prd_id",
-    ...requireOrgMember("org_id"),
+    "/api/organization/:org_public_id/prds/:prd_id",
+    ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { prd_id } = req.params
 
@@ -101,8 +101,8 @@ export function prdRoutes(app: Express) {
 
   // Create PRD - requires membership
   app.post(
-    "/api/organization/:org_id/prds",
-    ...requireOrgMember("org_id"),
+    "/api/organization/:org_public_id/prds",
+    ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const result = insertPrdSchema.safeParse(req.body)
       if (!result.success) {
@@ -135,8 +135,8 @@ export function prdRoutes(app: Express) {
 
   // Update PRD - requires membership
   app.patch(
-    "/api/organization/:org_id/prds/:prd_id",
-    ...requireOrgMember("org_id"),
+    "/api/organization/:org_public_id/prds/:prd_id",
+    ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { prd_id } = req.params
 
@@ -198,8 +198,8 @@ export function prdRoutes(app: Express) {
 
   // Delete PRD - requires admin role
   app.delete(
-    "/api/organization/:org_id/prds/:prd_id",
-    ...requireOrgAdmin("org_id"),
+    "/api/organization/:org_public_id/prds/:prd_id",
+    ...requireOrgAdmin("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { prd_id } = req.params
 

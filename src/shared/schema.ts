@@ -212,9 +212,9 @@ export const roleDocs = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => ({
-    primaryKey: primaryKey(table.releasePublicId, table.rolePublicId),
-  })
+  (table) => [
+    primaryKey({ columns: [table.releasePublicId, table.rolePublicId] }),
+  ]
 )
 
 // New table for tracking enqueued tasks

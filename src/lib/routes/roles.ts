@@ -1,6 +1,6 @@
 import type { Express } from "express"
-import { storage } from "src/storage"
-import { ROLES, Role } from "src/shared/schema"
+import { storage } from "../../storage"
+import { ROLES, Role } from "../../shared/schema"
 import {
   requireOrgMember,
   requireOrgAdmin,

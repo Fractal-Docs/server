@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction, RequestHandler } from "express"
+import type { Job } from "bullmq"
 import { storage } from "../../storage"
 import { getUserSub } from "../helpers"
 import type { Organization, GithubRepo } from "../../shared/schema"
@@ -31,6 +32,16 @@ export interface OrgSlugRequest extends Request {
 // Error message helper
 export function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
+}
+
+// Shared error handler for background workers - marks the job as failed
+export function createWorkerErrorHandler() {
+  return async (error: unknown, job: Job) => {
+    await storage.updateJob(job.id!, {
+      status: "error",
+      message: getErrorMessage(error, String(error)),
+    })
+  }
 }
 
 // Async route handler wrapper that catches errors
