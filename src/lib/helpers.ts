@@ -7,9 +7,7 @@ import type { Request, Response } from "express"
  * @returns The user's sub identifier or undefined if not found
  */
 export function getUserSub(req: Request, res: Response): string | undefined {
-  // express-oauth2-jwt-bearer adds the decoded JWT payload to req.auth
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const auth = (req as any).auth
+  const auth = req.auth
 
   if (!auth?.payload?.sub) {
     res.status(401).json({ error: "User not authenticated" })

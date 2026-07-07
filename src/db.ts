@@ -44,8 +44,11 @@ const connectWithRetry = async (retries = 3, delay = 2000) => {
   // Test DNS resolution first
   try {
     await lookup(dbUrl.hostname)
-  } catch (err: any) {
-    console.error("DNS resolution failed:", err.message)
+  } catch (err: unknown) {
+    console.error(
+      "DNS resolution failed:",
+      err instanceof Error ? err.message : err
+    )
     throw new Error(`DNS resolution failed for ${dbUrl.hostname}`)
   }
 
@@ -61,8 +64,11 @@ const connectWithRetry = async (retries = 3, delay = 2000) => {
         client.release()
         throw err
       }
-    } catch (err: any) {
-      console.error(`Connection attempt ${i + 1} failed:`, err.message)
+    } catch (err: unknown) {
+      console.error(
+        `Connection attempt ${i + 1} failed:`,
+        err instanceof Error ? err.message : err
+      )
       if (i < retries - 1) {
         console.log(`Retrying in ${delay / 1000} seconds...`)
         await new Promise((resolve) => setTimeout(resolve, delay))

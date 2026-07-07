@@ -233,7 +233,7 @@ export function codeRoutes(app: Express) {
               console.error(`Error processing file ${file.path}:`, fileError)
             }
           }
-          return { id: job.id }
+          return { id: job.id! }
         },
         async ({ id }) => {
           await storage.updateJob(id, { status: "completed" })

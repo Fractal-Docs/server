@@ -1,3 +1,4 @@
+import { Job } from "bullmq"
 import { DocType } from "src/shared/schema"
 import { chooseModel, getAIProvider, ModelType } from "./ai-providers"
 import { registerWorker } from "./task-manager"
@@ -5,7 +6,7 @@ import { registerWorker } from "./task-manager"
 export const registerGenerateWorker = (
   name: string,
   onSuccess: (data: Record<string, any>) => Promise<void>,
-  onError?: (error: unknown, job: any) => Promise<void>
+  onError?: (error: unknown, job: Job) => Promise<void>
 ) =>
   registerWorker(
     name,
@@ -38,7 +39,7 @@ export const registerGenerateWorker = (
         user: userPrompt,
       }
 
-      return { content, extra: { prompts, ...extra }, jobId: job.id }
+      return { content, extra: { prompts, ...extra }, jobId: job.id! }
     },
     onSuccess,
     onError
