@@ -1,4 +1,3 @@
-// keep-alive.js
 import cron from "node-cron"
 import { Pool } from "@neondatabase/serverless"
 import { drizzle } from "drizzle-orm/neon-serverless"

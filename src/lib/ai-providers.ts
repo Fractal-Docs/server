@@ -202,7 +202,7 @@ export function chooseModel(
     } else {
       model = "claude-sonnet-4-20250514"
       reason =
-        "Role-based doc (sales/marketing/etc.), using Claude Sonnet 3.5 for polished language."
+        "Role-based doc (sales/marketing/etc.), using Claude Sonnet 4 for polished language."
     }
   }
 

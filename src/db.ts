@@ -82,7 +82,7 @@ const connectWithRetry = async (retries = 3, delay = 2000) => {
   return false
 }
 
-// Test the connection and verify schema on startup
+// Test the connection on startup
 connectWithRetry().catch((err) => {
   console.error("Failed to connect to database:", err)
   process.exit(1)
