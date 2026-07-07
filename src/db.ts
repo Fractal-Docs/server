@@ -20,9 +20,6 @@ const connectionConfig = {
   max: 20, // Maximum number of clients
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
   connectionTimeoutMillis: 5000, // Return an error after 5 seconds if connection could not be established
-  ssl: {
-    rejectUnauthorized: false, // Required for some PostgreSQL providers
-  },
 }
 
 // Initialize the connection pool
