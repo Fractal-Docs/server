@@ -28,7 +28,7 @@
     "bullmq": "^5.61.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
-    "drizzle-orm": "^0.44.5",
+    "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "express": "^5.1.0",
     "express-oauth2-jwt-bearer": "^1.7.1",
