@@ -22,10 +22,7 @@ import {
   authorizedHandler,
   AuthorizedOrgRequest,
 } from "./authorization"
-import { withRepo, RepoRequest, getRepoByPublicId } from "./middleware"
-
-// Re-export for backwards compatibility
-export { getRepoByPublicId }
+import { withRepo, RepoRequest } from "./middleware"
 
 export function codeRoutes(app: Express) {
   // Get all repos for an organization - requires membership
