@@ -1,6 +1,6 @@
 import { Octokit } from "@octokit/rest"
 import { App } from "@octokit/app"
-import { GithubRepo, Organization } from "src/shared/schema"
+import { GithubRepo, Organization } from "../shared/schema"
 
 interface FileSystemItem {
   path: string

@@ -1,7 +1,7 @@
 import type { Express } from "express"
 
 import { getAuth0AccessToken, getUserRoles } from "../auth0"
-import { storage } from "src/storage"
+import { storage } from "../../storage"
 import {
   requireAuth,
   authorizedHandler,

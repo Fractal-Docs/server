@@ -1,6 +1,6 @@
 import type { Express } from "express"
-import { insertPrdSchema } from "src/shared/schema"
-import { storage } from "src/storage"
+import { insertPrdSchema } from "../../shared/schema"
+import { storage } from "../../storage"
 import {
   requireOrgMember,
   requireOrgAdmin,

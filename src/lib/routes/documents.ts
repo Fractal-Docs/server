@@ -1,6 +1,6 @@
 import type { Express } from "express"
 
-import { storage } from "src/storage"
+import { storage } from "../../storage"
 import { prepareDocumentation, registerGenerateWorker } from "../documents"
 import { compareBranchToDefaultBranch } from "../github"
 import { enqueueTask, getTaskStatus } from "../task-manager"
@@ -10,7 +10,7 @@ import {
   AuthorizedOrgRequest,
 } from "./authorization"
 import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
-import type { DocType, JobType } from "src/shared/schema"
+import type { DocType, JobType } from "../../shared/schema"
 
 // Helper to create/update repo documentation
 async function saveRepoDoc(

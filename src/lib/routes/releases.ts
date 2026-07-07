@@ -1,5 +1,5 @@
 import type { Express } from "express"
-import { storage } from "src/storage"
+import { storage } from "../../storage"
 import {
   createReleaseDiffAnalysis,
   prepareReleaseDocumentation,
@@ -16,7 +16,7 @@ import {
 } from "./authorization"
 import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
 import { hasValidPrefix } from "../public-ids"
-import type { Role } from "src/shared/schema"
+import type { Role } from "../../shared/schema"
 
 const RELEASE_GENERATION = "generateReleaseDocumentation"
 const ROLE_DOC_GENERATION = "generateRoleDocumentation"

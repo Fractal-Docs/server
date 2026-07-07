@@ -1,4 +1,4 @@
-import { GithubRepo, Organization, Role } from "src/shared/schema"
+import { GithubRepo, Organization, Role } from "../shared/schema"
 import { chooseModel, ModelType } from "./ai-providers"
 import { DEFAULT_ROLE_CONTEXTS } from "./roles"
 import { compareBranchToDefaultBranch } from "./github"

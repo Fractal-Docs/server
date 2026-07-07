@@ -1,5 +1,5 @@
 import { Job } from "bullmq"
-import { DocType } from "src/shared/schema"
+import { DocType } from "../shared/schema"
 import { chooseModel, getAIProvider, ModelType } from "./ai-providers"
 import { registerWorker } from "./task-manager"
 

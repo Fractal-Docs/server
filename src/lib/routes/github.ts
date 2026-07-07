@@ -1,6 +1,6 @@
 import type { Express } from "express"
 
-import { storage } from "src/storage"
+import { storage } from "../../storage"
 import {
   getRepoBranches,
   listRepoFileSystem,

@@ -1,5 +1,5 @@
 import type { Express } from "express"
-import { storage } from "src/storage"
+import { storage } from "../../storage"
 import { getAuth0AccessToken, getUserByEmail } from "../auth0"
 import { asyncHandler, withUserSub, UserRequest } from "./middleware"
 

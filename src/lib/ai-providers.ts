@@ -1,7 +1,7 @@
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import { encodingForModel } from "js-tiktoken"
-import { DocType, Role } from "src/shared/schema"
+import { DocType, Role } from "../shared/schema"
 
 export type ModelType =
   | "gpt-4.1"
