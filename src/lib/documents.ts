@@ -39,7 +39,7 @@ export const registerGenerateWorker = (
         user: userPrompt,
       }
 
-      return { content, extra: { prompts, ...extra }, jobId: job.id! }
+      return { content, extra: { prompts, model, ...extra }, jobId: job.id! }
     },
     onSuccess,
     onError

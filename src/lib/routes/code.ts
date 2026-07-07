@@ -1,28 +1,21 @@
 import type { Express } from "express"
 
 import { storage } from "../../storage"
-import {
-  getGithubRepo,
-  getLatestCommit,
-  getRepoContent,
-  CommitDetails,
-} from "../github"
-import { processFileContent } from "../embeddings"
+import { getGithubRepo, getLatestCommit, CommitDetails } from "../github"
 import { vectorStorage } from "../vector-storage"
-import { extname } from "path"
 import {
   generateCFG,
   visualizeCallGraph,
   visualizeControlFlowGraphs,
 } from "../cfg-analyzer"
-import { enqueueTask, registerWorker } from "../task-manager"
+import { enqueueTask } from "../task-manager"
 import {
   requireOrgMember,
   requireOrgAdmin,
   authorizedHandler,
   AuthorizedOrgRequest,
 } from "./authorization"
-import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
+import { withRepo, RepoRequest } from "./middleware"
 
 export function codeRoutes(app: Express) {
   // Get all repos for an organization - requires membership
@@ -142,112 +135,16 @@ export function codeRoutes(app: Express) {
     ...requireOrgMember("org_public_id"),
     withRepo(),
     authorizedHandler<RepoRequest>(async (req, res) => {
-      const { organization, repo, repoPublicId, branch, orgId } = req
+      const { repoPublicId, branch, orgId } = req
 
-      const repoContent = await getRepoContent(
-        organization,
-        repo,
-        repo.fileFilterRegex || ".*",
-        branch
-      )
-
-      // clear out old storage
-      await vectorStorage.deleteByRepoId(repoPublicId, branch)
-      const repoFiles = await storage.getRepoFiles(repoPublicId, branch)
-      for (const repoFile of repoFiles) {
-        if (!repoContent.find((f) => f.path === repoFile.filePath)) {
-          await storage.deleteRepoFile(repoFile.id)
-        }
-      }
-
-      // Process each file
-      registerWorker(
-        "analyzeRepo",
-        async (_, job) => {
-          for (const file of repoContent) {
-            try {
-              const extension = extname(file.path).toLowerCase()
-
-              // Process the file content and generate embeddings
-              const { chunks, embeddings } = await processFileContent(
-                file.content
-              )
-
-              // Store each chunk with its embedding in vector storage
-              for (let i = 0; i < chunks.length; i++) {
-                const vectorId = `${repoPublicId}-${branch}-${file.path}-${i}`
-                await vectorStorage.storeEmbedding(vectorId, embeddings[i], {
-                  repoId: repoPublicId,
-                  filePath: file.path,
-                  branch,
-                  fileId: i,
-                  language: extension.slice(1) || "text",
-                  lastModified: new Date().toISOString(),
-                })
-              }
-
-              // Attempt to get existing file, handle if it doesn't exist
-              let existingRepoFile
-              try {
-                existingRepoFile = await storage.getRepoFile(
-                  repoPublicId,
-                  file.path,
-                  branch
-                )
-              } catch (error: unknown) {
-                const errorMessage =
-                  error instanceof Error ? error.message : String(error)
-                console.log(
-                  `File ${file.path} not found in the database, will create it. Error: ${errorMessage}`
-                )
-              }
-
-              const fileMetadata = {
-                size: file.content.length,
-                language: extension.slice(1) || "text",
-              }
-
-              if (existingRepoFile) {
-                await storage.updateRepoFile(existingRepoFile.id, branch, {
-                  content: file.content,
-                  updatedAt: new Date(),
-                  metadata: fileMetadata,
-                })
-              } else {
-                await storage.createRepoFile({
-                  repoPublicId,
-                  filePath: file.path,
-                  content: file.content,
-                  branch,
-                  metadata: fileMetadata,
-                })
-              }
-
-              const index = repoContent.findIndex((f) => f.path === file.path)
-              console.log(
-                "File analyzed:",
-                file.path,
-                `${index + 1}/${repoContent.length}`
-              )
-            } catch (fileError) {
-              console.error(`Error processing file ${file.path}:`, fileError)
-            }
-          }
-          return { id: job.id! }
-        },
-        async ({ id }) => {
-          await storage.updateJob(id, { status: "completed" })
-          await storage.removeJobsByBranchAndType(
-            repoPublicId,
-            branch,
-            "analyze",
-            "error"
-          )
-        },
-        createWorkerErrorHandler()
-      )
-
-      const jobId = await enqueueTask("analyzeRepo")
+      // The analyzeRepo worker (registered once at boot, see lib/workers.ts)
+      // re-fetches the repo content itself from repoPublicId/branch/orgId,
+      // so this route only needs to enqueue the job.
+      const jobId = await enqueueTask("analyzeRepo", {
+        repoPublicId,
+        branch,
+        orgId,
+      })
 
       if (jobId) {
         await storage.addJob({

@@ -9,6 +9,10 @@ validateEnvironment()
 
 // this needs to be imported after validateEnvironment
 import { registerProtectedRoutes, registerPublicRoutes } from "./routes"
+import { registerBackgroundWorkers } from "./lib/workers"
+
+// Register all background-job workers once, before any route can enqueue a job
+registerBackgroundWorkers()
 
 // Only import supabase-keep-alive in production
 if (isProduction()) {

@@ -5,7 +5,6 @@ import {
   prepareReleaseDocumentation,
   prepareRoleDocumentation,
 } from "../releases"
-import { registerGenerateWorker } from "../documents"
 import { enqueueTask } from "../task-manager"
 import {
   requireOrgMember,
@@ -14,48 +13,17 @@ import {
   verifyResourceOwnership,
   AuthorizedOrgRequest,
 } from "./authorization"
-import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
+import { withRepo, RepoRequest } from "./middleware"
 import { hasValidPrefix } from "../public-ids"
 import type { Role } from "../../shared/schema"
 
 const RELEASE_GENERATION = "generateReleaseDocumentation"
 const ROLE_DOC_GENERATION = "generateRoleDocumentation"
 
-const registerRoleWorker = (repoPublicId: string, branch: string) => {
-  registerGenerateWorker(
-    ROLE_DOC_GENERATION,
-    async ({ content, extra, jobId: id }) => {
-      const { role, releasePublicId } = extra
-      console.log(
-        `Generated role documentation for role ${role?.roleType}, releasePublicId ${releasePublicId}`
-      )
-      await storage.updateJob(id, {
-        status: "completed",
-        details: {
-          releasePublicId,
-          rolePublicId: role.publicId,
-        },
-      })
-      await storage.removeJobsByBranchAndType(
-        repoPublicId,
-        branch,
-        "role",
-        "error"
-      )
-
-      await storage.createRoleDoc({
-        releasePublicId,
-        repoPublicId,
-        rolePublicId: role.publicId,
-        document: content,
-      })
-    },
-    createWorkerErrorHandler()
-  )
-}
-
-// Helper to generate role documents for a release
-async function generateRoleDocuments(
+// Generates role documents for a release. Enqueues one background job per
+// role; the worker for ROLE_DOC_GENERATION is registered once at process
+// boot (see lib/workers.ts) and reads all context from job.data/extra.
+export async function generateRoleDocuments(
   orgId: string,
   repoPublicId: string,
   branch: string,
@@ -91,6 +59,8 @@ async function generateRoleDocuments(
         userPrompt,
         model,
         extra: {
+          repoPublicId,
+          branch,
           releasePublicId,
           role,
         },
@@ -171,53 +141,17 @@ export function releaseRoutes(app: Express) {
       const { developerPrompt, userPrompt, model } =
         await prepareReleaseDocumentation(prd.content, diffAnalysis)
 
-      // Register the workers for generating role documentation
-      for (let i = 0; i < roles.length; i++) {
-        registerRoleWorker(repoPublicId, branch)
-      }
-
-      // Register the worker for generating release documentation
-      registerGenerateWorker(
-        RELEASE_GENERATION,
-        async ({ content, jobId: id }) => {
-          await storage.removeJobsByBranchAndType(
-            repoPublicId,
-            branch,
-            "release",
-            "error"
-          )
-          const release = await storage.createRelease({
-            title,
-            repoPublicId,
-            branch,
-            content,
-          })
-          await storage.updateJob(id, {
-            status: "completed",
-            details: {
-              releasePublicId: release.publicId,
-            },
-          })
-
-          console.log("Release created")
-          console.log(`Creating role documents for ${roles.join(", ")}`)
-
-          await generateRoleDocuments(
-            orgId,
-            repoPublicId,
-            branch,
-            release.publicId,
-            content,
-            roles
-          )
-        },
-        createWorkerErrorHandler()
-      )
-
       const jobId = await enqueueTask(RELEASE_GENERATION, {
         developerPrompt,
         userPrompt,
         model,
+        extra: {
+          repoPublicId,
+          branch,
+          orgId,
+          title,
+          roles,
+        },
       })
       console.log("Creating release")
 
@@ -267,11 +201,6 @@ export function releaseRoutes(app: Express) {
       if (!Array.isArray(roles)) {
         res.status(400).json({ error: "roles must be an array" })
         return
-      }
-
-      // Register the workers for generating role documentation
-      for (let i = 0; i < roles.length; i++) {
-        registerRoleWorker(release.repoPublicId, release.branch)
       }
 
       await generateRoleDocuments(

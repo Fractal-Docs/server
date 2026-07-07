@@ -1,7 +1,7 @@
 import type { Express } from "express"
 
 import { storage } from "../../storage"
-import { prepareDocumentation, registerGenerateWorker } from "../documents"
+import { prepareDocumentation } from "../documents"
 import { compareBranchToDefaultBranch } from "../github"
 import { enqueueTask, getTaskStatus } from "../task-manager"
 import {
@@ -9,67 +9,7 @@ import {
   authorizedHandler,
   AuthorizedOrgRequest,
 } from "./authorization"
-import { withRepo, RepoRequest, createWorkerErrorHandler } from "./middleware"
-import type { DocType, JobType } from "../../shared/schema"
-
-// Helper to create/update repo documentation
-async function saveRepoDoc(
-  repoPublicId: string,
-  branch: string,
-  existingDoc: Awaited<ReturnType<typeof storage.getRepoDoc>>,
-  docData: {
-    title: string
-    content: string
-    docType: DocType
-    generatedFrom: string[]
-    model: string
-    prompts: Record<string, string>
-  }
-) {
-  const metadata = {
-    generatedFrom: docData.generatedFrom,
-    aiModel: docData.model,
-    timestamp: new Date().toISOString(),
-    prompts: docData.prompts,
-  }
-
-  if (existingDoc) {
-    return storage.updateRepoDoc(existingDoc.id, {
-      repoPublicId,
-      title: docData.title,
-      content: docData.content,
-      docType: docData.docType,
-      updatedAt: new Date(),
-      metadata,
-    })
-  }
-
-  return storage.createRepoDoc({
-    repoPublicId,
-    branch,
-    title: docData.title,
-    content: docData.content,
-    docType: docData.docType as DocType,
-    metadata,
-  })
-}
-
-// Common worker completion handler
-function createWorkerCompletionHandler(
-  repoPublicId: string,
-  branch: string,
-  jobType: JobType
-) {
-  return async (id: string) => {
-    await storage.updateJob(id, { status: "completed" })
-    await storage.removeJobsByBranchAndType(
-      repoPublicId,
-      branch,
-      jobType,
-      "error"
-    )
-  }
-}
+import { withRepo, RepoRequest } from "./middleware"
 
 export function documentsRoutes(app: Express) {
   // Generate documentation - requires membership
@@ -80,7 +20,6 @@ export function documentsRoutes(app: Express) {
     authorizedHandler<RepoRequest>(async (req, res) => {
       const { repoPublicId, branch, orgId } = req
 
-      const repoDoc = await storage.getRepoDoc(repoPublicId, branch, "overview")
       const relevantFiles = await storage.getRepoFiles(repoPublicId, branch)
 
       if (!relevantFiles.length) {
@@ -130,31 +69,17 @@ export function documentsRoutes(app: Express) {
 
       const generatedFrom = relevantFiles.map((f) => f!.filePath)
 
-      registerGenerateWorker(
-        "generateDocumentation",
-        async ({ content, extra, jobId: id }) => {
-          const { prompts } = extra
-          await createWorkerCompletionHandler(
-            repoPublicId,
-            branch,
-            "generate"
-          )(id)
-          await saveRepoDoc(repoPublicId, branch, repoDoc, {
-            title: "Repo Documentation",
-            content,
-            docType: "overview",
-            generatedFrom,
-            model,
-            prompts,
-          })
-        },
-        createWorkerErrorHandler()
-      )
-
       const jobId = await enqueueTask("generateDocumentation", {
         developerPrompt,
         userPrompt,
         model,
+        extra: {
+          repoPublicId,
+          branch,
+          docType: "overview",
+          title: "Repo Documentation",
+          generatedFrom,
+        },
       })
 
       if (jobId) {
@@ -181,8 +106,6 @@ export function documentsRoutes(app: Express) {
     authorizedHandler<RepoRequest>(async (req, res) => {
       const { organization, repo, repoPublicId, branch, orgId } = req
       const docType = "delta"
-
-      const repoDoc = await storage.getRepoDoc(repoPublicId, branch, docType)
 
       const response = await compareBranchToDefaultBranch(
         organization,
@@ -231,31 +154,17 @@ export function documentsRoutes(app: Express) {
 
       const generatedFrom = relevantFiles.map((f) => f!.filename)
 
-      registerGenerateWorker(
-        "generateDocumentation",
-        async ({ content, extra, jobId: id }) => {
-          const { prompts } = extra
-          await createWorkerCompletionHandler(
-            repoPublicId,
-            branch,
-            "generate"
-          )(id)
-          await saveRepoDoc(repoPublicId, branch, repoDoc, {
-            title: `Delta Documentation: ${branch}`,
-            content,
-            docType,
-            generatedFrom,
-            model,
-            prompts,
-          })
-        },
-        createWorkerErrorHandler()
-      )
-
       const jobId = await enqueueTask("generateDocumentation", {
         developerPrompt,
         userPrompt,
         model,
+        extra: {
+          repoPublicId,
+          branch,
+          docType,
+          title: `Delta Documentation: ${branch}`,
+          generatedFrom,
+        },
       })
 
       if (jobId) {

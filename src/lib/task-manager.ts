@@ -48,15 +48,20 @@ export async function getTaskStatus(type: string, id: string) {
   }
 }
 
-// Worker registration
+// Worker registration - long-lived, one Worker per job type for the life of
+// the process. Call once at boot (see registerBackgroundWorkers); calling
+// again with the same type is a no-op so accidental re-registration can't
+// spin up a second worker competing for the same queue's jobs.
+const workers = new Map<string, Worker>()
+
 export function registerWorker<TInput, TOutput>(
   type: string,
   handler: (data: TInput, job: Job) => Promise<TOutput>,
   onComplete?: (output: TOutput & { id?: string }) => Promise<void>,
   onError?: (error: unknown, job: Job) => Promise<void>
 ) {
-  let idleTimer: NodeJS.Timeout | null = null
-  const queueName = `tasks-${type}`
+  const existing = workers.get(type)
+  if (existing) return existing
 
   const worker = new Worker(
     `tasks-${type}`,
@@ -79,17 +84,6 @@ export function registerWorker<TInput, TOutput>(
     { connection }
   )
 
-  const scheduleShutdown = (why?: string) => {
-    if (idleTimer) return
-
-    idleTimer = setTimeout(async () => {
-      console.log(`[Worker ${queueName}] Idle, shutting down ${why || ""}`)
-      await worker.close()
-    }, 30000)
-  }
-
-  worker.on("completed", () => scheduleShutdown("completed"))
-  worker.on("failed", () => scheduleShutdown("failed"))
-
+  workers.set(type, worker)
   return worker
 }
