@@ -10,6 +10,9 @@ export type ModelType =
   | "claude-sonnet-4-20250514"
   | "claude-opus-4-20250514"
 
+// Models that support the 1M context beta and must go through the beta API surface
+const MODELS_WITH_1M_CONTEXT_BETA: string[] = ["claude-sonnet-4-20250514"]
+
 export interface AIProvider {
   generateCompletion(
     systemPrompt: string,
@@ -64,31 +67,30 @@ class AnthropicProvider implements AIProvider {
     userPrompt: string,
     model: string
   ): Promise<string> {
-    const response =
-      model === "claude-sonnet-4-20250514"
-        ? await this.client.beta.messages.create({
-            model,
-            max_tokens: 4000,
-            system: systemPrompt,
-            betas: ["context-1m-2025-08-07"],
-            messages: [
-              {
-                role: "user",
-                content: userPrompt,
-              },
-            ],
-          })
-        : await this.client.messages.create({
-            model,
-            max_tokens: 4000,
-            system: systemPrompt,
-            messages: [
-              {
-                role: "user",
-                content: userPrompt,
-              },
-            ],
-          })
+    const response = MODELS_WITH_1M_CONTEXT_BETA.includes(model)
+      ? await this.client.beta.messages.create({
+          model,
+          max_tokens: 4000,
+          system: systemPrompt,
+          betas: ["context-1m-2025-08-07"],
+          messages: [
+            {
+              role: "user",
+              content: userPrompt,
+            },
+          ],
+        })
+      : await this.client.messages.create({
+          model,
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages: [
+            {
+              role: "user",
+              content: userPrompt,
+            },
+          ],
+        })
 
     const content = response.content[0]
     if (content.type !== "text") {
