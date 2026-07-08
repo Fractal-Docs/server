@@ -15,10 +15,26 @@ import {
 } from "./authorization"
 import { withRepo, RepoRequest } from "./middleware"
 import { hasValidPrefix } from "../public-ids"
-import type { Role } from "../../shared/schema"
+import { z } from "zod"
+import { ROLES, insertReleaseSchema, type Role } from "../../shared/schema"
 
 const RELEASE_GENERATION = "generateReleaseDocumentation"
 const ROLE_DOC_GENERATION = "generateRoleDocumentation"
+
+// The release-creation request kicks off generation rather than inserting a
+// row directly (content is produced by the AI job afterward), so it doesn't
+// match insertReleaseSchema's shape - reuse its field-level validators for
+// the columns it does share and add the generation-only `roles` list.
+const createReleaseRequestSchema = z.object({
+  title: insertReleaseSchema.shape.title,
+  repoPublicId: insertReleaseSchema.shape.repoPublicId,
+  branch: insertReleaseSchema.shape.branch,
+  roles: z.array(z.enum(ROLES)).min(1, "Select at least one role"),
+})
+
+const roleDocsRequestSchema = z.object({
+  roles: z.array(z.enum(ROLES)).min(1, "Select at least one role"),
+})
 
 // Generates role documents for a release. Enqueues one background job per
 // role; the worker for ROLE_DOC_GENERATION is registered once at process
@@ -100,10 +116,19 @@ export function releaseRoutes(app: Express) {
     ...requireOrgMember("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { organization, orgId } = req
-      const { title, repoPublicId, branch, roles } = req.body
+
+      const result = createReleaseRequestSchema.safeParse(req.body)
+      if (!result.success) {
+        res.status(400).json({
+          error: "Invalid release data",
+          details: result.error.issues,
+        })
+        return
+      }
+      const { title, repoPublicId, branch, roles } = result.data
 
       // Validate repo publicId format
-      if (!repoPublicId || !hasValidPrefix(repoPublicId, "repo")) {
+      if (!hasValidPrefix(repoPublicId, "repo")) {
         res.status(400).json({
           error:
             "Invalid repository ID format. Expected format: repo_xxxxxxxxxxxx",
@@ -197,11 +222,15 @@ export function releaseRoutes(app: Express) {
         return
       }
 
-      const { roles } = req.body
-      if (!Array.isArray(roles)) {
-        res.status(400).json({ error: "roles must be an array" })
+      const result = roleDocsRequestSchema.safeParse(req.body)
+      if (!result.success) {
+        res.status(400).json({
+          error: "Invalid role-docs request",
+          details: result.error.issues,
+        })
         return
       }
+      const { roles } = result.data
 
       await generateRoleDocuments(
         orgId,

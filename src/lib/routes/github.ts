@@ -15,12 +15,22 @@ import {
   OrgSlugRequest,
 } from "./middleware"
 import { hasValidPrefix } from "../public-ids"
+import { z } from "zod"
+import { insertGithubRepoSchema } from "../../shared/schema"
 
 interface GithubTokenResponse {
   access_token?: string
   error?: string
   error_description?: string
 }
+
+// publicId/organizationId are server-assigned (generated in
+// storage.createRepo / taken from the org-slug context), not client input.
+const importReposRequestSchema = z.object({
+  repositories: z.array(
+    insertGithubRepoSchema.omit({ publicId: true, organizationId: true })
+  ),
+})
 
 export function githubRoutes(app: Express) {
   const orgSlugMiddleware = withOrganizationBySlug()
@@ -179,12 +189,16 @@ export function githubRoutes(app: Express) {
     orgSlugMiddleware,
     asyncHandler<OrgSlugRequest>(async (req, res) => {
       const { organization } = req
-      const { repositories } = req.body
 
-      if (!Array.isArray(repositories)) {
-        res.status(400).json({ error: "Invalid repositories format" })
+      const result = importReposRequestSchema.safeParse(req.body)
+      if (!result.success) {
+        res.status(400).json({
+          error: "Invalid repositories format",
+          details: result.error.issues,
+        })
         return
       }
+      const { repositories } = result.data
 
       const existingRepos = await storage.getRepos(organization.publicId)
       const existingRepoIds = new Set(existingRepos.map((r) => r.repoId))

@@ -1,12 +1,17 @@
 import type { Express } from "express"
 import { storage } from "../../storage"
-import { ROLES, Role } from "../../shared/schema"
+import { ROLES, Role, insertRoleSchema } from "../../shared/schema"
 import {
   requireOrgMember,
   requireOrgAdmin,
   authorizedHandler,
   AuthorizedOrgRequest,
 } from "./authorization"
+import { z } from "zod"
+
+const updateRoleSchema = z.object({
+  context: insertRoleSchema.shape.context,
+})
 
 export function roleRoutes(app: Express) {
   // Get all roles for an organization - requires membership
@@ -54,19 +59,21 @@ export function roleRoutes(app: Express) {
     ...requireOrgAdmin("org_public_id"),
     authorizedHandler<AuthorizedOrgRequest>(async (req, res) => {
       const { role_type } = req.params
-      const { context } = req.body
 
       if (!ROLES.includes(role_type as Role)) {
         res.status(400).json({ error: "Invalid role type" })
         return
       }
 
-      if (!context || typeof context !== "string") {
-        res
-          .status(400)
-          .json({ error: "Context is required and must be a string" })
+      const result = updateRoleSchema.safeParse(req.body)
+      if (!result.success) {
+        res.status(400).json({
+          error: "Invalid role update",
+          details: result.error.issues,
+        })
         return
       }
+      const { context } = result.data
 
       let role = await storage.getRoleByOrgAndType(req.orgId, role_type as Role)
 

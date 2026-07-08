@@ -62,7 +62,7 @@ export interface IStorage {
   // GitHub repo operations
   getRepos(organizationId: string): Promise<GithubRepo[]>
   getRepoByPublicId(publicId: string): Promise<GithubRepo | undefined>
-  createRepo(repo: InsertGithubRepo): Promise<GithubRepo>
+  createRepo(repo: Omit<InsertGithubRepo, "publicId">): Promise<GithubRepo>
   updateRepoByPublicId(
     publicId: string,
     repo: Partial<InsertGithubRepo>
@@ -319,7 +319,9 @@ export class DatabaseStorage implements IStorage {
     })
   }
 
-  async createRepo(insertRepo: InsertGithubRepo): Promise<GithubRepo> {
+  async createRepo(
+    insertRepo: Omit<InsertGithubRepo, "publicId">
+  ): Promise<GithubRepo> {
     return this.handleDatabaseOperation(async () => {
       const publicId = publicIdGenerators.repo()
       const [repo] = await db
