@@ -40,7 +40,7 @@ import {
   DocType,
 } from "./shared/schema"
 import { db } from "./db"
-import { eq, like, inArray, and } from "drizzle-orm"
+import { eq, like, inArray, and, lt } from "drizzle-orm"
 import { publicIdGenerators } from "./lib/public-ids"
 
 type UserRole = "owner" | "admin" | "member"
@@ -168,6 +168,7 @@ export interface IStorage {
   removeAllUsersFromOrganization(organizationId: string): Promise<void>
   getJobs(organizationId: string, jobTypes: JobType[]): Promise<EnqueuedTask[]>
   getJob(jobId: string): Promise<EnqueuedTask | null>
+  getPendingJobsOlderThan(cutoff: Date): Promise<EnqueuedTask[]>
   addJob(job: InsertEnqueuedTask): Promise<EnqueuedTask>
   updateJob(
     jobId: string,
@@ -1012,6 +1013,20 @@ export class DatabaseStorage implements IStorage {
         .from(enqueuedTasks)
         .where(eq(enqueuedTasks.jobId, jobId))
       return job || null
+    })
+  }
+
+  async getPendingJobsOlderThan(cutoff: Date): Promise<EnqueuedTask[]> {
+    return this.handleDatabaseOperation(async () => {
+      return db
+        .select()
+        .from(enqueuedTasks)
+        .where(
+          and(
+            eq(enqueuedTasks.status, "pending"),
+            lt(enqueuedTasks.updatedAt, cutoff)
+          )
+        )
     })
   }
 
