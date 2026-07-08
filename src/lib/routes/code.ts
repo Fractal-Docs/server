@@ -16,6 +16,24 @@ import {
   AuthorizedOrgRequest,
 } from "./authorization"
 import { withRepo, RepoRequest } from "./middleware"
+import { z } from "zod"
+
+// fileFilterRegex is later used as `new RegExp(...)` when analyzing the
+// repo (see lib/workers.ts), so an invalid pattern should fail here at
+// request time rather than inside the background job.
+const updateRepoSchema = z.object({
+  fileFilterRegex: z
+    .string()
+    .min(1, "Please supply a file regex for matching")
+    .refine((pattern) => {
+      try {
+        new RegExp(pattern)
+        return true
+      } catch {
+        return false
+      }
+    }, "Invalid regular expression"),
+})
 
 export function codeRoutes(app: Express) {
   // Get all repos for an organization - requires membership
@@ -105,13 +123,15 @@ export function codeRoutes(app: Express) {
     ...requireOrgAdmin("org_public_id"),
     withRepo(),
     authorizedHandler<RepoRequest>(async (req, res) => {
-      const { fileFilterRegex } = req.body
-      if (!fileFilterRegex) {
-        res
-          .status(400)
-          .json({ error: "Please supply a file regex for matching" })
+      const result = updateRepoSchema.safeParse(req.body)
+      if (!result.success) {
+        res.status(400).json({
+          error: "Invalid repository update",
+          details: result.error.issues,
+        })
         return
       }
+      const { fileFilterRegex } = result.data
 
       await storage.updateRepoByPublicId(req.repoPublicId, { fileFilterRegex })
       res.status(204).end()

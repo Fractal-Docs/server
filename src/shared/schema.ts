@@ -8,6 +8,7 @@ import {
   boolean,
   integer,
   uuid,
+  index,
 } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod"
 import { z } from "zod"
@@ -42,33 +43,48 @@ export type RepoDocMetadata = {
   prompts?: Record<string, string>
 }
 
-export const prds = pgTable("prds", {
-  id: serial("id"),
-  publicId: text("public_id").primaryKey().unique(),
-  title: text("title").notNull(),
-  content: text("content").notNull(),
-  businessContext: text("business_context").notNull(),
-  repoPublicId: text("repo_public_id")
-    .notNull()
-    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
-  branch: text("branch"),
-})
+export const prds = pgTable(
+  "prds",
+  {
+    id: serial("id"),
+    publicId: text("public_id").primaryKey().unique(),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    businessContext: text("business_context").notNull(),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+    branch: text("branch"),
+  },
+  (table) => [
+    index("prds_repo_public_id_branch_idx").on(
+      table.repoPublicId,
+      table.branch
+    ),
+  ]
+)
 
-export const githubRepos = pgTable("github_repos", {
-  id: serial("id"),
-  publicId: text("public_id").primaryKey().unique(),
-  name: text("name").notNull(),
-  fullName: text("full_name").notNull(),
-  owner: text("owner").notNull(),
-  repoId: text("repo_id").notNull().unique(), // External GitHub repo ID - keep for GitHub API integration
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organizations.publicId, { onDelete: "cascade" }),
-  fileFilterRegex: text("file_filter_regex"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-})
+export const githubRepos = pgTable(
+  "github_repos",
+  {
+    id: serial("id"),
+    publicId: text("public_id").primaryKey().unique(),
+    name: text("name").notNull(),
+    fullName: text("full_name").notNull(),
+    owner: text("owner").notNull(),
+    repoId: text("repo_id").notNull().unique(), // External GitHub repo ID - keep for GitHub API integration
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.publicId, { onDelete: "cascade" }),
+    fileFilterRegex: text("file_filter_regex"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("github_repos_organization_id_idx").on(table.organizationId),
+  ]
+)
 
 export const organizations = pgTable("organizations", {
   id: serial("id"),
@@ -102,7 +118,13 @@ export const userOrganizations = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.organizationId] })]
+  (table) => [
+    primaryKey({ columns: [table.userId, table.organizationId] }),
+    // organizationId is the trailing column of the PK above, so lookups by
+    // organization alone (getUsersInOrganization) can't use that index's
+    // leading-column prefix and need their own.
+    index("user_organizations_organization_id_idx").on(table.organizationId),
+  ]
 )
 
 export const users = pgTable("users", {
@@ -121,22 +143,31 @@ export const users = pgTable("users", {
 })
 
 // New tables for repository analysis
-export const repoFiles = pgTable("repo_files", {
-  id: serial("id").primaryKey().unique(),
-  repoPublicId: text("repo_public_id")
-    .notNull()
-    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
-  filePath: text("file_path").notNull(),
-  branch: text("branch").notNull(),
-  content: text("content"), // Store the actual file content
-  metadata: jsonb("metadata").notNull(), // Store file metadata like size, etc.
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-})
+export const repoFiles = pgTable(
+  "repo_files",
+  {
+    id: serial("id").primaryKey().unique(),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+    filePath: text("file_path").notNull(),
+    branch: text("branch").notNull(),
+    content: text("content"), // Store the actual file content
+    metadata: jsonb("metadata").notNull(), // Store file metadata like size, etc.
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("repo_files_repo_public_id_branch_idx").on(
+      table.repoPublicId,
+      table.branch
+    ),
+  ]
+)
 
 export const repoDocs = pgTable(
   "repo_docs",
@@ -157,27 +188,40 @@ export const repoDocs = pgTable(
       .defaultNow()
       .notNull(),
   },
+  // repoPublicId is the leading column of the PK below, so it already
+  // covers lookups by repoPublicId alone (getOrganizationDocs) as well as
+  // the repoPublicId+branch queries (getRepoDocsByBranch) reasonably well
+  // given how few rows exist per repo/branch - no extra index needed.
   (table) => [
     primaryKey({ columns: [table.repoPublicId, table.docType, table.branch] }),
   ]
 )
 
-export const releases = pgTable("releases", {
-  id: serial("id"),
-  publicId: text("public_id").primaryKey().unique(),
-  title: text("title").notNull(),
-  repoPublicId: text("repo_public_id")
-    .notNull()
-    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
-  branch: text("branch").notNull(),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-})
+export const releases = pgTable(
+  "releases",
+  {
+    id: serial("id"),
+    publicId: text("public_id").primaryKey().unique(),
+    title: text("title").notNull(),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+    branch: text("branch").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("releases_repo_public_id_branch_idx").on(
+      table.repoPublicId,
+      table.branch
+    ),
+  ]
+)
 
 export const roles = pgTable("roles", {
   id: serial("id"),
@@ -218,26 +262,37 @@ export const roleDocs = pgTable(
 )
 
 // New table for tracking enqueued tasks
-export const enqueuedTasks = pgTable("enqueued_tasks", {
-  jobId: text("job_id").notNull().primaryKey().unique(),
-  branch: text("branch").notNull(),
-  repoPublicId: text("repo_public_id")
-    .notNull()
-    .references(() => githubRepos.publicId, { onDelete: "cascade" }),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organizations.publicId),
-  type: text("type").$type<JobType>().notNull(),
-  status: text("status").$type<JobStatusType>().notNull(),
-  message: text("message"),
-  details: jsonb("details"),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-})
+export const enqueuedTasks = pgTable(
+  "enqueued_tasks",
+  {
+    jobId: text("job_id").notNull().primaryKey().unique(),
+    branch: text("branch").notNull(),
+    repoPublicId: text("repo_public_id")
+      .notNull()
+      .references(() => githubRepos.publicId, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.publicId),
+    type: text("type").$type<JobType>().notNull(),
+    status: text("status").$type<JobStatusType>().notNull(),
+    message: text("message"),
+    details: jsonb("details"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("enqueued_tasks_repo_public_id_branch_idx").on(
+      table.repoPublicId,
+      table.branch
+    ),
+    // getJobs (pending-releases dashboard) filters by organizationId alone
+    index("enqueued_tasks_organization_id_idx").on(table.organizationId),
+  ]
+)
 
 export const invitations = pgTable("invitations", {
   organizationId: text("organization_id")
